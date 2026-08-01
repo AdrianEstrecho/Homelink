@@ -71,7 +71,7 @@ router.post('/login', async (req, res) => {
     if (user.archived) {
       return res.status(401).json({ error: 'This account has been archived. Contact an administrator.' });
     }
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET || 'homelink-super-secret-key-change-in-production', { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, position: user.position }, process.env.JWT_SECRET || 'homelink-super-secret-key-change-in-production', { expiresIn: '7d' });
 
     if (user.role !== 'customer') {
       logActivity({ user: { id: user.id }, ip: req.ip }, 'auth.login', 'user', user.id, { role: user.role });
@@ -80,7 +80,7 @@ router.post('/login', async (req, res) => {
     res.json({
       token,
       user: {
-        id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, phone: user.phone, address: user.address, role: user.role, createdAt: user.created_at,
+        id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, phone: user.phone, address: user.address, role: user.role, position: user.position, createdAt: user.created_at,
         notifyOrders: !!user.notify_orders, notifyBookings: !!user.notify_bookings, notifyPromotions: !!user.notify_promotions,
       },
     });
@@ -240,7 +240,7 @@ router.get('/me', authenticate, (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({
-    id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, phone: user.phone, address: user.address, role: user.role, createdAt: user.created_at,
+    id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, phone: user.phone, address: user.address, role: user.role, position: user.position, createdAt: user.created_at,
     notifyOrders: !!user.notify_orders, notifyBookings: !!user.notify_bookings, notifyPromotions: !!user.notify_promotions,
   });
 });

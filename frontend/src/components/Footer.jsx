@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Home, Mail, Phone, MapPin } from 'lucide-react';
+import { Home, Mail, Phone, MapPin, ShieldCheck } from 'lucide-react';
 
 export default function Footer() {
   return (
@@ -42,9 +42,12 @@ export default function Footer() {
         </div>
         <div className="border-t border-white/10 mt-8 pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-400">
           <p>&copy; {new Date().getFullYear()} HomeLink. All rights reserved.</p>
-          <div className="flex gap-4">
+          <div className="flex items-center gap-4">
             <Link to="/policies" className="hover:text-white transition">Policies</Link>
             <Link to="/location" className="hover:text-white transition">Find Us</Link>
+            <Link to="/admin/login" className="flex items-center gap-1.5 hover:text-white transition">
+              <ShieldCheck className="w-3.5 h-3.5" /> Staff Login
+            </Link>
           </div>
         </div>
       </div>

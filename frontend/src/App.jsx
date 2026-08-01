@@ -74,10 +74,10 @@ export default function App() {
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/products" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminProducts /></ProtectedRoute>} />
-          <Route path="/admin/services" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminServices /></ProtectedRoute>} />
-          <Route path="/admin/orders" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminOrders /></ProtectedRoute>} />
-          <Route path="/admin/bookings" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminBookings /></ProtectedRoute>} />
+          <Route path="/admin/products" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk']} redirectTo="/admin/login"><AdminProducts /></ProtectedRoute>} />
+          <Route path="/admin/services" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk']} redirectTo="/admin/login"><AdminServices /></ProtectedRoute>} />
+          <Route path="/admin/orders" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff']} redirectTo="/admin/login"><AdminOrders /></ProtectedRoute>} />
+          <Route path="/admin/bookings" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator']} redirectTo="/admin/login"><AdminBookings /></ProtectedRoute>} />
           <Route path="/admin/users" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminUsers /></ProtectedRoute>} />
           <Route path="/admin/archived-users" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><ArchivedUsers /></ProtectedRoute>} />
           <Route path="/admin/staff" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminManagement /></ProtectedRoute>} />

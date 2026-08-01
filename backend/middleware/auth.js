@@ -22,3 +22,17 @@ export function authorize(...roles) {
     next();
   };
 }
+
+// Lets an admin through unconditionally, or an employee whose position is in
+// the given list — used to scope a slice of the admin API to the one
+// position that actually does that job (e.g. only inventory clerks touch
+// product/service writes) without granting the rest of the admin surface.
+export function authorizeAdminOr(...positions) {
+  return (req, res, next) => {
+    const { role, position } = req.user;
+    if (role === 'admin' || (role === 'employee' && positions.includes(position))) {
+      return next();
+    }
+    return res.status(403).json({ error: 'Access denied' });
+  };
+}

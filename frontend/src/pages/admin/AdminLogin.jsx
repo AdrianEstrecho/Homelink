@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { ShieldCheck, LogIn, Home } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { landingFor } from '../../utils/staffLanding';
 
 export default function AdminLogin() {
   const { user, login, logout } = useAuth();
@@ -10,8 +11,8 @@ export default function AdminLogin() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (user?.role === 'admin') return <Navigate to="/admin" replace />;
-  if (user?.role === 'employee') return <Navigate to="/employee" replace />;
+  const existingLanding = user ? landingFor(user) : null;
+  if (existingLanding) return <Navigate to={existingLanding} replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,8 +20,8 @@ export default function AdminLogin() {
     setError('');
     try {
       const loggedIn = await login(form.email, form.password);
-      if (loggedIn.role === 'admin') navigate('/admin');
-      else if (loggedIn.role === 'employee') navigate('/employee');
+      const landing = landingFor(loggedIn);
+      if (landing) navigate(landing);
       else {
         logout();
         throw new Error('This portal is for staff use only.');

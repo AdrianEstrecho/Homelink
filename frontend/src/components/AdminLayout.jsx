@@ -46,6 +46,14 @@ const NAV_SECTIONS = [
   },
 ];
 
+// Which /admin/* pages a given employee position may see in the sidebar —
+// mirrors the authorizeAdminOr() scoping enforced server-side in admin.js.
+const POSITION_NAV_PATHS = {
+  inventory_clerk: ['/admin/products', '/admin/services'],
+  general_staff: ['/admin/orders'],
+  booking_coordinator: ['/admin/bookings'],
+};
+
 function isNavItemActive(item, location) {
   const [path, queryString] = item.to.split('?');
   if (item.end) return location.pathname === path;
@@ -99,6 +107,7 @@ export default function AdminLayout({ children, title, subtitle }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const isAdmin = user?.role === 'admin';
   const [search, setSearch] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
   const [viewAllOpen, setViewAllOpen] = useState(false);
@@ -108,9 +117,19 @@ export default function AdminLayout({ children, title, subtitle }) {
   const seenKey = `homelink_notif_seen_${user?.id || 'admin'}`;
   const [seenAt, setSeenAt] = useState(() => localStorage.getItem(seenKey) || '');
 
+  // Employees only ever see the one section covering their own task; the
+  // audit-log-backed notification feed and global search stay admin-only.
+  const navSections = useMemo(() => {
+    if (isAdmin) return NAV_SECTIONS;
+    const allowed = new Set(POSITION_NAV_PATHS[user?.position] || []);
+    const items = (NAV_SECTIONS.find(s => s.label === 'Main')?.items || []).filter(item => allowed.has(item.to));
+    return items.length ? [{ label: 'Main', items }] : [];
+  }, [isAdmin, user?.position]);
+
   useEffect(() => {
+    if (!isAdmin) return;
     api.get('/admin/audit-logs?action=order.create,booking.create,support.create&limit=50').then(setActivity).catch(() => {});
-  }, []);
+  }, [isAdmin]);
 
   // Mark the currently-loaded activity as seen once the panel is closed again,
   // so items stay flagged unread for the whole viewing session and only
@@ -158,7 +177,7 @@ export default function AdminLayout({ children, title, subtitle }) {
           <span className="font-display font-bold text-lg truncate">Home<span className="text-brand-orange">Link</span></span>
         </div>
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          {NAV_SECTIONS.map((section, i) => (
+          {navSections.map((section, i) => (
             <div key={section.label} className={i > 0 ? 'mt-5' : ''}>
               <p className="px-3 mb-1.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{section.label}</p>
               <div className="space-y-1">
@@ -179,7 +198,7 @@ export default function AdminLayout({ children, title, subtitle }) {
           ))}
         </nav>
         <div className="p-3 border-t border-white/10 shrink-0">
-          <Link to="/admin/profile" className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/5 transition">
+          <Link to={isAdmin ? '/admin/profile' : '/employee/profile'} className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/5 transition">
             <div className={`w-8 h-8 rounded-lg ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold shrink-0`}>
               {initials(user?.firstName, user?.lastName)}
             </div>
@@ -228,17 +247,19 @@ export default function AdminLayout({ children, title, subtitle }) {
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Topbar */}
         <div className="h-16 shrink-0 bg-white border-b border-gray-100 flex items-center gap-4 px-6">
-          <form onSubmit={handleSearch} className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search products..."
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-orange focus:border-transparent outline-none transition"
-            />
-          </form>
+          {isAdmin ? (
+            <form onSubmit={handleSearch} className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search products..."
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-orange focus:border-transparent outline-none transition"
+              />
+            </form>
+          ) : <div className="flex-1" />}
           <div className="flex items-center gap-3 ml-auto">
-            <div className="relative">
+            {isAdmin && <div className="relative">
               <button onClick={() => setNotifOpen(o => !o)} className="relative p-2 rounded-lg hover:bg-gray-100 transition" aria-label="Notifications">
                 <Bell className="w-5 h-5 text-gray-500" />
                 {notifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-orange rounded-full" />}
@@ -269,7 +290,7 @@ export default function AdminLayout({ children, title, subtitle }) {
                   </div>
                 </>
               )}
-            </div>
+            </div>}
             <div className="relative">
               <button onClick={() => setProfileOpen(o => !o)} className={`w-9 h-9 rounded-full ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold text-white shrink-0`}>
                 {initials(user?.firstName, user?.lastName)}
@@ -278,7 +299,7 @@ export default function AdminLayout({ children, title, subtitle }) {
                 <>
                   <button className="fixed inset-0 z-10 cursor-default" onClick={() => setProfileOpen(false)} aria-label="Close profile menu" />
                   <div className="absolute right-0 mt-2 w-48 card p-1.5 z-20">
-                    <Link to="/admin/profile" onClick={() => setProfileOpen(false)} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">
+                    <Link to={isAdmin ? '/admin/profile' : '/employee/profile'} onClick={() => setProfileOpen(false)} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">
                       <User className="w-4 h-4 text-gray-400" /> View Profile
                     </Link>
                     <Link to="/" onClick={() => setProfileOpen(false)} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">

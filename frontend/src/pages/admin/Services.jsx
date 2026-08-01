@@ -6,6 +6,7 @@ import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import PromptDialog from '../../components/PromptDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useAuth } from '../../context/AuthContext';
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_IMAGE_MB = 5;
@@ -33,6 +34,8 @@ function Field({ label, required, children }) {
 }
 
 export default function AdminServices() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [searchParams] = useSearchParams();
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -162,7 +165,9 @@ export default function AdminServices() {
           {tab !== 'archived' && (
             <TabButton active={tab === 'active'} onClick={() => setTab('active')}>All Active ({activeCount})</TabButton>
           )}
-          <TabButton active={tab === 'archived'} onClick={() => setTab('archived')}>Archived ({archivedCount})</TabButton>
+          {isAdmin && (
+            <TabButton active={tab === 'archived'} onClick={() => setTab('archived')}>Archived ({archivedCount})</TabButton>
+          )}
         </div>
         {!showForm && tab !== 'archived' && (
           <button onClick={startAdd} className="btn-primary flex items-center gap-2 text-sm py-2"><Plus className="w-4 h-4" /> Add Service</button>
@@ -311,12 +316,12 @@ export default function AdminServices() {
                 <td className="p-3">
                   <div className="flex items-center justify-end gap-1.5">
                     {s.archived ? (
-                      <button onClick={() => restore(s.id)} title="Unarchive" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><ArchiveRestore className="w-3.5 h-3.5" /></button>
+                      isAdmin && <button onClick={() => restore(s.id)} title="Unarchive" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><ArchiveRestore className="w-3.5 h-3.5" /></button>
                     ) : (
                       <>
                         <button onClick={() => startEdit(s)} title="Edit" className="p-1.5 rounded-lg bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/20 transition"><Pencil className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => setConfirmArchiveId(s.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => setConfirmDeleteId(s.id)} title="Delete permanently" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                        {isAdmin && <button onClick={() => setConfirmArchiveId(s.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>}
+                        {isAdmin && <button onClick={() => setConfirmDeleteId(s.id)} title="Delete permanently" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>}
                       </>
                     )}
                   </div>

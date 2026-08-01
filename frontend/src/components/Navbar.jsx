@@ -1,9 +1,10 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ShoppingCart, User, Menu, X, Home, Wrench, LayoutDashboard, LogOut } from 'lucide-react';
+import { ShoppingCart, User, Menu, X, Home, Wrench, LayoutDashboard, ShieldCheck, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import ConfirmDialog from './ConfirmDialog';
+import { POSITION_LANDING } from '../utils/staffLanding';
 
 const NAV_LINKS = [
   { to: '/products', label: 'Products' },
@@ -25,6 +26,9 @@ export default function Navbar() {
   const handleLogout = () => { setConfirmLogout(false); logout(); navigate('/'); };
 
   const dashLink = user?.role === 'admin' ? '/admin' : user?.role === 'employee' ? '/employee' : '/account';
+  // Employees whose position has a scoped slice of the admin panel (clerk, staff,
+  // booking coordinator) get a direct shortcut to it; installer/customer support don't.
+  const adminShortcut = user?.role === 'employee' ? POSITION_LANDING[user.position] : null;
   const isActive = (to) => location.pathname === to || location.pathname.startsWith(`${to}/`);
 
   return (
@@ -65,6 +69,11 @@ export default function Navbar() {
                   <LayoutDashboard className="w-4 h-4" />
                   {user.role === 'admin' ? 'Admin' : user.role === 'employee' ? 'Employee' : 'Account'}
                 </Link>
+                {adminShortcut && (
+                  <Link to={adminShortcut} className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-orange/90 hover:bg-brand-orange rounded-lg transition text-sm font-medium">
+                    <ShieldCheck className="w-4 h-4" /> Admin Panel
+                  </Link>
+                )}
                 <button onClick={requestLogout} className="p-2 hover:bg-white/10 rounded-lg transition" title="Logout"><LogOut className="w-4 h-4" /></button>
               </div>
             ) : (
@@ -97,6 +106,11 @@ export default function Navbar() {
           {user ? (
             <>
               <Link to={dashLink} className="block px-2 py-2 rounded-lg hover:bg-white/5" onClick={() => setOpen(false)}>Dashboard</Link>
+              {adminShortcut && (
+                <Link to={adminShortcut} className="flex items-center gap-1.5 px-2 py-2 rounded-lg text-brand-orange font-medium hover:bg-white/5" onClick={() => setOpen(false)}>
+                  <ShieldCheck className="w-4 h-4" /> Admin Panel
+                </Link>
+              )}
               <button onClick={requestLogout} className="block w-full text-left px-2 py-2 rounded-lg text-brand-orange hover:bg-white/5">Logout</button>
             </>
           ) : (
