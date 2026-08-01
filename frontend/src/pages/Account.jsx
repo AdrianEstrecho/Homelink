@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   User, Package, Calendar, LogOut, ShieldCheck, ArrowLeft, ArrowRight,
-  MapPinned, CreditCard, Bell, Lock, Star, LayoutDashboard,
+  MapPinned, CreditCard, Bell, Lock, Star, LayoutDashboard, LifeBuoy,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -14,6 +14,7 @@ import PaymentTab from '../components/account/PaymentTab';
 import NotificationsTab from '../components/account/NotificationsTab';
 import SecurityTab from '../components/account/SecurityTab';
 import ReviewsTab from '../components/account/ReviewsTab';
+import SupportTab from '../components/account/SupportTab';
 
 const AVATAR_COLORS = ['bg-brand-navy', 'bg-brand-blue', 'bg-[#00806f]', 'bg-[#c8461a]'];
 const ROLE_LABEL = { customer: 'Customer', employee: 'Employee', admin: 'Administrator' };
@@ -25,6 +26,7 @@ const TABS = [
   { key: 'notifications', label: 'Notifications', icon: Bell, Component: NotificationsTab },
   { key: 'security', label: 'Security', icon: Lock, Component: SecurityTab },
   { key: 'reviews', label: 'Reviews', icon: Star, Component: ReviewsTab },
+  { key: 'support', label: 'Support', icon: LifeBuoy, Component: SupportTab },
 ];
 
 function avatarColor(seed) {

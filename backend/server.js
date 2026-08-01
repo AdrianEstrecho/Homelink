@@ -13,6 +13,7 @@ import employeeRoutes from './routes/employee.js';
 import addressRoutes from './routes/addresses.js';
 import paymentMethodRoutes from './routes/paymentMethods.js';
 import reviewRoutes from './routes/reviews.js';
+import supportRoutes from './routes/support.js';
 import db from './db/database.js';
 
 dotenv.config();
@@ -44,6 +45,7 @@ app.use('/api/employee', employeeRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/payment-methods', paymentMethodRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/support', supportRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

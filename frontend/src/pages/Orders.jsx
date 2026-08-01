@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ShoppingBag } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import OrderDetailsModal from '../components/OrderDetailsModal';
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => { api.get('/orders/my').then(setOrders).catch(() => {}); }, []);
 
@@ -16,34 +20,41 @@ export default function Orders() {
       </button>
       <h1 className="font-display text-3xl font-bold text-brand-navy mb-8">My Orders</h1>
       {orders.length === 0 ? (
-        <p className="text-gray-500 text-center py-12">No orders yet.</p>
+        <div className="text-center py-20">
+          <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500">No orders yet.</p>
+        </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {orders.map(o => (
-            <div key={o.id} className="card p-6">
-              <div className="flex flex-wrap justify-between items-start gap-2 mb-4">
-                <div>
-                  <p className="font-semibold">Order #{o.id.slice(0, 8).toUpperCase()}</p>
-                  <p className="text-sm text-gray-500">{new Date(o.created_at).toLocaleDateString()}</p>
-                </div>
-                <div className="flex gap-2">
-                  <span className={`badge ${statusColor(o.status)}`}>{o.status}</span>
-                  <span className={`badge ${statusColor(o.payment_status)}`}>{o.payment_status}</span>
-                </div>
+            <button
+              key={o.id}
+              onClick={() => setSelectedOrder(o)}
+              className="card p-5 w-full text-left flex flex-wrap items-center justify-between gap-3 hover:shadow-md hover:border-brand-orange/40 transition"
+            >
+              <div>
+                <p className="font-semibold">Order #{o.id.slice(0, 8).toUpperCase()}</p>
+                <p className="text-sm text-gray-500">
+                  {new Date(o.created_at).toLocaleDateString()} · {o.items?.length || 0} item{o.items?.length === 1 ? '' : 's'}
+                </p>
               </div>
-              {o.items?.map(i => (
-                <div key={i.id} className="flex justify-between text-sm py-1 border-b last:border-0">
-                  <span>{i.name} x{i.quantity}</span>
-                  <span>{formatPrice(i.price * i.quantity)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between font-bold mt-3 pt-3 border-t">
-                <span>Total {o.discount > 0 && <span className="text-sm text-green-600 font-normal">(₱{o.discount} saved)</span>}</span>
-                <span className="text-brand-orange">{formatPrice(o.total)}</span>
+              <div className="flex items-center gap-3">
+                <span className={`badge ${statusColor(o.status)}`}>{o.status}</span>
+                <span className="font-bold text-brand-orange">{formatPrice(o.total)}</span>
+                <ChevronRight className="w-4 h-4 text-gray-400" />
               </div>
-            </div>
+            </button>
           ))}
         </div>
+      )}
+
+      {selectedOrder && (
+        <OrderDetailsModal
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+          person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
+          personLabel="Billed To"
+        />
       )}
     </div>
   );

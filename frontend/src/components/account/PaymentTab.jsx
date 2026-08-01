@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CreditCard, Plus, Star, Trash2, X, ShieldCheck } from 'lucide-react';
 import { api } from '../../api/client';
+import Select from '../Select';
 
 const emptyForm = { cardNumber: '', expMonth: '', expYear: '' };
 
@@ -19,6 +20,7 @@ export default function PaymentTab() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!form.expMonth || !form.expYear) { setError('Please select an expiry month and year.'); return; }
     setSaving(true);
     setError('');
     try {
@@ -69,17 +71,21 @@ export default function PaymentTab() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1.5 text-gray-700">Expiry Month</label>
-              <select value={form.expMonth} onChange={e => setForm({ ...form, expMonth: e.target.value })} className="input-field" required>
-                <option value="">Month</option>
-                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
-              </select>
+              <Select
+                value={form.expMonth}
+                onChange={expMonth => setForm({ ...form, expMonth })}
+                placeholder="Month"
+                options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: String(i + 1).padStart(2, '0') }))}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5 text-gray-700">Expiry Year</label>
-              <select value={form.expYear} onChange={e => setForm({ ...form, expYear: e.target.value })} className="input-field" required>
-                <option value="">Year</option>
-                {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
+              <Select
+                value={form.expYear}
+                onChange={expYear => setForm({ ...form, expYear })}
+                placeholder="Year"
+                options={yearOptions.map(y => ({ value: String(y), label: String(y) }))}
+              />
             </div>
           </div>
           {error && <p className="text-red-600 text-sm">{error}</p>}

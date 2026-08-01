@@ -3,6 +3,7 @@ import { Plus, Trash2, Eye, EyeOff, ArrowUpCircle, X, Archive, ArchiveRestore } 
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const POSITION_LABELS = {
   inventory_clerk: 'Inventory Clerk',
@@ -44,6 +45,8 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
   const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '', phone: '', position: 'general_staff' });
   const [revealed, setRevealed] = useState(new Set());
   const [promotingId, setPromotingId] = useState(null);
+  const [confirmArchiveId, setConfirmArchiveId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const load = () => api.get('/admin/users').then(setUsers).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -72,17 +75,12 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
     load();
   };
 
-  const archiveUser = async (id) => {
-    if (!confirm('Archive this user? They will no longer be able to sign in, but their data is kept and can be restored later.')) return;
-    await api.put(`/admin/users/${id}/archive`);
-    load();
-  };
+  const archiveUser = async (id) => { await api.put(`/admin/users/${id}/archive`); load(); };
   const restoreUser = async (id) => { await api.put(`/admin/users/${id}/restore`); load(); };
-  const deleteForever = async (id) => {
-    if (!confirm('Permanently delete this user? This cannot be undone.')) return;
-    await api.delete(`/admin/users/${id}`);
-    load();
-  };
+  const deleteForever = async (id) => { await api.delete(`/admin/users/${id}`); load(); };
+
+  const confirmArchive = () => { archiveUser(confirmArchiveId); setConfirmArchiveId(null); };
+  const confirmDelete = () => { deleteForever(confirmDeleteId); setConfirmDeleteId(null); };
 
   const promote = async (id, position) => {
     await api.put(`/admin/users/${id}/promote`, { position });
@@ -92,6 +90,27 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
 
   return (
     <AdminLayout title={title} subtitle={subtitle}>
+      <ConfirmDialog
+        open={!!confirmArchiveId}
+        icon={Archive}
+        tone="archive"
+        title="Archive this user?"
+        message="They will no longer be able to sign in, but their data is kept and can be restored later."
+        confirmLabel="Archive"
+        onConfirm={confirmArchive}
+        onCancel={() => setConfirmArchiveId(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        icon={Trash2}
+        tone="delete"
+        title="Permanently delete this user?"
+        message="This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         {roleTabs.length > 1 ? (
           <div className="flex items-center gap-2">
@@ -196,11 +215,11 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
                       {archivedView ? (
                         <>
                           <button onClick={() => restoreUser(u.id)} title="Restore" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><ArchiveRestore className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => deleteForever(u.id)} title="Delete permanently" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => setConfirmDeleteId(u.id)} title="Delete permanently" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>
                         </>
                       ) : (
                         u.role !== 'admin' && (
-                          <button onClick={() => archiveUser(u.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => setConfirmArchiveId(u.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>
                         )
                       )}
                     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import Select from '../../components/Select';
 import { ACTION_META, CATEGORY_STYLE, formatDateTime } from '../../data/auditActions';
 
 const CATEGORIES = [
@@ -56,53 +57,57 @@ export default function AdminAuditLog() {
             </button>
           ))}
         </div>
-        <select value={userFilter} onChange={e => setUserFilter(e.target.value)} className="input-field w-auto text-sm">
-          <option value="">All staff members</option>
-          {staff.map(u => <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>)}
-        </select>
+        <Select
+          value={userFilter}
+          onChange={setUserFilter}
+          options={[{ value: '', label: 'All staff members' }, ...staff.map(u => ({ value: u.id, label: `${u.first_name} ${u.last_name}` }))]}
+          className="w-56"
+        />
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
-              <th className="p-3 font-medium">Date &amp; Time</th>
-              <th className="p-3 font-medium">Action</th>
-              <th className="p-3 font-medium">Entity</th>
-              <th className="p-3 font-medium">Admin</th>
-              <th className="p-3 font-medium">Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={5} className="p-8 text-center text-gray-400">Loading...</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={5} className="p-8 text-center text-gray-400">No activity recorded yet.</td></tr>
-            ) : filtered.map(log => {
-              const meta = ACTION_META[log.action];
-              return (
-                <tr key={log.id} className="border-t border-gray-100">
-                  <td className="p-3 text-gray-500 whitespace-nowrap">{formatDateTime(log.created_at)}</td>
-                  <td className="p-3">
-                    <span className={`badge uppercase font-semibold ${CATEGORY_STYLE[meta?.category] || 'bg-gray-100 text-gray-800'}`}>
-                      {meta?.category || log.action}
-                    </span>
-                  </td>
-                  <td className="p-3 text-gray-600">{meta?.entity || log.entity_type || '—'}</td>
-                  <td className="p-3">
-                    {log.first_name ? (
-                      <>
-                        <p className="font-medium text-gray-800">{log.first_name} {log.last_name}</p>
-                        <p className="text-xs text-gray-400 font-mono">{log.staff_code || '—'}</p>
-                      </>
-                    ) : <span className="text-gray-400">Deleted user</span>}
-                  </td>
-                  <td className="p-3 text-gray-600">{meta && log.details ? meta.describe(log.details, nameOf) : '—'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="card overflow-hidden">
+        <div className="overflow-auto max-h-[65vh]">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 sticky top-0 z-10">
+              <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
+                <th className="p-3 font-medium">Date &amp; Time</th>
+                <th className="p-3 font-medium">Action</th>
+                <th className="p-3 font-medium">Entity</th>
+                <th className="p-3 font-medium">Admin</th>
+                <th className="p-3 font-medium">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={5} className="p-8 text-center text-gray-400">Loading...</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={5} className="p-8 text-center text-gray-400">No activity recorded yet.</td></tr>
+              ) : filtered.map(log => {
+                const meta = ACTION_META[log.action];
+                return (
+                  <tr key={log.id} className="border-t border-gray-100">
+                    <td className="p-3 text-gray-500 whitespace-nowrap">{formatDateTime(log.created_at)}</td>
+                    <td className="p-3">
+                      <span className={`badge uppercase font-semibold ${CATEGORY_STYLE[meta?.category] || 'bg-gray-100 text-gray-800'}`}>
+                        {meta?.category || log.action}
+                      </span>
+                    </td>
+                    <td className="p-3 text-gray-600">{meta?.entity || log.entity_type || '—'}</td>
+                    <td className="p-3">
+                      {log.first_name ? (
+                        <>
+                          <p className="font-medium text-gray-800">{log.first_name} {log.last_name}</p>
+                          <p className="text-xs text-gray-400 font-mono">{log.staff_code || '—'}</p>
+                        </>
+                      ) : <span className="text-gray-400">Deleted user</span>}
+                    </td>
+                    <td className="p-3 text-gray-600">{meta && log.details ? meta.describe(log.details, nameOf) : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     </AdminLayout>
   );

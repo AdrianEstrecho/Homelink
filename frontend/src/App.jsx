@@ -33,6 +33,7 @@ import AdminUsers from './pages/admin/Users';
 import AdminManagement from './pages/admin/AdminManagement';
 import ArchivedUsers from './pages/admin/ArchivedUsers';
 import AdminVouchers from './pages/admin/Vouchers';
+import AdminSupportMessages from './pages/admin/SupportMessages';
 import AdminAuditLog from './pages/admin/AuditLog';
 import AdminProfile from './pages/admin/Profile';
 import EmployeeProfile from './pages/employee/Profile';
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="/admin/archived-users" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><ArchivedUsers /></ProtectedRoute>} />
           <Route path="/admin/staff" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminManagement /></ProtectedRoute>} />
           <Route path="/admin/vouchers" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminVouchers /></ProtectedRoute>} />
+          <Route path="/admin/support" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminSupportMessages /></ProtectedRoute>} />
           <Route path="/admin/audit-log" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminAuditLog /></ProtectedRoute>} />
           <Route path="/admin/profile" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminProfile /></ProtectedRoute>} />
           <Route path="/employee" element={<ProtectedRoute roles={['employee']} redirectTo="/admin/login"><EmployeeDashboard /></ProtectedRoute>} />

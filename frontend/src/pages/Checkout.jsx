@@ -4,6 +4,13 @@ import { CreditCard, Tag, MapPin } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import Select from '../components/Select';
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: 'card', label: 'Credit/Debit Card' },
+  { value: 'gcash', label: 'GCash' },
+  { value: 'bank', label: 'Bank Transfer' },
+];
 
 export default function Checkout() {
   const { items, total, clearCart } = useCart();
@@ -66,11 +73,7 @@ export default function Checkout() {
 
         <div>
           <label className="block text-sm font-medium mb-1.5 flex items-center gap-1"><CreditCard className="w-4 h-4" /> Payment Method</label>
-          <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="input-field">
-            <option value="card">Credit/Debit Card</option>
-            <option value="gcash">GCash</option>
-            <option value="bank">Bank Transfer</option>
-          </select>
+          <Select value={paymentMethod} onChange={setPaymentMethod} options={PAYMENT_METHOD_OPTIONS} />
         </div>
 
         {error && <p className="text-red-600 text-sm">{error}</p>}

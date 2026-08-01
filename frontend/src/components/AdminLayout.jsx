@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Wrench, ShoppingCart, Calendar, Users, Ticket, ShieldCheck, Settings,
-  Search, Bell, Home, LogOut, History, AlertTriangle, Plus, Pencil, Trash2, LogIn, Archive,
+  Search, Bell, Home, LogOut, History, LifeBuoy, X, User,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -20,6 +20,7 @@ const NAV_SECTIONS = [
       { to: '/admin/bookings', icon: Calendar, label: 'Booking' },
       { to: '/admin/users', icon: Users, label: 'User' },
       { to: '/admin/vouchers', icon: Ticket, label: 'Voucher' },
+      { to: '/admin/support', icon: LifeBuoy, label: 'Support' },
     ],
   },
   {
@@ -28,7 +29,6 @@ const NAV_SECTIONS = [
       { to: '/admin/products?tab=archived', icon: Package, label: 'Archived Products' },
       { to: '/admin/services?tab=archived', icon: Wrench, label: 'Archived Services' },
       { to: '/admin/archived-users', icon: Users, label: 'Archived Users' },
-      { to: '/admin/orders?tab=cancelled', icon: ShoppingCart, label: 'Archived Orders' },
     ],
   },
   {
@@ -55,14 +55,14 @@ function isNavItemActive(item, location) {
   return (itemTab || null) === (currentTab || null);
 }
 
-const CATEGORY_ICON = {
-  create: { Icon: Plus, className: 'bg-green-100 text-green-600' },
-  update: { Icon: Pencil, className: 'bg-amber-100 text-amber-600' },
-  delete: { Icon: Trash2, className: 'bg-red-100 text-red-600' },
-  login: { Icon: LogIn, className: 'bg-blue-100 text-blue-600' },
-  archive: { Icon: Archive, className: 'bg-purple-100 text-purple-600' },
+// The notification bell only ever surfaces these three customer-initiated
+// events (new purchase, new booking, new support message) — everything else
+// staff/admins do is still recorded but only shown on the Audit Trail page.
+const NOTIF_META = {
+  'order.create': { Icon: ShoppingCart, className: 'bg-yellow-100 text-yellow-700', title: 'New Order', link: '/admin/orders' },
+  'booking.create': { Icon: Calendar, className: 'bg-blue-100 text-blue-700', title: 'New Booking', link: '/admin/bookings' },
+  'support.create': { Icon: LifeBuoy, className: 'bg-red-100 text-red-700', title: 'Support Message', link: '/admin/support' },
 };
-const CATEGORY_VERB = { create: 'Created', update: 'Updated', delete: 'Deleted', login: 'Logged In', archive: 'Archived' };
 
 const AVATAR_COLORS = ['bg-brand-navy', 'bg-brand-blue', 'bg-[#00806f]', 'bg-[#c8461a]'];
 
@@ -75,21 +75,41 @@ function initials(first, last) {
   return `${first?.[0] || ''}${last?.[0] || ''}`.toUpperCase() || 'A';
 }
 
+function NotifRow({ n, onClick }) {
+  return (
+    <Link
+      to={n.link}
+      onClick={onClick}
+      className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 last:border-0 transition hover:bg-gray-50 ${n.unread ? 'bg-[#00806f]/5' : ''}`}
+    >
+      <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${n.className}`}>
+        <n.Icon className="w-4 h-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-gray-800 truncate">{n.title}</p>
+        <p className="text-xs text-gray-500 truncate">{n.description}</p>
+        <p className="text-[11px] text-gray-400 mt-0.5">{n.time}</p>
+      </div>
+      {n.unread && <span className="w-2 h-2 rounded-full bg-[#00806f] shrink-0 mt-1.5" />}
+    </Link>
+  );
+}
+
 export default function AdminLayout({ children, title, subtitle }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
-  const [summary, setSummary] = useState(null);
+  const [viewAllOpen, setViewAllOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [activity, setActivity] = useState([]);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const seenKey = `homelink_notif_seen_${user?.id || 'admin'}`;
   const [seenAt, setSeenAt] = useState(() => localStorage.getItem(seenKey) || '');
 
   useEffect(() => {
-    api.get('/admin/notifications-summary').then(setSummary).catch(() => {});
-    api.get('/admin/audit-logs?limit=5').then(setActivity).catch(() => {});
+    api.get('/admin/audit-logs?action=order.create,booking.create,support.create&limit=50').then(setActivity).catch(() => {});
   }, []);
 
   // Mark the currently-loaded activity as seen once the panel is closed again,
@@ -112,47 +132,31 @@ export default function AdminLayout({ children, title, subtitle }) {
 
   const handleLogout = () => { logout(); navigate('/admin/login'); };
 
-  const alerts = useMemo(() => {
-    if (!summary) return [];
-    const items = [];
-    if (summary.pendingOrders > 0) {
-      items.push({ id: 'alert-orders', Icon: ShoppingCart, className: 'bg-yellow-100 text-yellow-700', title: 'Pending orders', description: `${summary.pendingOrders} order${summary.pendingOrders === 1 ? '' : 's'} awaiting processing`, time: 'Needs attention', link: '/admin/orders' });
-    }
-    if (summary.pendingBookings > 0) {
-      items.push({ id: 'alert-bookings', Icon: Calendar, className: 'bg-blue-100 text-blue-700', title: 'Pending bookings', description: `${summary.pendingBookings} booking${summary.pendingBookings === 1 ? '' : 's'} awaiting confirmation`, time: 'Needs attention', link: '/admin/bookings' });
-    }
-    if (summary.lowStockCount > 0) {
-      items.push({ id: 'alert-stock', Icon: AlertTriangle, className: 'bg-red-100 text-red-700', title: 'Low stock products', description: `${summary.lowStockCount} product${summary.lowStockCount === 1 ? '' : 's'} running low`, time: 'Needs attention', link: '/admin/products' });
-    }
-    return items;
-  }, [summary]);
-
-  const activityItems = useMemo(() => activity.map(log => {
+  const notifItems = useMemo(() => activity.map(log => {
     const meta = ACTION_META[log.action];
-    const { Icon, className } = CATEGORY_ICON[meta?.category] || { Icon: Pencil, className: 'bg-gray-100 text-gray-600' };
+    const { Icon, className, title, link } = NOTIF_META[log.action] || { Icon: Bell, className: 'bg-gray-100 text-gray-600', title: 'Activity', link: '/admin/audit-log' };
     return {
       id: log.id,
       Icon,
       className,
-      title: meta ? `${meta.entity} ${CATEGORY_VERB[meta.category] || 'Updated'}` : 'Activity',
+      title,
       description: meta && log.details ? meta.describe(log.details) : log.action,
       time: timeAgo(log.created_at),
-      link: '/admin/audit-log',
+      link,
       unread: !seenAt || new Date(`${log.created_at.replace(' ', 'T')}Z`).toISOString() > seenAt,
     };
   }), [activity, seenAt]);
 
-  const notifItems = [...alerts.map(a => ({ ...a, unread: true })), ...activityItems];
-  const notifCount = alerts.length + activityItems.filter(a => a.unread).length;
+  const notifCount = notifItems.filter(a => a.unread).length;
 
   return (
     <div className="min-h-screen flex bg-gray-50">
       {/* Sidebar */}
       <aside className="w-60 shrink-0 bg-brand-navy text-white flex flex-col">
-        <Link to="/" className="flex items-center gap-2 px-5 h-16 border-b border-white/10 shrink-0">
+        <div className="flex items-center gap-2 px-5 h-16 border-b border-white/10 shrink-0">
           <div className="w-8 h-8 bg-brand-orange rounded-lg flex items-center justify-center shrink-0"><Home className="w-4 h-4" /></div>
           <span className="font-display font-bold text-lg truncate">Home<span className="text-brand-orange">Link</span></span>
-        </Link>
+        </div>
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           {NAV_SECTIONS.map((section, i) => (
             <div key={section.label} className={i > 0 ? 'mt-5' : ''}>
@@ -193,12 +197,32 @@ export default function AdminLayout({ children, title, subtitle }) {
       <ConfirmDialog
         open={confirmLogout}
         icon={LogOut}
+        tone="login"
         title="Log out?"
         message="You'll need to sign in again to access the staff portal."
         confirmLabel="Log Out"
         onConfirm={handleLogout}
         onCancel={() => setConfirmLogout(false)}
       />
+
+      {viewAllOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={() => setViewAllOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col fade-up">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+              <h3 className="font-display font-semibold text-lg text-brand-navy">All Notifications</h3>
+              <button onClick={() => setViewAllOpen(false)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {notifItems.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-10">You're all caught up.</p>
+              ) : notifItems.map(n => (
+                <NotifRow key={n.id} n={n} onClick={() => setViewAllOpen(false)} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
@@ -232,39 +256,38 @@ export default function AdminLayout({ children, title, subtitle }) {
                     <div className="max-h-96 overflow-y-auto">
                       {notifItems.length === 0 ? (
                         <p className="text-sm text-gray-400 text-center py-8">You're all caught up.</p>
-                      ) : notifItems.map(n => (
-                        <Link
-                          key={n.id}
-                          to={n.link}
-                          onClick={() => setNotifOpen(false)}
-                          className={`flex items-start gap-3 px-4 py-3 border-b border-gray-50 last:border-0 transition hover:bg-gray-50 ${n.unread ? 'bg-[#00806f]/5' : ''}`}
-                        >
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${n.className}`}>
-                            <n.Icon className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-gray-800 truncate">{n.title}</p>
-                            <p className="text-xs text-gray-500 truncate">{n.description}</p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">{n.time}</p>
-                          </div>
-                          {n.unread && <span className="w-2 h-2 rounded-full bg-[#00806f] shrink-0 mt-1.5" />}
-                        </Link>
+                      ) : notifItems.slice(0, 8).map(n => (
+                        <NotifRow key={n.id} n={n} onClick={() => setNotifOpen(false)} />
                       ))}
                     </div>
-                    <Link
-                      to="/admin/audit-log"
-                      onClick={() => setNotifOpen(false)}
-                      className="block text-center text-sm font-semibold text-[#00806f] hover:text-brand-navy transition py-3 border-t border-gray-100"
+                    <button
+                      onClick={() => { setNotifOpen(false); setViewAllOpen(true); }}
+                      className="block w-full text-center text-sm font-semibold text-[#00806f] hover:text-brand-navy transition py-3 border-t border-gray-100"
                     >
                       View All Notifications
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="relative">
+              <button onClick={() => setProfileOpen(o => !o)} className={`w-9 h-9 rounded-full ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold text-white shrink-0`}>
+                {initials(user?.firstName, user?.lastName)}
+              </button>
+              {profileOpen && (
+                <>
+                  <button className="fixed inset-0 z-10 cursor-default" onClick={() => setProfileOpen(false)} aria-label="Close profile menu" />
+                  <div className="absolute right-0 mt-2 w-48 card p-1.5 z-20">
+                    <Link to="/admin/profile" onClick={() => setProfileOpen(false)} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">
+                      <User className="w-4 h-4 text-gray-400" /> View Profile
+                    </Link>
+                    <Link to="/" onClick={() => setProfileOpen(false)} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">
+                      <Home className="w-4 h-4 text-gray-400" /> View Website
                     </Link>
                   </div>
                 </>
               )}
             </div>
-            <Link to="/admin/profile" className={`w-9 h-9 rounded-full ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold text-white shrink-0`}>
-              {initials(user?.firstName, user?.lastName)}
-            </Link>
           </div>
         </div>
 

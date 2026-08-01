@@ -4,6 +4,7 @@ import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { getFirstTimeServiceDiscount, getHolidayDiscount, calculateDiscount } from '../utils/promos.js';
 import { bookingConfirmationEmail } from '../utils/email.js';
+import { logActivity } from '../utils/audit.js';
 
 const router = Router();
 
@@ -37,6 +38,12 @@ router.post('/', authenticate, async (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
     await bookingConfirmationEmail(booking, service, user);
+
+    logActivity(req, 'booking.create', 'booking', id, {
+      customerName: `${user.first_name} ${user.last_name}`,
+      serviceName: service.name,
+      scheduledDate,
+    });
 
     res.status(201).json({ bookingId: id, price, discount, status: 'pending' });
   } catch (err) {

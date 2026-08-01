@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pencil, Search } from 'lucide-react';
+import { Pencil, Search, RefreshCw, Wrench } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import Select from '../../components/Select';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const STATUSES = ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled'];
+const statusLabel = (s) => s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+const STATUS_OPTIONS = STATUSES.map(s => ({ value: s, label: statusLabel(s) }));
 
 export default function AdminBookings() {
   const [bookings, setBookings] = useState([]);
@@ -11,6 +15,8 @@ export default function AdminBookings() {
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [confirmStatus, setConfirmStatus] = useState(null);
+  const [confirmAssign, setConfirmAssign] = useState(null);
 
   const load = () => {
     api.get('/admin/bookings').then(setBookings).catch(() => {});
@@ -28,6 +34,12 @@ export default function AdminBookings() {
     setEditingId(null);
     load();
   };
+
+  const confirmStatusChange = () => { updateStatus(confirmStatus.id, confirmStatus.status); setConfirmStatus(null); };
+
+  const assignTarget = confirmAssign ? installers.find(i => i.id === confirmAssign.employeeId) : null;
+  const isUnassign = !!confirmAssign && !confirmAssign.employeeId;
+  const confirmAssignChange = () => { assign(confirmAssign.bookingId, confirmAssign.employeeId); setConfirmAssign(null); };
 
   const counts = useMemo(() => {
     const c = { all: bookings.length };
@@ -47,6 +59,27 @@ export default function AdminBookings() {
 
   return (
     <AdminLayout title="Bookings" subtitle="View and manage service bookings.">
+      <ConfirmDialog
+        open={!!confirmStatus}
+        icon={RefreshCw}
+        tone="update"
+        title={confirmStatus ? `Change status to "${STATUS_OPTIONS.find(o => o.value === confirmStatus.status)?.label}"?` : ''}
+        message="This updates the status shown to the customer."
+        confirmLabel="Change Status"
+        onConfirm={confirmStatusChange}
+        onCancel={() => setConfirmStatus(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmAssign}
+        icon={Wrench}
+        tone="update"
+        title={isUnassign ? 'Unassign this booking?' : `Assign to ${assignTarget?.first_name} ${assignTarget?.last_name}?`}
+        message={isUnassign ? 'The technician will be removed from this booking.' : 'The booking will be marked confirmed and the technician assigned.'}
+        confirmLabel={isUnassign ? 'Unassign' : 'Assign'}
+        onConfirm={confirmAssignChange}
+        onCancel={() => setConfirmAssign(null)}
+      />
+
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <TabButton active={tab === 'all'} onClick={() => setTab('all')}>All ({counts.all})</TabButton>
         {STATUSES.map(s => (
@@ -99,26 +132,23 @@ export default function AdminBookings() {
                 <td className="p-3 text-gray-600">{b.service_name}</td>
                 <td className="p-3 text-gray-600 whitespace-nowrap">{b.scheduled_date} <span className="text-gray-400">{b.scheduled_time}</span></td>
                 <td className="p-3">
-                  <select
-                    onChange={e => assign(b.id, e.target.value)}
+                  <Select
                     value={b.employee_id || ''}
-                    className="input-field w-auto text-xs py-1"
-                  >
-                    <option value="">Unassigned</option>
-                    {installers.map(i => <option key={i.id} value={i.id}>{i.first_name} {i.last_name}</option>)}
-                  </select>
+                    onChange={employeeId => setConfirmAssign({ bookingId: b.id, employeeId })}
+                    options={[{ value: '', label: 'Unassigned' }, ...installers.map(i => ({ value: i.id, label: `${i.first_name} ${i.last_name}` }))]}
+                    className="w-40"
+                  />
                 </td>
                 <td className="p-3">
                   {editingId === b.id ? (
-                    <select
-                      autoFocus
+                    <Select
+                      defaultOpen
                       value={b.status}
-                      onChange={e => updateStatus(b.id, e.target.value)}
-                      onBlur={() => setEditingId(null)}
-                      className="input-field w-auto text-xs py-1"
-                    >
-                      {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-                    </select>
+                      onChange={status => setConfirmStatus({ id: b.id, status })}
+                      onClose={() => setEditingId(null)}
+                      options={STATUS_OPTIONS}
+                      className="w-40"
+                    />
                   ) : (
                     <span className={`badge capitalize ${statusColor(b.status)}`}>{b.status.replace('_', ' ')}</span>
                   )}

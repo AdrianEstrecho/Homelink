@@ -99,3 +99,27 @@
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+@media print {
+  body.printing-receipt > * {
+    visibility: hidden;
+  }
+  body.printing-receipt .receipt-print-area,
+  body.printing-receipt .receipt-print-area * {
+    visibility: visible;
+  }
+  body.printing-receipt .receipt-print-area {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    padding: 32px;
+    margin: 0;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  body.printing-receipt .no-print {
+    display: none !important;
+  }
+}

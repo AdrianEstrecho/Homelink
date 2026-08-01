@@ -9,14 +9,6 @@ import { generateStaffCode } from '../utils/staffCode.js';
 const router = Router();
 router.use(authenticate, authorize('admin'));
 
-router.get('/notifications-summary', (req, res) => {
-  res.json({
-    pendingOrders: db.prepare("SELECT COUNT(*) as c FROM orders WHERE status='pending'").get().c,
-    pendingBookings: db.prepare("SELECT COUNT(*) as c FROM bookings WHERE status='pending'").get().c,
-    lowStockCount: db.prepare("SELECT COUNT(*) as c FROM products WHERE stock > 0 AND stock <= 5 AND (archived IS NULL OR archived = 0)").get().c,
-  });
-});
-
 router.get('/dashboard', (req, res) => {
   const stats = {
     totalCustomers: db.prepare("SELECT COUNT(*) as c FROM users WHERE role='customer'").get().c,
@@ -173,7 +165,7 @@ router.put('/products/:id', (req, res) => {
 
 router.put('/products/:id/archive', (req, res) => {
   const product = db.prepare('SELECT name FROM products WHERE id = ?').get(req.params.id);
-  db.prepare('UPDATE products SET archived = 1 WHERE id = ?').run(req.params.id);
+  db.prepare("UPDATE products SET archived = 1, status = 'inactive' WHERE id = ?").run(req.params.id);
   logActivity(req, 'product.archive', 'product', req.params.id, { name: product?.name });
   res.json({ message: 'Product archived' });
 });
@@ -249,7 +241,7 @@ router.put('/services/:id', (req, res) => {
 
 router.put('/services/:id/archive', (req, res) => {
   const service = db.prepare('SELECT name FROM services WHERE id = ?').get(req.params.id);
-  db.prepare('UPDATE services SET archived = 1 WHERE id = ?').run(req.params.id);
+  db.prepare("UPDATE services SET archived = 1, status = 'inactive' WHERE id = ?").run(req.params.id);
   logActivity(req, 'service.archive', 'service', req.params.id, { name: service?.name });
   res.json({ message: 'Service archived' });
 });
@@ -303,9 +295,14 @@ router.put('/bookings/:id', (req, res) => {
     db.prepare('UPDATE bookings SET status = ? WHERE id = ?').run(status, req.params.id);
     logActivity(req, 'booking.status_update', 'booking', req.params.id, { from: booking?.status, to: status });
   }
-  if (employeeId) {
-    db.prepare('UPDATE bookings SET employee_id = ?, status = ? WHERE id = ?').run(employeeId, 'confirmed', req.params.id);
-    logActivity(req, 'booking.assign', 'booking', req.params.id, { fromEmployeeId: booking?.employee_id, toEmployeeId: employeeId });
+  if ('employeeId' in req.body) {
+    if (employeeId) {
+      db.prepare('UPDATE bookings SET employee_id = ?, status = ? WHERE id = ?').run(employeeId, 'confirmed', req.params.id);
+      logActivity(req, 'booking.assign', 'booking', req.params.id, { fromEmployeeId: booking?.employee_id, toEmployeeId: employeeId });
+    } else {
+      db.prepare('UPDATE bookings SET employee_id = NULL WHERE id = ?').run(req.params.id);
+      logActivity(req, 'booking.unassign', 'booking', req.params.id, { fromEmployeeId: booking?.employee_id });
+    }
   }
   res.json({ message: 'Updated' });
 });
@@ -339,6 +336,25 @@ router.delete('/vouchers/:id', (req, res) => {
   res.json({ message: 'Deleted' });
 });
 
+// Support messages
+router.get('/support-messages', (req, res) => {
+  const messages = db.prepare(`
+    SELECT s.*, u.first_name, u.last_name, u.email
+    FROM support_messages s JOIN users u ON s.user_id = u.id
+    ORDER BY s.status ASC, s.created_at DESC
+  `).all();
+  res.json(messages);
+});
+
+router.put('/support-messages/:id/toggle', (req, res) => {
+  const msg = db.prepare('SELECT * FROM support_messages WHERE id = ?').get(req.params.id);
+  if (!msg) return res.status(404).json({ error: 'Message not found' });
+  const nextStatus = msg.status === 'open' ? 'resolved' : 'open';
+  db.prepare('UPDATE support_messages SET status = ? WHERE id = ?').run(nextStatus, req.params.id);
+  logActivity(req, nextStatus === 'resolved' ? 'support.resolve' : 'support.reopen', 'support', req.params.id, { subject: msg.subject });
+  res.json({ message: 'Updated', status: nextStatus });
+});
+
 // Announcements
 router.get('/announcements', (req, res) => res.json(db.prepare('SELECT * FROM announcements ORDER BY created_at DESC').all()));
 
@@ -369,7 +385,11 @@ router.get('/audit-logs', (req, res) => {
   const params = [];
   if (userId) { sql += ' AND a.user_id = ?'; params.push(userId); }
   if (role) { sql += ' AND u.role = ?'; params.push(role); }
-  if (action) { sql += ' AND a.action = ?'; params.push(action); }
+  if (action) {
+    const actions = action.split(',').map(a => a.trim()).filter(Boolean);
+    sql += ` AND a.action IN (${actions.map(() => '?').join(',')})`;
+    params.push(...actions);
+  }
   sql += ' ORDER BY a.created_at DESC LIMIT ?';
   params.push(cappedLimit);
   const logs = db.prepare(sql).all(...params);

@@ -3,6 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Calendar, Clock, MapPin, CreditCard } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import Select from '../components/Select';
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: 'card', label: 'Credit/Debit Card' },
+  { value: 'gcash', label: 'GCash' },
+  { value: 'bank', label: 'Bank Transfer' },
+];
 
 export default function ServiceBook() {
   const { slug } = useParams();
@@ -83,11 +90,7 @@ export default function ServiceBook() {
         </div>
         <div>
           <label className="block text-sm font-medium mb-1.5 flex items-center gap-1"><CreditCard className="w-4 h-4" /> Payment Method</label>
-          <select value={form.paymentMethod} onChange={e => setForm({ ...form, paymentMethod: e.target.value })} className="input-field">
-            <option value="card">Credit/Debit Card</option>
-            <option value="gcash">GCash</option>
-            <option value="bank">Bank Transfer</option>
-          </select>
+          <Select value={form.paymentMethod} onChange={paymentMethod => setForm({ ...form, paymentMethod })} options={PAYMENT_METHOD_OPTIONS} />
         </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
         <button type="submit" disabled={loading || !form.time} className="btn-primary w-full py-3 disabled:opacity-50">

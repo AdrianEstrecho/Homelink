@@ -1,10 +1,14 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Pencil, Search } from 'lucide-react';
+import { Pencil, Search, RefreshCw } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import OrderDetailsModal from '../../components/OrderDetailsModal';
+import Select from '../../components/Select';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+const STATUS_OPTIONS = STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }));
 
 export default function AdminOrders() {
   const [searchParams] = useSearchParams();
@@ -12,6 +16,8 @@ export default function AdminOrders() {
   const [tab, setTab] = useState(STATUSES.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'all');
   const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [confirmStatus, setConfirmStatus] = useState(null);
 
   const load = () => api.get('/admin/orders').then(setOrders).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -21,6 +27,8 @@ export default function AdminOrders() {
     setEditingId(null);
     load();
   };
+
+  const confirmStatusChange = () => { updateStatus(confirmStatus.id, confirmStatus.status); setConfirmStatus(null); };
 
   const counts = useMemo(() => {
     const c = { all: orders.length };
@@ -40,6 +48,17 @@ export default function AdminOrders() {
 
   return (
     <AdminLayout title="Orders" subtitle="View and manage customer orders.">
+      <ConfirmDialog
+        open={!!confirmStatus}
+        icon={RefreshCw}
+        tone="update"
+        title={confirmStatus ? `Change status to "${STATUS_OPTIONS.find(o => o.value === confirmStatus.status)?.label}"?` : ''}
+        message="This updates the status shown to the customer."
+        confirmLabel="Change Status"
+        onConfirm={confirmStatusChange}
+        onCancel={() => setConfirmStatus(null)}
+      />
+
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <TabButton active={tab === 'all'} onClick={() => setTab('all')}>All ({counts.all})</TabButton>
         {STATUSES.map(s => (
@@ -77,30 +96,33 @@ export default function AdminOrders() {
             {filtered.length === 0 ? (
               <tr><td colSpan={6} className="p-8 text-center text-gray-400">No orders found.</td></tr>
             ) : filtered.map(o => (
-              <tr key={o.id} className="border-t border-gray-100">
+              <tr
+                key={o.id}
+                onClick={() => setSelectedOrder(o)}
+                className="border-t border-gray-100 cursor-pointer hover:bg-gray-50 transition"
+              >
                 <td className="p-3">
                   <p className="font-medium text-gray-800">{o.first_name} {o.last_name}</p>
                   <p className="text-xs text-gray-400">{o.email}</p>
                 </td>
                 <td className="p-3 text-gray-500 font-mono text-xs">#{o.id.slice(0, 8).toUpperCase()}</td>
                 <td className="p-3 text-gray-600">{o.items?.length || 0} item{o.items?.length === 1 ? '' : 's'}</td>
-                <td className="p-3">
+                <td className="p-3" onClick={e => e.stopPropagation()}>
                   {editingId === o.id ? (
-                    <select
-                      autoFocus
+                    <Select
+                      defaultOpen
                       value={o.status}
-                      onChange={e => updateStatus(o.id, e.target.value)}
-                      onBlur={() => setEditingId(null)}
-                      className="input-field w-auto text-xs py-1"
-                    >
-                      {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                      onChange={status => setConfirmStatus({ id: o.id, status })}
+                      onClose={() => setEditingId(null)}
+                      options={STATUS_OPTIONS}
+                      className="w-40"
+                    />
                   ) : (
                     <span className={`badge capitalize ${statusColor(o.status)}`}>{o.status}</span>
                   )}
                 </td>
                 <td className="p-3 text-right font-medium">{formatPrice(o.total)}</td>
-                <td className="p-3">
+                <td className="p-3" onClick={e => e.stopPropagation()}>
                   <div className="flex items-center justify-end">
                     <button onClick={() => setEditingId(o.id)} title="Change status" className="p-1.5 rounded-lg bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/20 transition">
                       <Pencil className="w-3.5 h-3.5" />
@@ -112,6 +134,14 @@ export default function AdminOrders() {
           </tbody>
         </table>
       </div>
+
+      {selectedOrder && (
+        <OrderDetailsModal
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+          person={{ name: `${selectedOrder.first_name} ${selectedOrder.last_name}`, email: selectedOrder.email }}
+        />
+      )}
     </AdminLayout>
   );
 }

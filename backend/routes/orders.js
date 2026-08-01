@@ -4,6 +4,7 @@ import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { getHolidayDiscount, validateVoucher, calculateDiscount, applyVoucherUse } from '../utils/promos.js';
 import { orderConfirmationEmail } from '../utils/email.js';
+import { logActivity } from '../utils/audit.js';
 
 const router = Router();
 
@@ -51,6 +52,12 @@ router.post('/', authenticate, async (req, res) => {
 
     const emailItems = orderItems.map(oi => ({ name: oi.product.name, quantity: oi.quantity, price: oi.price * oi.quantity }));
     await orderConfirmationEmail({ id: orderId, total }, emailItems, user);
+
+    logActivity(req, 'order.create', 'order', orderId, {
+      customerName: `${user.first_name} ${user.last_name}`,
+      total,
+      itemCount: orderItems.reduce((sum, oi) => sum + oi.quantity, 0),
+    });
 
     res.status(201).json({ orderId, subtotal, discount, total, status: 'pending' });
   } catch (err) {

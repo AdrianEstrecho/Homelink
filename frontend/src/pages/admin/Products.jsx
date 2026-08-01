@@ -5,6 +5,7 @@ import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import PromptDialog from '../../components/PromptDialog';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_IMAGE_MB = 5;
@@ -46,6 +47,8 @@ export default function AdminProducts() {
   const [error, setError] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [subcategoryPromptOpen, setSubcategoryPromptOpen] = useState(false);
+  const [confirmArchiveId, setConfirmArchiveId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const fileInputRef = useRef(null);
 
   const load = () => {
@@ -155,11 +158,10 @@ export default function AdminProducts() {
 
   const archive = async (id) => { await api.put(`/admin/products/${id}/archive`); load(); };
   const restore = async (id) => { await api.put(`/admin/products/${id}/restore`); load(); };
-  const remove = async (id) => {
-    if (!confirm('Permanently delete this product? This cannot be undone.')) return;
-    await api.delete(`/admin/products/${id}`);
-    load();
-  };
+  const remove = async (id) => { await api.delete(`/admin/products/${id}`); load(); };
+
+  const confirmArchive = () => { archive(confirmArchiveId); setConfirmArchiveId(null); };
+  const confirmDelete = () => { remove(confirmDeleteId); setConfirmDeleteId(null); };
 
   return (
     <AdminLayout title="Products" subtitle="View and manage your product catalog.">
@@ -172,12 +174,35 @@ export default function AdminProducts() {
         onCancel={() => setSubcategoryPromptOpen(false)}
       />
 
+      <ConfirmDialog
+        open={!!confirmArchiveId}
+        icon={Archive}
+        tone="archive"
+        title="Archive this product?"
+        message="It will be hidden from customers but can be restored later from the Archived tab."
+        confirmLabel="Archive"
+        onConfirm={confirmArchive}
+        onCancel={() => setConfirmArchiveId(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        icon={Trash2}
+        tone="delete"
+        title="Permanently delete this product?"
+        message="This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
-          <TabButton active={tab === 'active'} onClick={() => setTab('active')}>All Active ({activeCount})</TabButton>
+          {tab !== 'archived' && (
+            <TabButton active={tab === 'active'} onClick={() => setTab('active')}>All Active ({activeCount})</TabButton>
+          )}
           <TabButton active={tab === 'archived'} onClick={() => setTab('archived')}>Archived ({archivedCount})</TabButton>
         </div>
-        {!showForm && (
+        {!showForm && tab !== 'archived' && (
           <button onClick={startAdd} className="btn-primary flex items-center gap-2 text-sm py-2"><Plus className="w-4 h-4" /> Add Product</button>
         )}
       </div>
@@ -372,13 +397,15 @@ export default function AdminProducts() {
                 </td>
                 <td className="p-3">
                   <div className="flex items-center justify-end gap-1.5">
-                    <button onClick={() => startEdit(p)} title="Edit" className="p-1.5 rounded-lg bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/20 transition"><Pencil className="w-3.5 h-3.5" /></button>
                     {p.archived ? (
-                      <button onClick={() => restore(p.id)} title="Restore" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><ArchiveRestore className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => restore(p.id)} title="Unarchive" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><ArchiveRestore className="w-3.5 h-3.5" /></button>
                     ) : (
-                      <button onClick={() => archive(p.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>
+                      <>
+                        <button onClick={() => startEdit(p)} title="Edit" className="p-1.5 rounded-lg bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/20 transition"><Pencil className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => setConfirmArchiveId(p.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => setConfirmDeleteId(p.id)} title="Delete permanently" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </>
                     )}
-                    <button onClick={() => remove(p.id)} title="Delete permanently" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </td>
               </tr>

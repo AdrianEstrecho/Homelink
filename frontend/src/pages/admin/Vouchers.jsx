@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react';
 import { Plus, Trash2, X, Ticket } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import Select from '../../components/Select';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const emptyForm = { code: '', discountType: 'percent', discountValue: '', minOrder: '', maxUses: '100', validFrom: '', validUntil: '' };
+const DISCOUNT_TYPE_OPTIONS = [{ value: 'percent', label: 'Percent Off' }, { value: 'fixed', label: 'Fixed Amount Off' }];
 
 function formatDate(d) {
   if (!d) return '—';
@@ -14,9 +17,11 @@ export default function AdminVouchers() {
   const [vouchers, setVouchers] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [confirmToggleId, setConfirmToggleId] = useState(null);
 
   const load = () => api.get('/admin/vouchers').then(setVouchers).catch(() => {});
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
 
   const cancelForm = () => { setShowForm(false); setForm(emptyForm); };
 
@@ -32,14 +37,34 @@ export default function AdminVouchers() {
   };
 
   const toggleActive = async (id) => { await api.put(`/admin/vouchers/${id}/toggle`); load(); };
-  const remove = async (id) => {
-    if (!confirm('Delete this voucher? This cannot be undone.')) return;
-    await api.delete(`/admin/vouchers/${id}`);
-    load();
-  };
+  const remove = async (id) => { await api.delete(`/admin/vouchers/${id}`); load(); };
+  const confirmDelete = () => { remove(confirmDeleteId); setConfirmDeleteId(null); };
+  const confirmToggle = () => { toggleActive(confirmToggleId); setConfirmToggleId(null); };
+  const toggleTarget = vouchers.find(v => v.id === confirmToggleId);
 
   return (
     <AdminLayout title="Voucher Management" subtitle="Create and manage discount vouchers for customers.">
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        icon={Trash2}
+        tone="delete"
+        title="Delete this voucher?"
+        message="This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmToggleId}
+        icon={Ticket}
+        tone="update"
+        title={toggleTarget ? `${toggleTarget.active ? 'Deactivate' : 'Activate'} this voucher?` : ''}
+        message={toggleTarget?.active ? 'Customers will no longer be able to use this code.' : 'Customers will be able to use this code again.'}
+        confirmLabel={toggleTarget?.active ? 'Deactivate' : 'Activate'}
+        onConfirm={confirmToggle}
+        onCancel={() => setConfirmToggleId(null)}
+      />
+
       <div className="flex items-center justify-end mb-4">
         {!showForm && (
           <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 text-sm py-2"><Plus className="w-4 h-4" /> Add Voucher</button>
@@ -55,10 +80,7 @@ export default function AdminVouchers() {
               <button type="button" onClick={cancelForm} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
             </div>
             <input placeholder="Code (e.g. SAVE20)" required value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} className="input-field md:col-span-2 font-mono" />
-            <select value={form.discountType} onChange={e => setForm({ ...form, discountType: e.target.value })} className="input-field">
-              <option value="percent">Percent Off</option>
-              <option value="fixed">Fixed Amount Off</option>
-            </select>
+            <Select value={form.discountType} onChange={discountType => setForm({ ...form, discountType })} options={DISCOUNT_TYPE_OPTIONS} />
             <input placeholder={form.discountType === 'percent' ? 'Discount %' : 'Discount ₱'} type="number" min="0" required value={form.discountValue} onChange={e => setForm({ ...form, discountValue: e.target.value })} className="input-field" />
             <input placeholder="Minimum Order (₱)" type="number" min="0" value={form.minOrder} onChange={e => setForm({ ...form, minOrder: e.target.value })} className="input-field" />
             <input placeholder="Max Uses" type="number" min="1" value={form.maxUses} onChange={e => setForm({ ...form, maxUses: e.target.value })} className="input-field" />
@@ -103,13 +125,13 @@ export default function AdminVouchers() {
                 <td className="p-3 text-gray-600">{v.used_count} / {v.max_uses}</td>
                 <td className="p-3 text-gray-600 text-xs">{formatDate(v.valid_from)} – {formatDate(v.valid_until)}</td>
                 <td className="p-3">
-                  <button onClick={() => toggleActive(v.id)} className={`badge ${v.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                  <button onClick={() => setConfirmToggleId(v.id)} className={`badge ${v.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
                     {v.active ? 'Active' : 'Inactive'}
                   </button>
                 </td>
                 <td className="p-3">
                   <div className="flex items-center justify-end gap-1.5">
-                    <button onClick={() => remove(v.id)} title="Delete" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setConfirmDeleteId(v.id)} title="Delete" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </td>
               </tr>
