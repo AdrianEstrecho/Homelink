@@ -70,6 +70,37 @@
     animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
+  /* Thin, near-invisible scrollbar for dark panels (e.g. the admin sidebar) —
+     stays out of the way at rest and only firms up slightly on hover/scroll. */
+  .scrollbar-ghost::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-ghost::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-ghost::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 9999px;
+  }
+  .scrollbar-ghost:hover::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.18);
+  }
+  .scrollbar-ghost::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.32);
+  }
+  /* Firefox has no ::-webkit-scrollbar support, so it's scoped out of the
+     rules above entirely — give it the standard-properties equivalent
+     instead of leaving it with a default opaque scrollbar. */
+  @supports not selector(::-webkit-scrollbar) {
+    .scrollbar-ghost {
+      scrollbar-width: thin;
+      scrollbar-color: transparent transparent;
+    }
+    .scrollbar-ghost:hover {
+      scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .reveal {
       opacity: 1;
@@ -100,15 +131,18 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Generic single-area print isolation — toggle .printing-active on <body> and mark
+   the one element to print with .print-area (see OrderDetailsModal and any admin
+   report's handlePrint). Everything else on the page is hidden for that print pass. */
 @media print {
-  body.printing-receipt > * {
+  body.printing-active > * {
     visibility: hidden;
   }
-  body.printing-receipt .receipt-print-area,
-  body.printing-receipt .receipt-print-area * {
+  body.printing-active .print-area,
+  body.printing-active .print-area * {
     visibility: visible;
   }
-  body.printing-receipt .receipt-print-area {
+  body.printing-active .print-area {
     position: fixed;
     inset: 0;
     width: 100%;
@@ -119,7 +153,7 @@
     box-shadow: none;
     border-radius: 0;
   }
-  body.printing-receipt .no-print {
+  body.printing-active .no-print {
     display: none !important;
   }
 }

@@ -16,7 +16,7 @@ const appleConfigured = isAppleSignInConfigured();
 export default function Register() {
   const { register, loginWithGoogle, loginWithApple } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', phone: '', address: '' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', phone: '' });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
@@ -111,31 +111,25 @@ export default function Register() {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1.5">Address</label>
-          <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="input-field" />
+          <label className="block text-sm font-medium mb-1.5">Password</label>
+          <input
+            type="password"
+            required
+            value={form.password}
+            onFocus={() => setPasswordTouched(true)}
+            onChange={e => setForm({ ...form, password: e.target.value })}
+            className="input-field"
+          />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Password</label>
-            <input
-              type="password"
-              required
-              value={form.password}
-              onFocus={() => setPasswordTouched(true)}
-              onChange={e => setForm({ ...form, password: e.target.value })}
-              className="input-field"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Confirm Password</label>
-            <input
-              type="password"
-              required
-              value={form.confirmPassword}
-              onChange={e => setForm({ ...form, confirmPassword: e.target.value })}
-              className="input-field"
-            />
-          </div>
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Confirm Password</label>
+          <input
+            type="password"
+            required
+            value={form.confirmPassword}
+            onChange={e => setForm({ ...form, confirmPassword: e.target.value })}
+            className="input-field"
+          />
         </div>
         {passwordTouched && <PasswordRequirements password={form.password} />}
         {!passwordsMatch && <p className="text-red-600 text-xs">Passwords do not match</p>}

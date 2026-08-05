@@ -4,11 +4,15 @@ import db from './database.js';
 
 console.log('Seeding HomeLink database...');
 
-db.exec('DELETE FROM order_items; DELETE FROM orders; DELETE FROM bookings; DELETE FROM vouchers; DELETE FROM products; DELETE FROM services; DELETE FROM categories; DELETE FROM announcements; DELETE FROM gallery; DELETE FROM users;');
+// reviews.order_id has no cascade, so it must go before orders; same for subcategories,
+// which self-reference their parent via parent_id and must go before the parent row.
+db.exec('DELETE FROM reviews; DELETE FROM order_items; DELETE FROM orders; DELETE FROM bookings; DELETE FROM vouchers; DELETE FROM products; DELETE FROM services; DELETE FROM categories WHERE parent_id IS NOT NULL; DELETE FROM categories; DELETE FROM announcements; DELETE FROM gallery; DELETE FROM audit_logs; DELETE FROM users;');
 
 const adminId = uuid();
 const emp1 = uuid();
 const emp2 = uuid();
+const accountingEmp = uuid();
+const hrEmp = uuid();
 const custId = uuid();
 const hash = await bcrypt.hash('password123', 10);
 const adminHash = await bcrypt.hash('admin123', 10);
@@ -19,6 +23,10 @@ db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone
   .run(emp1, 'juan.delacruz@homelink.com', hash, 'Juan', 'Delacruz', '09181111111', 'Manila', 'employee', 'EMP001');
 db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, staff_code, verified) VALUES (?,?,?,?,?,?,?,?,?,1)')
   .run(emp2, 'maria.santos@homelink.com', hash, 'Maria', 'Santos', '09182222222', 'Quezon City', 'employee', 'EMP002');
+db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, position, staff_code, salary, verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)')
+  .run(accountingEmp, 'accounting@homelink.com', hash, 'Ramon', 'Cruz', '09184444444', 'Pasig City', 'employee', 'accounting', 'AC001', 35000);
+db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, position, staff_code, salary, verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)')
+  .run(hrEmp, 'hr@homelink.com', hash, 'Liza', 'Fernandez', '09185555555', 'Mandaluyong City', 'employee', 'hr', 'HR001', 32000);
 db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, verified) VALUES (?,?,?,?,?,?,?,?,1)')
   .run(custId, 'customer@demo.com', hash, 'Demo', 'Customer', '09183333333', 'Makati City', 'customer');
 
@@ -148,4 +156,6 @@ reviews.forEach(r => insertReview.run(uuid(), r.user, productBySlug[r.slug], r.r
 console.log('Seed complete!');
 console.log('Admin: admin@homelink.com / admin123');
 console.log('Employee: juan.delacruz@homelink.com / password123');
+console.log('Accounting: accounting@homelink.com / password123');
+console.log('HR: hr@homelink.com / password123');
 console.log('Customer: customer@demo.com / password123');

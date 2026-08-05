@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Wrench, ShoppingCart, Calendar, Users, Ticket, ShieldCheck, Settings,
-  Search, Bell, Home, LogOut, History, LifeBuoy, X, User,
+  Search, Bell, Home, LogOut, History, LifeBuoy, X, User, ClipboardCheck, Wallet, Truck, UserCog, PieChart,
+  HardHat, MessageSquare, CheckCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -24,11 +25,24 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    label: 'Management',
+    items: [
+      { to: '/admin/approvals', icon: ClipboardCheck, label: 'Approvals' },
+      { to: '/admin/payroll', icon: Wallet, label: 'Payroll' },
+      { to: '/admin/payroll/revenue', icon: PieChart, label: 'Revenue Sources' },
+      { to: '/admin/technicians', icon: HardHat, label: 'Technicians' },
+      { to: '/admin/messages', icon: MessageSquare, label: 'Messages' },
+      { to: '/admin/hr/employees', icon: UserCog, label: 'Employees' },
+      { to: '/admin/suppliers', icon: Truck, label: 'Suppliers' },
+    ],
+  },
+  {
     label: 'Archive',
     items: [
       { to: '/admin/products?tab=archived', icon: Package, label: 'Archived Products' },
       { to: '/admin/services?tab=archived', icon: Wrench, label: 'Archived Services' },
       { to: '/admin/archived-users', icon: Users, label: 'Archived Users' },
+      { to: '/admin/hr/employees/archived', icon: UserCog, label: 'Archived Employees' },
     ],
   },
   {
@@ -49,10 +63,44 @@ const NAV_SECTIONS = [
 // Which /admin/* pages a given employee position may see in the sidebar —
 // mirrors the authorizeAdminOr() scoping enforced server-side in admin.js.
 const POSITION_NAV_PATHS = {
-  inventory_clerk: ['/admin/products', '/admin/services'],
-  general_staff: ['/admin/orders'],
-  booking_coordinator: ['/admin/bookings'],
+  inventory_clerk: ['/admin/products', '/admin/services', '/admin/orders', '/admin/bookings', '/admin/vouchers', '/admin/support', '/admin/approvals'],
+  general_staff: ['/admin/products', '/admin/services', '/admin/orders', '/admin/bookings', '/admin/vouchers', '/admin/support'],
+  booking_coordinator: ['/admin/bookings', '/admin/technicians', '/admin/messages', '/admin/approvals'],
+  accounting: ['/admin/payroll', '/admin/payroll/revenue'],
+  hr: ['/admin/hr/employees', '/admin/suppliers'],
+  installer: ['/admin/messages'],
 };
+
+// Archive-section pages a position may see — kept separate from POSITION_NAV_PATHS
+// since it maps to the "Archive" NAV_SECTIONS group rather than "Main".
+const POSITION_ARCHIVE_PATHS = {
+  inventory_clerk: ['/admin/products?tab=archived', '/admin/services?tab=archived'],
+  general_staff: ['/admin/products?tab=archived', '/admin/services?tab=archived'],
+  hr: ['/admin/hr/employees/archived'],
+};
+
+// Every scoped position's own stats overview, injected ahead of their filtered
+// NAV_SECTIONS items rather than living inside NAV_SECTIONS itself — admin
+// already has its own /admin dashboard and doesn't need these four extra links.
+const POSITION_DASHBOARD_ITEM = {
+  inventory_clerk: { to: '/admin/products/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
+  general_staff: { to: '/admin/orders/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
+  booking_coordinator: { to: '/admin/bookings/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
+  accounting: { to: '/admin/payroll/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
+  hr: { to: '/admin/hr/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
+  // Installer has a scoped nav (just Messages, via POSITION_NAV_PATHS) but the job-assignment
+  // page is still its actual landing page, so it reuses EMPLOYEE_DASHBOARD_ITEM below rather
+  // than getting its own /dashboard route.
+  installer: { to: '/employee', icon: Wrench, label: 'My Jobs', end: true },
+};
+
+// Positions with no scoped admin slice at all (no position set) get this as their only
+// item instead — the job-assignment dashboard that's their actual landing page.
+const EMPLOYEE_DASHBOARD_ITEM = { to: '/employee', icon: Wrench, label: 'My Jobs', end: true };
+
+// Installer-only: a status table of their jobs plus the history of completions they've
+// submitted for verification (including rejection notes) — sits right after "My Jobs".
+const INSTALLER_JOB_STATUS_ITEM = { to: '/employee/job-status', icon: CheckCircle, label: 'Job Status', end: true };
 
 function isNavItemActive(item, location) {
   const [path, queryString] = item.to.split('?');
@@ -70,6 +118,16 @@ const NOTIF_META = {
   'order.create': { Icon: ShoppingCart, className: 'bg-yellow-100 text-yellow-700', title: 'New Order', link: '/admin/orders' },
   'booking.create': { Icon: Calendar, className: 'bg-blue-100 text-blue-700', title: 'New Booking', link: '/admin/bookings' },
   'support.create': { Icon: LifeBuoy, className: 'bg-red-100 text-red-700', title: 'Support Message', link: '/admin/support' },
+  'booking.completed': { Icon: CheckCircle, className: 'bg-green-100 text-green-700', title: 'Installation Completed', link: '/admin/bookings' },
+};
+
+// Employees (booking coordinators, installers, ...) get their own personal notification
+// feed from /notifications instead of the admin audit-log feed above — icon/color by type.
+const EMPLOYEE_NOTIF_META = {
+  'booking.assigned': { Icon: Calendar, className: 'bg-blue-100 text-blue-700' },
+  'message.new': { Icon: MessageSquare, className: 'bg-teal-100 text-[#00806f]' },
+  'booking.completed': { Icon: CheckCircle, className: 'bg-green-100 text-green-700' },
+  'booking.complete_requested': { Icon: ClipboardCheck, className: 'bg-amber-100 text-amber-700' },
 };
 
 const AVATAR_COLORS = ['bg-brand-navy', 'bg-brand-blue', 'bg-[#00806f]', 'bg-[#c8461a]'];
@@ -103,45 +161,98 @@ function NotifRow({ n, onClick }) {
   );
 }
 
+// Every /admin/* page mounts its own <AdminLayout>, so React Router fully
+// unmounts and remounts it on every navigation (there's no shared parent
+// route keeping it alive) — a plain useState scroll position would reset to
+// 0 each time. Stashing it in module scope survives that remount and
+// useLayoutEffect restores it before paint, so the sidebar doesn't visibly
+// snap back to the top when a nav link is clicked.
+let cachedSidebarScrollTop = 0;
+
 export default function AdminLayout({ children, title, subtitle }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const navRef = useRef(null);
   const isAdmin = user?.role === 'admin';
   const [search, setSearch] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
   const [viewAllOpen, setViewAllOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [activity, setActivity] = useState([]);
+  const [employeeNotifs, setEmployeeNotifs] = useState([]);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const seenKey = `homelink_notif_seen_${user?.id || 'admin'}`;
   const [seenAt, setSeenAt] = useState(() => localStorage.getItem(seenKey) || '');
 
-  // Employees only ever see the one section covering their own task; the
-  // audit-log-backed notification feed and global search stay admin-only.
+  // Employees only ever see the section(s) covering their own task; global search
+  // stays admin-only, but the notification bell below now covers both — admin from
+  // the audit-log feed, employees from their own personal /notifications feed.
   const navSections = useMemo(() => {
     if (isAdmin) return NAV_SECTIONS;
-    const allowed = new Set(POSITION_NAV_PATHS[user?.position] || []);
-    const items = (NAV_SECTIONS.find(s => s.label === 'Main')?.items || []).filter(item => allowed.has(item.to));
-    return items.length ? [{ label: 'Main', items }] : [];
+    const hasScopedPosition = Object.prototype.hasOwnProperty.call(POSITION_NAV_PATHS, user?.position);
+    const mainAllowed = new Set(POSITION_NAV_PATHS[user?.position] || []);
+    const archiveAllowed = new Set(POSITION_ARCHIVE_PATHS[user?.position] || []);
+    const sections = [];
+    // "Main" and "Management" are two visually separate groups for admin, but a
+    // scoped employee's allowed items come from either — fold both into their
+    // single "Main" section rather than splitting it the same way for them.
+    const selectableItems = [
+      ...(NAV_SECTIONS.find(s => s.label === 'Main')?.items || []),
+      ...(NAV_SECTIONS.find(s => s.label === 'Management')?.items || []),
+    ];
+    const mainItems = hasScopedPosition
+      ? [
+          ...(POSITION_DASHBOARD_ITEM[user?.position] ? [POSITION_DASHBOARD_ITEM[user.position]] : []),
+          ...(user?.position === 'installer' ? [INSTALLER_JOB_STATUS_ITEM] : []),
+          ...selectableItems.filter(item => mainAllowed.has(item.to)),
+        ]
+      : [EMPLOYEE_DASHBOARD_ITEM];
+    if (mainItems.length) sections.push({ label: 'Main', items: mainItems });
+    const archiveItems = (NAV_SECTIONS.find(s => s.label === 'Archive')?.items || []).filter(item => archiveAllowed.has(item.to));
+    if (archiveItems.length) sections.push({ label: 'Archive', items: archiveItems });
+    return sections;
   }, [isAdmin, user?.position]);
+
+  useLayoutEffect(() => {
+    if (navRef.current) navRef.current.scrollTop = cachedSidebarScrollTop;
+  }, []);
 
   useEffect(() => {
     if (!isAdmin) return;
-    api.get('/admin/audit-logs?action=order.create,booking.create,support.create&limit=50').then(setActivity).catch(() => {});
+    api.get('/admin/audit-logs?action=order.create,booking.create,support.create,booking.completed&limit=50').then(setActivity).catch(() => {});
+  }, [isAdmin]);
+
+  const loadEmployeeNotifs = () => api.get('/notifications').then(setEmployeeNotifs).catch(() => {});
+  useEffect(() => {
+    if (isAdmin) return;
+    loadEmployeeNotifs();
   }, [isAdmin]);
 
   // Mark the currently-loaded activity as seen once the panel is closed again,
   // so items stay flagged unread for the whole viewing session and only
-  // clear the next time the panel is reopened.
+  // clear the next time the panel is reopened. Admin's audit-log feed has no
+  // per-item read state, so it's tracked client-side via a seen-at timestamp;
+  // employees' own /notifications rows are real records, so those get marked
+  // read server-side instead.
   useEffect(() => {
-    if (!notifOpen) return undefined;
+    if (!isAdmin || !notifOpen) return undefined;
     return () => {
       const now = new Date().toISOString();
       localStorage.setItem(seenKey, now);
       setSeenAt(now);
     };
-  }, [notifOpen, seenKey]);
+  }, [isAdmin, notifOpen, seenKey]);
+
+  useEffect(() => {
+    if (isAdmin || !notifOpen) return undefined;
+    return () => {
+      if (employeeNotifs.some(n => !n.is_read)) {
+        api.put('/notifications/read-all').catch(() => {});
+        setEmployeeNotifs(items => items.map(n => ({ ...n, is_read: true })));
+      }
+    };
+  }, [isAdmin, notifOpen, employeeNotifs]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -166,17 +277,36 @@ export default function AdminLayout({ children, title, subtitle }) {
     };
   }), [activity, seenAt]);
 
-  const notifCount = notifItems.filter(a => a.unread).length;
+  const employeeNotifItems = useMemo(() => employeeNotifs.map(n => {
+    const { Icon, className } = EMPLOYEE_NOTIF_META[n.type] || { Icon: Bell, className: 'bg-gray-100 text-gray-600' };
+    return {
+      id: n.id,
+      Icon,
+      className,
+      title: n.title,
+      description: n.message,
+      time: timeAgo(n.created_at),
+      link: n.link || '/employee',
+      unread: !n.is_read,
+    };
+  }), [employeeNotifs]);
+
+  const bellItems = isAdmin ? notifItems : employeeNotifItems;
+  const bellCount = bellItems.filter(a => a.unread).length;
 
   return (
     <div className="min-h-screen flex bg-gray-50">
       {/* Sidebar */}
-      <aside className="w-60 shrink-0 bg-brand-navy text-white flex flex-col">
+      <aside className="w-60 shrink-0 h-screen sticky top-0 bg-brand-navy text-white flex flex-col">
         <div className="flex items-center gap-2 px-5 h-16 border-b border-white/10 shrink-0">
           <div className="w-8 h-8 bg-brand-orange rounded-lg flex items-center justify-center shrink-0"><Home className="w-4 h-4" /></div>
           <span className="font-display font-bold text-lg truncate">Home<span className="text-brand-orange">Link</span></span>
         </div>
-        <nav className="flex-1 px-3 py-4 overflow-y-auto">
+        <nav
+          ref={navRef}
+          onScroll={() => { cachedSidebarScrollTop = navRef.current.scrollTop; }}
+          className="flex-1 px-3 py-4 overflow-y-auto scrollbar-ghost"
+        >
           {navSections.map((section, i) => (
             <div key={section.label} className={i > 0 ? 'mt-5' : ''}>
               <p className="px-3 mb-1.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{section.label}</p>
@@ -233,9 +363,9 @@ export default function AdminLayout({ children, title, subtitle }) {
               <button onClick={() => setViewAllOpen(false)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"><X className="w-4 h-4" /></button>
             </div>
             <div className="overflow-y-auto flex-1">
-              {notifItems.length === 0 ? (
+              {bellItems.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-10">You're all caught up.</p>
-              ) : notifItems.map(n => (
+              ) : bellItems.map(n => (
                 <NotifRow key={n.id} n={n} onClick={() => setViewAllOpen(false)} />
               ))}
             </div>
@@ -259,10 +389,10 @@ export default function AdminLayout({ children, title, subtitle }) {
             </form>
           ) : <div className="flex-1" />}
           <div className="flex items-center gap-3 ml-auto">
-            {isAdmin && <div className="relative">
+            <div className="relative">
               <button onClick={() => setNotifOpen(o => !o)} className="relative p-2 rounded-lg hover:bg-gray-100 transition" aria-label="Notifications">
                 <Bell className="w-5 h-5 text-gray-500" />
-                {notifCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-orange rounded-full" />}
+                {bellCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-brand-orange rounded-full" />}
               </button>
               {notifOpen && (
                 <>
@@ -270,14 +400,14 @@ export default function AdminLayout({ children, title, subtitle }) {
                   <div className="absolute right-0 mt-2 w-96 card p-0 z-20 overflow-hidden">
                     <div className="flex items-center gap-2 px-4 py-3.5 border-b border-gray-100">
                       <h3 className="font-semibold text-gray-900">Notifications</h3>
-                      {notifCount > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-[#00806f] text-white text-[11px] font-bold flex items-center justify-center">{notifCount}</span>
+                      {bellCount > 0 && (
+                        <span className="w-5 h-5 rounded-full bg-[#00806f] text-white text-[11px] font-bold flex items-center justify-center">{bellCount}</span>
                       )}
                     </div>
                     <div className="max-h-96 overflow-y-auto">
-                      {notifItems.length === 0 ? (
+                      {bellItems.length === 0 ? (
                         <p className="text-sm text-gray-400 text-center py-8">You're all caught up.</p>
-                      ) : notifItems.slice(0, 8).map(n => (
+                      ) : bellItems.slice(0, 8).map(n => (
                         <NotifRow key={n.id} n={n} onClick={() => setNotifOpen(false)} />
                       ))}
                     </div>
@@ -290,7 +420,7 @@ export default function AdminLayout({ children, title, subtitle }) {
                   </div>
                 </>
               )}
-            </div>}
+            </div>
             <div className="relative">
               <button onClick={() => setProfileOpen(o => !o)} className={`w-9 h-9 rounded-full ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold text-white shrink-0`}>
                 {initials(user?.firstName, user?.lastName)}
@@ -305,6 +435,10 @@ export default function AdminLayout({ children, title, subtitle }) {
                     <Link to="/" onClick={() => setProfileOpen(false)} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition">
                       <Home className="w-4 h-4 text-gray-400" /> View Website
                     </Link>
+                    <div className="my-1 border-t border-gray-100" />
+                    <button onClick={() => { setProfileOpen(false); setConfirmLogout(true); }} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition w-full">
+                      <LogOut className="w-4 h-4 text-red-400" /> Log Out
+                    </button>
                   </div>
                 </>
               )}

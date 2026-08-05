@@ -1,4 +1,5 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -29,6 +30,10 @@ import AdminProducts from './pages/admin/Products';
 import AdminServices from './pages/admin/Services';
 import AdminOrders from './pages/admin/Orders';
 import AdminBookings from './pages/admin/Bookings';
+import InventoryDashboard from './pages/admin/InventoryDashboard';
+import Approvals from './pages/admin/Approvals';
+import OrdersDashboard from './pages/admin/OrdersDashboard';
+import BookingsDashboard from './pages/admin/BookingsDashboard';
 import AdminUsers from './pages/admin/Users';
 import AdminManagement from './pages/admin/AdminManagement';
 import ArchivedUsers from './pages/admin/ArchivedUsers';
@@ -36,16 +41,41 @@ import AdminVouchers from './pages/admin/Vouchers';
 import AdminSupportMessages from './pages/admin/SupportMessages';
 import AdminAuditLog from './pages/admin/AuditLog';
 import AdminProfile from './pages/admin/Profile';
+import PayrollDashboard from './pages/admin/PayrollDashboard';
+import Payroll from './pages/admin/Payroll';
+import RevenueSources from './pages/admin/RevenueSources';
+import HRDashboard from './pages/admin/HRDashboard';
+import EmployeeManagement from './pages/admin/EmployeeManagement';
+import HRArchivedEmployees from './pages/admin/HRArchivedEmployees';
+import Suppliers from './pages/admin/Suppliers';
+import Technicians from './pages/admin/Technicians';
+import Messages from './pages/admin/Messages';
 import EmployeeProfile from './pages/employee/Profile';
 import EmployeeDashboard from './pages/employee/Dashboard';
+import JobStatus from './pages/employee/JobStatus';
 
 const AUTH_PATHS = ['/login', '/register', '/forgot-password', '/verify-reset-code', '/reset-password'];
 
 export default function App() {
   const location = useLocation();
-  const isAdminSection = location.pathname.startsWith('/admin');
+  const navigate = useNavigate();
+  // Employee pages use the same AdminLayout shell (sidebar/topbar) as /admin/* —
+  // both need the public Navbar/Footer hidden so the two shells don't stack.
+  const isStaffSection = location.pathname.startsWith('/admin') || location.pathname.startsWith('/employee');
   const isAuthSection = AUTH_PATHS.includes(location.pathname);
-  const hideChrome = isAdminSection || isAuthSection;
+  const hideChrome = isStaffSection || isAuthSection;
+
+  useEffect(() => {
+    if (location.pathname !== '/login') return;
+    const handleStaffShortcut = (e) => {
+      if (e.ctrlKey && e.altKey && e.code === 'Period') {
+        e.preventDefault();
+        navigate('/admin/login');
+      }
+    };
+    window.addEventListener('keydown', handleStaffShortcut);
+    return () => window.removeEventListener('keydown', handleStaffShortcut);
+  }, [location.pathname, navigate]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -74,18 +104,32 @@ export default function App() {
           <Route path="/gallery" element={<Gallery />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/products" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk']} redirectTo="/admin/login"><AdminProducts /></ProtectedRoute>} />
-          <Route path="/admin/services" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk']} redirectTo="/admin/login"><AdminServices /></ProtectedRoute>} />
-          <Route path="/admin/orders" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff']} redirectTo="/admin/login"><AdminOrders /></ProtectedRoute>} />
-          <Route path="/admin/bookings" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator']} redirectTo="/admin/login"><AdminBookings /></ProtectedRoute>} />
+          <Route path="/admin/products/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk']} redirectTo="/admin/login"><InventoryDashboard /></ProtectedRoute>} />
+          <Route path="/admin/approvals" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk', 'booking_coordinator']} redirectTo="/admin/login"><Approvals /></ProtectedRoute>} />
+          <Route path="/admin/products" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk', 'general_staff']} redirectTo="/admin/login"><AdminProducts /></ProtectedRoute>} />
+          <Route path="/admin/services" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk', 'general_staff']} redirectTo="/admin/login"><AdminServices /></ProtectedRoute>} />
+          <Route path="/admin/orders/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff']} redirectTo="/admin/login"><OrdersDashboard /></ProtectedRoute>} />
+          <Route path="/admin/orders" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff', 'inventory_clerk']} redirectTo="/admin/login"><AdminOrders /></ProtectedRoute>} />
+          <Route path="/admin/bookings/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator']} redirectTo="/admin/login"><BookingsDashboard /></ProtectedRoute>} />
+          <Route path="/admin/bookings" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator', 'general_staff', 'inventory_clerk']} redirectTo="/admin/login"><AdminBookings /></ProtectedRoute>} />
+          <Route path="/admin/technicians" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator']} redirectTo="/admin/login"><Technicians /></ProtectedRoute>} />
+          <Route path="/admin/messages" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator', 'installer']} redirectTo="/admin/login"><Messages /></ProtectedRoute>} />
           <Route path="/admin/users" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminUsers /></ProtectedRoute>} />
           <Route path="/admin/archived-users" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><ArchivedUsers /></ProtectedRoute>} />
           <Route path="/admin/staff" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminManagement /></ProtectedRoute>} />
-          <Route path="/admin/vouchers" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminVouchers /></ProtectedRoute>} />
-          <Route path="/admin/support" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminSupportMessages /></ProtectedRoute>} />
+          <Route path="/admin/vouchers" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff', 'inventory_clerk']} redirectTo="/admin/login"><AdminVouchers /></ProtectedRoute>} />
+          <Route path="/admin/support" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff', 'inventory_clerk']} redirectTo="/admin/login"><AdminSupportMessages /></ProtectedRoute>} />
           <Route path="/admin/audit-log" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminAuditLog /></ProtectedRoute>} />
           <Route path="/admin/profile" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminProfile /></ProtectedRoute>} />
+          <Route path="/admin/payroll/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['accounting']} redirectTo="/admin/login"><PayrollDashboard /></ProtectedRoute>} />
+          <Route path="/admin/payroll" element={<ProtectedRoute roles={['admin', 'employee']} positions={['accounting']} redirectTo="/admin/login"><Payroll /></ProtectedRoute>} />
+          <Route path="/admin/payroll/revenue" element={<ProtectedRoute roles={['admin', 'employee']} positions={['accounting']} redirectTo="/admin/login"><RevenueSources /></ProtectedRoute>} />
+          <Route path="/admin/hr/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><HRDashboard /></ProtectedRoute>} />
+          <Route path="/admin/hr/employees" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><EmployeeManagement /></ProtectedRoute>} />
+          <Route path="/admin/hr/employees/archived" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><HRArchivedEmployees /></ProtectedRoute>} />
+          <Route path="/admin/suppliers" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><Suppliers /></ProtectedRoute>} />
           <Route path="/employee" element={<ProtectedRoute roles={['employee']} redirectTo="/admin/login"><EmployeeDashboard /></ProtectedRoute>} />
+          <Route path="/employee/job-status" element={<ProtectedRoute roles={['admin', 'employee']} positions={['installer']} redirectTo="/admin/login"><JobStatus /></ProtectedRoute>} />
           <Route path="/employee/profile" element={<ProtectedRoute roles={['employee']} redirectTo="/admin/login"><EmployeeProfile /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>

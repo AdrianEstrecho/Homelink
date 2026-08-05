@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
-import { LogIn, Lock, ShieldCheck } from 'lucide-react';
+import { LogIn, Lock, ShieldCheck, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AuthLayout from '../components/AuthLayout';
 import AuthIllustration from '../components/AuthIllustration';
@@ -15,6 +15,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [notRegistered, setNotRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -25,7 +26,7 @@ export default function Login() {
       const user = await login(form.email, form.password);
       if (user.role !== 'customer') {
         logout();
-        throw new Error('Staff accounts sign in at the staff portal below.');
+        throw new Error('Staff accounts sign in at the staff portal — press Ctrl+Alt+. to continue there.');
       }
       navigate('/');
     } catch (err) {
@@ -37,12 +38,17 @@ export default function Login() {
 
   const handleGoogleSuccess = async (credentialResponse) => {
     setError('');
+    setNotRegistered(false);
     setLoading(true);
     try {
-      await loginWithGoogle(credentialResponse.credential);
+      await loginWithGoogle(credentialResponse.credential, { mode: 'login' });
       navigate('/');
     } catch (err) {
-      setError(err.message || 'Google sign-in failed');
+      if (err.code === 'not_registered') {
+        setNotRegistered(true);
+      } else {
+        setError(err.message || 'Google sign-in failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -99,8 +105,19 @@ export default function Login() {
             </div>
             <div className="space-y-3 flex flex-col items-center">
               {googleConfigured && (
-                <div className="w-[320px] rounded-lg overflow-hidden">
-                  <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError('Google sign-in failed')} width="320" />
+                <div className="w-[320px] space-y-2">
+                  <div className="rounded-lg overflow-hidden">
+                    <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError('Google sign-in failed')} width="320" />
+                  </div>
+                  {notRegistered && (
+                    <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
+                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <p>
+                        We couldn't find a HomeLink account for this Google account.{' '}
+                        <Link to="/register" className="font-semibold underline hover:text-amber-900">Register first</Link> to continue.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
               {appleConfigured && (
@@ -112,13 +129,6 @@ export default function Login() {
           </>
         )}
 
-        <div className="text-xs text-gray-400 border-t pt-4 space-y-1">
-          <p>Demo account:</p>
-          <p>Customer: customer@demo.com / password123</p>
-        </div>
-        <p className="text-center text-xs text-gray-400">
-          Staff member? <Link to="/admin/login" className="text-gray-500 font-medium hover:underline">Sign in at the staff portal</Link>
-        </p>
       </form>
     </AuthLayout>
   );

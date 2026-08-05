@@ -2,7 +2,8 @@ export const POSITION_LABELS = {
   inventory_clerk: 'Inventory Clerk',
   booking_coordinator: 'Booking Coordinator',
   installer: 'Installer / Technician',
-  customer_support: 'Customer Support',
+  accounting: 'Accounting',
+  hr: 'Human Resources',
   general_staff: 'General Staff',
 };
 
@@ -17,6 +18,7 @@ export const ACTION_META = {
   'user.restore': { category: 'archive', entity: 'User', describe: d => `Restored user ${d.email}` },
   'booking.create': { category: 'create', entity: 'Booking', describe: d => `${d.customerName || 'A customer'} booked ${d.serviceName || 'a service'}${d.scheduledDate ? ` for ${d.scheduledDate}` : ''}` },
   'booking.status_update': { category: 'update', entity: 'Booking', describe: d => `Status changed: ${d.from || '—'} → ${d.to}${d.completionNotes ? ` · "${d.completionNotes}"` : ''}` },
+  'booking.completed': { category: 'update', entity: 'Booking', describe: d => `${d.serviceName || 'Service'} for ${d.customerName || 'a customer'} marked Installed Completed by ${d.installerName || 'installer'}${d.completionNotes ? ` · "${d.completionNotes}"` : ''}` },
   'booking.assign': { category: 'update', entity: 'Booking', describe: (d, nameOf) => `Assigned to ${nameOf?.(d.toEmployeeId) || '—'}` },
   'booking.unassign': { category: 'update', entity: 'Booking', describe: (d, nameOf) => `Unassigned from ${nameOf?.(d.fromEmployeeId) || '—'}` },
   'order.create': { category: 'create', entity: 'Order', describe: d => `${d.customerName || 'A customer'} placed an order for ${d.itemCount || ''} item${d.itemCount === 1 ? '' : 's'} (₱${Number(d.total || 0).toLocaleString('en-PH')})` },
@@ -44,6 +46,13 @@ export const ACTION_META = {
   'voucher.delete': { category: 'delete', entity: 'Voucher', describe: d => `Deleted voucher ${d.code}` },
   'announcement.create': { category: 'create', entity: 'Announcement', describe: d => `Created announcement "${d.title}"` },
   'announcement.delete': { category: 'delete', entity: 'Announcement', describe: d => `Deleted announcement "${d.title}"` },
+  'salary.update': { category: 'update', entity: 'User', describe: d => `Updated salary for ${d.email}: ${d.from ?? 0} → ${d.to}` },
+  'supplier.create': { category: 'create', entity: 'Supplier', describe: d => `Added supplier "${d.name}"` },
+  'supplier.update': { category: 'update', entity: 'Supplier', describe: d => `Updated supplier "${d.name}"` },
+  'supplier.activate': { category: 'update', entity: 'Supplier', describe: d => `Activated supplier "${d.name}"` },
+  'supplier.deactivate': { category: 'update', entity: 'Supplier', describe: d => `Deactivated supplier "${d.name}"` },
+  'supplier.delete': { category: 'delete', entity: 'Supplier', describe: d => `Deleted supplier "${d.name}"` },
+  'payment.pay': { category: 'create', entity: 'Payment', describe: d => `Paid ${d.recipientName} ₱${Number(d.amount || 0).toLocaleString('en-PH')} via bank transfer (${d.bankName} ••••${(d.accountNumber || '').slice(-4)})` },
 };
 
 export const CATEGORY_STYLE = {

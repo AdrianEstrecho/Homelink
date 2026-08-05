@@ -1,10 +1,13 @@
-// Positions with a scoped slice of the admin panel land straight on the page
-// for their task instead of the generic employee dashboard. Positions not
-// listed here (installer, customer_support) fall through to /employee.
+// Positions with a scoped slice of the admin panel land on their own dashboard
+// (a stats overview of their area) instead of the generic employee dashboard.
+// installer isn't listed here — the generic employee dashboard (assigned
+// jobs) already is its intended page, so it falls through to /employee.
 export const POSITION_LANDING = {
-  inventory_clerk: '/admin/products',
-  general_staff: '/admin/orders',
-  booking_coordinator: '/admin/bookings',
+  inventory_clerk: '/admin/products/dashboard',
+  general_staff: '/admin/orders/dashboard',
+  booking_coordinator: '/admin/bookings/dashboard',
+  accounting: '/admin/payroll/dashboard',
+  hr: '/admin/hr/dashboard',
 };
 
 export function landingFor(user) {

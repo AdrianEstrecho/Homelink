@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import ConfirmDialog from './ConfirmDialog';
-import { POSITION_LANDING } from '../utils/staffLanding';
+import { landingFor } from '../utils/staffLanding';
 
 const NAV_LINKS = [
   { to: '/products', label: 'Products' },
@@ -25,10 +25,11 @@ export default function Navbar() {
   const requestLogout = () => { setOpen(false); setConfirmLogout(true); };
   const handleLogout = () => { setConfirmLogout(false); logout(); navigate('/'); };
 
-  const dashLink = user?.role === 'admin' ? '/admin' : user?.role === 'employee' ? '/employee' : '/account';
-  // Employees whose position has a scoped slice of the admin panel (clerk, staff,
-  // booking coordinator) get a direct shortcut to it; installer/customer support don't.
-  const adminShortcut = user?.role === 'employee' ? POSITION_LANDING[user.position] : null;
+  // Employees have no separate "Employee" nav item — their one entry point is the
+  // Admin Panel shortcut below, which already lands them on the right page for their
+  // position (or /employee for installer/unscoped positions).
+  const dashLink = user?.role === 'admin' ? '/admin' : user?.role === 'customer' ? '/account' : null;
+  const adminShortcut = user?.role === 'employee' ? landingFor(user) : null;
   const isActive = (to) => location.pathname === to || location.pathname.startsWith(`${to}/`);
 
   return (
@@ -65,10 +66,12 @@ export default function Navbar() {
             )}
             {user ? (
               <div className="hidden md:flex items-center gap-2">
-                <Link to={dashLink} className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-white/10 rounded-lg transition text-sm">
-                  <LayoutDashboard className="w-4 h-4" />
-                  {user.role === 'admin' ? 'Admin' : user.role === 'employee' ? 'Employee' : 'Account'}
-                </Link>
+                {dashLink && (
+                  <Link to={dashLink} className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-white/10 rounded-lg transition text-sm">
+                    <LayoutDashboard className="w-4 h-4" />
+                    {user.role === 'admin' ? 'Admin' : 'Account'}
+                  </Link>
+                )}
                 {adminShortcut && (
                   <Link to={adminShortcut} className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-orange/90 hover:bg-brand-orange rounded-lg transition text-sm font-medium">
                     <ShieldCheck className="w-4 h-4" /> Admin Panel
@@ -105,7 +108,9 @@ export default function Navbar() {
           ))}
           {user ? (
             <>
-              <Link to={dashLink} className="block px-2 py-2 rounded-lg hover:bg-white/5" onClick={() => setOpen(false)}>Dashboard</Link>
+              {dashLink && (
+                <Link to={dashLink} className="block px-2 py-2 rounded-lg hover:bg-white/5" onClick={() => setOpen(false)}>Dashboard</Link>
+              )}
               {adminShortcut && (
                 <Link to={adminShortcut} className="flex items-center gap-1.5 px-2 py-2 rounded-lg text-brand-orange font-medium hover:bg-white/5" onClick={() => setOpen(false)}>
                   <ShieldCheck className="w-4 h-4" /> Admin Panel

@@ -6,10 +6,12 @@ import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import PromptDialog from '../../components/PromptDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Pagination from '../../components/Pagination';
 import { useAuth } from '../../context/AuthContext';
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_IMAGE_MB = 5;
+const PAGE_SIZE = 10;
 
 const emptyForm = {
   name: '', category: '', description: '',
@@ -17,6 +19,11 @@ const emptyForm = {
   basePrice: '', discount: '', durationHours: '2',
   image: '',
 };
+
+function requestLabel(r, services) {
+  if (r.payload?.name) return r.payload.name;
+  return services.find(s => s.id === r.entity_id)?.name || 'this service';
+}
 
 function slugify(str) {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -36,26 +43,39 @@ function Field({ label, required, children }) {
 export default function AdminServices() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isClerk = user?.position === 'inventory_clerk';
+  const isGeneralStaff = user?.position === 'general_staff';
+  const canManageArchive = isAdmin || isClerk || isGeneralStaff;
   const [searchParams] = useSearchParams();
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
   const [tab, setTab] = useState(searchParams.get('tab') === 'archived' ? 'archived' : 'active');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [pageError, setPageError] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [categoryPromptOpen, setCategoryPromptOpen] = useState(false);
   const [confirmArchiveId, setConfirmArchiveId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [myRequests, setMyRequests] = useState([]);
   const fileInputRef = useRef(null);
 
   const load = () => {
     api.get('/admin/services').then(setServices).catch(() => {});
     api.get('/services/categories').then(setCategories).catch(() => {});
   };
+  const loadMyRequests = () => {
+    if (!isGeneralStaff) return;
+    api.get('/admin/approvals/mine').then(rows => setMyRequests(rows.filter(r => r.entity_type === 'service' && r.status === 'pending'))).catch(() => {});
+  };
   useEffect(load, []);
+  useEffect(loadMyRequests, [isGeneralStaff]);
 
   const byTabAndSearch = useMemo(() => {
     return services
@@ -71,10 +91,14 @@ export default function AdminServices() {
 
   const filtered = categoryFilter ? byTabAndSearch.filter(s => s.category === categoryFilter) : byTabAndSearch;
 
+  useEffect(() => { setPage(1); }, [tab, search, categoryFilter]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const activeCount = services.filter(s => !s.archived).length;
   const archivedCount = services.filter(s => s.archived).length;
 
-  const startAdd = () => { setForm(emptyForm); setEditingId(null); setShowForm(true); };
+  const startAdd = () => { setForm(emptyForm); setEditingId(null); setError(''); setNotice(''); setShowForm(true); };
   const startEdit = (s) => {
     setForm({
       name: s.name, category: s.category, description: s.description || '',
@@ -83,9 +107,11 @@ export default function AdminServices() {
       image: s.image || '',
     });
     setEditingId(s.id);
+    setError('');
+    setNotice('');
     setShowForm(true);
   };
-  const cancelForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setDragActive(false); };
+  const cancelForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setError(''); setDragActive(false); };
 
   const handleFile = (file) => {
     if (!file) return;
@@ -110,23 +136,41 @@ export default function AdminServices() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
     const payload = {
       name: form.name, category: form.category, description: form.description,
       basePrice: Number(form.basePrice), discount: Number(form.discount) || 0,
       durationHours: Number(form.durationHours), image: form.image, status: form.status,
     };
-    if (editingId) await api.put(`/admin/services/${editingId}`, payload);
-    else await api.post('/admin/services', { ...payload, slug: slugify(form.name) });
-    cancelForm();
-    load();
+    try {
+      const result = editingId
+        ? await api.put(`/admin/services/${editingId}`, payload)
+        : await api.post('/admin/services', { ...payload, slug: slugify(form.name) });
+      cancelForm();
+      if (result?.pending) setNotice(result.message || 'Submitted for clerk approval.');
+      load();
+      loadMyRequests();
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const archive = async (id) => { await api.put(`/admin/services/${id}/archive`); load(); };
   const restore = async (id) => { await api.put(`/admin/services/${id}/restore`); load(); };
-  const remove = async (id) => { await api.delete(`/admin/services/${id}`); load(); };
+  const remove = async (id) => {
+    try {
+      const result = await api.delete(`/admin/services/${id}`);
+      if (result?.pending) setNotice(result.message || 'Deletion request submitted for clerk approval.');
+      else setNotice('');
+      load();
+      loadMyRequests();
+    } catch (err) {
+      setPageError(err.message);
+    }
+  };
 
   const confirmArchive = () => { archive(confirmArchiveId); setConfirmArchiveId(null); };
-  const confirmDelete = () => { remove(confirmDeleteId); setConfirmDeleteId(null); };
+  const confirmDelete = () => { setNotice(''); setPageError(''); remove(confirmDeleteId); setConfirmDeleteId(null); };
 
   return (
     <AdminLayout title="Services" subtitle="View and manage your service offerings.">
@@ -153,19 +197,36 @@ export default function AdminServices() {
         open={!!confirmDeleteId}
         icon={Trash2}
         tone="delete"
-        title="Permanently delete this service?"
-        message="This cannot be undone."
-        confirmLabel="Delete"
+        title={isAdmin ? 'Permanently delete this service?' : 'Request deletion of this service?'}
+        message={isAdmin ? 'This cannot be undone.' : 'An inventory clerk will need to approve this before the service is removed.'}
+        confirmLabel={isAdmin ? 'Delete' : 'Request Deletion'}
         onConfirm={confirmDelete}
         onCancel={() => setConfirmDeleteId(null)}
       />
+
+      {notice && <p className="mb-4 text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">{notice}</p>}
+      {pageError && <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pageError}</p>}
+
+      {isGeneralStaff && myRequests.length > 0 && (
+        <div className="card p-4 mb-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Your Pending Requests</h3>
+          <div className="space-y-1.5">
+            {myRequests.map(r => (
+              <div key={r.id} className="flex items-center justify-between text-sm">
+                <span className="text-gray-600"><span className="capitalize font-medium">{r.action}</span> — {requestLabel(r, services)}</span>
+                <span className="badge bg-amber-100 text-amber-800">Pending clerk review</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           {tab !== 'archived' && (
             <TabButton active={tab === 'active'} onClick={() => setTab('active')}>All Active ({activeCount})</TabButton>
           )}
-          {isAdmin && (
+          {canManageArchive && (
             <TabButton active={tab === 'archived'} onClick={() => setTab('archived')}>Archived ({archivedCount})</TabButton>
           )}
         </div>
@@ -182,6 +243,8 @@ export default function AdminServices() {
               <h3 className="font-semibold text-gray-800 text-lg">{editingId ? 'Edit Service' : 'Add New Service'}</h3>
               <button type="button" onClick={cancelForm} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
             </div>
+
+            {error && <p className="md:col-span-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
 
             <div className="md:col-span-2">
               <Field label="Service Name" required>
@@ -226,6 +289,12 @@ export default function AdminServices() {
             </Field>
             <div />
 
+            {isGeneralStaff && (
+              <p className="md:col-span-2 text-xs text-gray-400">
+                {editingId ? 'This edit' : 'This service'} won't go live until an inventory clerk reviews and approves it.
+              </p>
+            )}
+
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Service Cover Image</label>
               {form.image ? (
@@ -249,7 +318,9 @@ export default function AdminServices() {
               <input ref={fileInputRef} type="file" accept={ACCEPTED_IMAGE_TYPES.join(',')} className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
             </div>
 
-            <button type="submit" className="btn-primary md:col-span-2">{editingId ? 'Save Changes' : 'Save Service'}</button>
+            <button type="submit" className="btn-primary md:col-span-2">
+              {isGeneralStaff ? 'Submit for Approval' : editingId ? 'Save Changes' : 'Save Service'}
+            </button>
           </form>
         </div>
       )}
@@ -275,7 +346,8 @@ export default function AdminServices() {
         />
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
@@ -290,7 +362,7 @@ export default function AdminServices() {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={6} className="p-8 text-center text-gray-400">No services {tab === 'archived' ? 'archived' : 'found'}.</td></tr>
-            ) : filtered.map(s => (
+            ) : paginated.map(s => (
               <tr key={s.id} className="border-t border-gray-100">
                 <td className="p-3">
                   <div className="flex items-center gap-3">
@@ -316,12 +388,12 @@ export default function AdminServices() {
                 <td className="p-3">
                   <div className="flex items-center justify-end gap-1.5">
                     {s.archived ? (
-                      isAdmin && <button onClick={() => restore(s.id)} title="Unarchive" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><ArchiveRestore className="w-3.5 h-3.5" /></button>
+                      canManageArchive && <button onClick={() => restore(s.id)} title="Unarchive" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><ArchiveRestore className="w-3.5 h-3.5" /></button>
                     ) : (
                       <>
                         <button onClick={() => startEdit(s)} title="Edit" className="p-1.5 rounded-lg bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/20 transition"><Pencil className="w-3.5 h-3.5" /></button>
-                        {isAdmin && <button onClick={() => setConfirmArchiveId(s.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>}
-                        {isAdmin && <button onClick={() => setConfirmDeleteId(s.id)} title="Delete permanently" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>}
+                        {canManageArchive && <button onClick={() => setConfirmArchiveId(s.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>}
+                        {(isAdmin || isGeneralStaff) && <button onClick={() => setConfirmDeleteId(s.id)} title={isAdmin ? 'Delete permanently' : 'Request deletion'} className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>}
                       </>
                     )}
                   </div>
@@ -330,6 +402,8 @@ export default function AdminServices() {
             ))}
           </tbody>
         </table>
+        </div>
+        <Pagination page={page} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </AdminLayout>
   );

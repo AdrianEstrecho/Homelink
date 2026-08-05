@@ -19,12 +19,13 @@ export default function ConfirmDialog({
   tone = 'delete',
   onConfirm,
   onCancel,
+  zIndexClass = 'z-[100]',
 }) {
   if (!open) return null;
   const { icon: iconClass, confirm: confirmClass } = TONE_STYLES[tone] || TONE_STYLES.delete;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4`}>
       <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 fade-up">
         {Icon && (
@@ -33,7 +34,7 @@ export default function ConfirmDialog({
           </div>
         )}
         <h2 className="font-display text-lg font-bold text-brand-navy">{title}</h2>
-        {message && <p className="text-sm text-gray-600 mt-1.5">{message}</p>}
+        {message && <p className="text-sm text-gray-600 mt-1.5 whitespace-pre-line">{message}</p>}
         <div className="flex gap-3 mt-6">
           <button
             type="button"

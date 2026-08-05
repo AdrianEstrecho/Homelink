@@ -4,7 +4,8 @@ const POSITION_PREFIX = {
   inventory_clerk: 'IC',
   booking_coordinator: 'BC',
   installer: 'IN',
-  customer_support: 'CS',
+  accounting: 'AC',
+  hr: 'HR',
   general_staff: 'GS',
 };
 

@@ -28,8 +28,8 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const loginWithGoogle = async (credential) => {
-    const data = await api.post('/auth/google', { credential });
+  const loginWithGoogle = async (credential, { mode } = {}) => {
+    const data = await api.post('/auth/google', { credential, mode });
     localStorage.setItem('homelink_token', data.token);
     setUser(data.user);
     return data.user;

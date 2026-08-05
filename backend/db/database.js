@@ -187,6 +187,67 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+
+  -- Proposed create/update/delete writes from positions whose changes need a reviewer to
+  -- sign off before they take effect: general_staff's product/service/voucher writes go to
+  -- an inventory clerk or admin, and HR's employee/supplier writes go to admin only. payload
+  -- holds the submitted fields as JSON; entity_id is null for 'create' requests since the
+  -- entity doesn't exist yet.
+  CREATE TABLE IF NOT EXISTS change_requests (
+    id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking')),
+    entity_id TEXT,
+    action TEXT NOT NULL CHECK(action IN ('create','update','delete','archive','restore')),
+    payload TEXT,
+    requested_by TEXT NOT NULL REFERENCES users(id),
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+    reviewed_by TEXT REFERENCES users(id),
+    review_note TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    reviewed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_change_requests_status ON change_requests(status);
+
+  CREATE TABLE IF NOT EXISTS suppliers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    contact_name TEXT,
+    email TEXT,
+    phone TEXT,
+    address TEXT,
+    category TEXT,
+    status TEXT DEFAULT 'active' CHECK(status IN ('active','inactive')),
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  -- Personal, per-recipient notifications (job assignments, new messages) — distinct from
+  -- audit_logs, which records who-did-what for the admin activity feed/trail rather than
+  -- who should be told about it.
+  CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    link TEXT,
+    is_read INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
+
+  -- Direct staff-to-staff messages (e.g. a booking coordinator reaching a technician about
+  -- a job) — a simple two-party thread keyed by (sender_id, recipient_id) pairs, not a
+  -- general group-chat model.
+  CREATE TABLE IF NOT EXISTS staff_messages (
+    id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL REFERENCES users(id),
+    recipient_id TEXT NOT NULL REFERENCES users(id),
+    body TEXT NOT NULL,
+    is_read INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_staff_messages_parties ON staff_messages(sender_id, recipient_id);
 `);
 
 function ensureColumn(table, column, definition) {
@@ -215,6 +276,45 @@ ensureColumn('categories', 'parent_id', 'TEXT REFERENCES categories(id)');
 ensureColumn('products', 'brand', 'TEXT');
 ensureColumn('products', 'discount', 'REAL DEFAULT 0');
 ensureColumn('products', 'status', "TEXT DEFAULT 'active'");
+ensureColumn('users', 'salary', 'REAL DEFAULT 0');
+ensureColumn('users', 'bank_name', 'TEXT');
+ensureColumn('users', 'bank_account_number', 'TEXT');
+ensureColumn('users', 'bank_account_name', 'TEXT');
+ensureColumn('suppliers', 'bank_name', 'TEXT');
+ensureColumn('suppliers', 'bank_account_number', 'TEXT');
+ensureColumn('suppliers', 'bank_account_name', 'TEXT');
+
+// The customer_support position was retired in favor of Accounting/HR — any existing
+// employee still holding it moves to general_staff (which already shares support-message
+// access) rather than being left pointing at a position that no longer exists.
+db.exec("UPDATE users SET position = 'general_staff' WHERE position = 'customer_support'");
+
+// SQLite can't ALTER a CHECK constraint in place, so a database created before
+// 'employee'/'supplier'/'salary'/'payment'/'booking' entity types (and HR's 'archive'/'restore'
+// actions on them) were added to change_requests needs the table rebuilt to widen it. Guarded by
+// inspecting the stored schema so this only runs once per missing entity type.
+const changeRequestsSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='change_requests'").get()?.sql || '';
+if (changeRequestsSql && !changeRequestsSql.includes("'booking'")) {
+  db.exec(`
+    ALTER TABLE change_requests RENAME TO change_requests_old;
+    CREATE TABLE change_requests (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking')),
+      entity_id TEXT,
+      action TEXT NOT NULL CHECK(action IN ('create','update','delete','archive','restore')),
+      payload TEXT,
+      requested_by TEXT NOT NULL REFERENCES users(id),
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+      reviewed_by TEXT REFERENCES users(id),
+      review_note TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      reviewed_at TEXT
+    );
+    INSERT INTO change_requests SELECT * FROM change_requests_old;
+    DROP TABLE change_requests_old;
+    CREATE INDEX IF NOT EXISTS idx_change_requests_status ON change_requests(status);
+  `);
+}
 
 // A staff code must be unique once assigned — enforced at the DB level so a
 // bug (e.g. two overlapping backfill runs during a --watch restart) fails
@@ -222,7 +322,7 @@ ensureColumn('products', 'status', "TEXT DEFAULT 'active'");
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_staff_code ON users(staff_code) WHERE staff_code IS NOT NULL');
 
 // Backfill staff codes for admin/employee rows that predate the staff_code column.
-const STAFF_CODE_PREFIX = { inventory_clerk: 'IC', booking_coordinator: 'BC', installer: 'IN', customer_support: 'CS', general_staff: 'GS' };
+const STAFF_CODE_PREFIX = { inventory_clerk: 'IC', booking_coordinator: 'BC', installer: 'IN', accounting: 'AC', hr: 'HR', general_staff: 'GS' };
 const backfillStaffCodes = db.transaction(() => {
   const uncoded = db.prepare("SELECT id, role, position FROM users WHERE role IN ('admin','employee') AND staff_code IS NULL ORDER BY created_at ASC").all();
   for (const u of uncoded) {

@@ -5,7 +5,6 @@ export default function ArchivedUsers() {
     <UserManagementPanel
       roleTabs={[
         { key: 'customer', label: 'Customers' },
-        { key: 'employee', label: 'Employees' },
       ]}
       title="Archived Users"
       subtitle="Restore or permanently delete archived accounts."

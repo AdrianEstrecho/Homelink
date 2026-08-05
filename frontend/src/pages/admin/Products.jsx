@@ -6,19 +6,26 @@ import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import PromptDialog from '../../components/PromptDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Pagination from '../../components/Pagination';
 import { useAuth } from '../../context/AuthContext';
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_IMAGE_MB = 5;
+const PAGE_SIZE = 10;
 
 const emptyForm = {
   name: '', brand: '', description: '',
   mainCategoryId: '', subcategoryId: '',
   status: 'active',
-  stock: '', addStock: '', clerkCode: '',
+  stock: '', addStock: '',
   price: '', discount: '',
   image: '', featured: false,
 };
+
+function requestLabel(r, products) {
+  if (r.payload?.name) return r.payload.name;
+  return products.find(p => p.id === r.entity_id)?.name || 'this product';
+}
 
 function slugify(str) {
   return str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -38,27 +45,40 @@ function Field({ label, required, children }) {
 export default function AdminProducts() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isClerk = user?.position === 'inventory_clerk';
+  const isGeneralStaff = user?.position === 'general_staff';
+  const canManageArchive = isAdmin || isClerk || isGeneralStaff;
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [tab, setTab] = useState(searchParams.get('tab') === 'archived' ? 'archived' : 'active');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [pageError, setPageError] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [subcategoryPromptOpen, setSubcategoryPromptOpen] = useState(false);
   const [confirmArchiveId, setConfirmArchiveId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
+  const [myRequests, setMyRequests] = useState([]);
   const fileInputRef = useRef(null);
 
   const load = () => {
     api.get('/admin/products').then(setProducts).catch(() => {});
     api.get('/admin/categories').then(setCategories).catch(() => {});
   };
+  const loadMyRequests = () => {
+    if (!isGeneralStaff) return;
+    api.get('/admin/approvals/mine').then(rows => setMyRequests(rows.filter(r => r.entity_type === 'product' && r.status === 'pending'))).catch(() => {});
+  };
   useEffect(load, []);
+  useEffect(loadMyRequests, [isGeneralStaff]);
 
   useEffect(() => {
     const p = searchParams.get('search');
@@ -82,21 +102,26 @@ export default function AdminProducts() {
 
   const filtered = categoryFilter ? byTabAndSearch.filter(p => p.main_category_id === categoryFilter) : byTabAndSearch;
 
+  useEffect(() => { setPage(1); }, [tab, search, categoryFilter]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   const activeCount = products.filter(p => !p.archived).length;
   const archivedCount = products.filter(p => p.archived).length;
 
-  const startAdd = () => { setForm(emptyForm); setEditingId(null); setError(''); setShowForm(true); };
+  const startAdd = () => { setForm(emptyForm); setEditingId(null); setError(''); setNotice(''); setShowForm(true); };
   const startEdit = (p) => {
     setForm({
       name: p.name, brand: p.brand || '', description: p.description || '',
       mainCategoryId: p.main_category_id || '', subcategoryId: p.category_parent_id ? p.category_id : '',
       status: p.status === 'inactive' ? 'inactive' : 'active',
-      stock: p.stock, addStock: '', clerkCode: '',
+      stock: p.stock, addStock: '',
       price: p.price, discount: p.discount || 0,
       image: p.image || '', featured: !!p.featured,
     });
     setEditingId(p.id);
     setError('');
+    setNotice('');
     setShowForm(true);
   };
   const cancelForm = () => { setShowForm(false); setEditingId(null); setForm(emptyForm); setError(''); setDragActive(false); };
@@ -127,16 +152,21 @@ export default function AdminProducts() {
     setSubcategoryPromptOpen(false);
   };
 
-  const handleSubmit = async (e) => {
+  // Admin and inventory clerk writes take effect immediately, so the form submit gates on
+  // an explicit confirmation first. General staff's submit already only ever queues a
+  // change request — nothing goes live until a clerk reviews it — so it skips the extra step.
+  const handleFormSubmit = (e) => {
     e.preventDefault();
     setError('');
     if (!form.mainCategoryId) { setError('Select a main category.'); return; }
+    if (isGeneralStaff) { doSubmit(); return; }
+    setConfirmSaveOpen(true);
+  };
+
+  const doSubmit = async () => {
+    setConfirmSaveOpen(false);
     const categoryId = form.subcategoryId || form.mainCategoryId;
     const addQty = Number(form.addStock) || 0;
-    if (editingId && addQty > 0 && !form.clerkCode.trim()) {
-      setError('Enter the inventory clerk code to authorize this stock addition.');
-      return;
-    }
     const payload = {
       name: form.name, categoryId, description: form.description,
       price: Number(form.price), image: form.image,
@@ -145,15 +175,17 @@ export default function AdminProducts() {
     };
     if (editingId) {
       payload.addStock = addQty;
-      payload.clerkCode = form.clerkCode.trim();
     } else {
       payload.stock = Number(form.stock);
     }
     try {
-      if (editingId) await api.put(`/admin/products/${editingId}`, payload);
-      else await api.post('/admin/products', { ...payload, slug: slugify(form.name) });
+      const result = editingId
+        ? await api.put(`/admin/products/${editingId}`, payload)
+        : await api.post('/admin/products', { ...payload, slug: slugify(form.name) });
       cancelForm();
+      if (result?.pending) setNotice(result.message || 'Submitted for clerk approval.');
       load();
+      loadMyRequests();
     } catch (err) {
       setError(err.message);
     }
@@ -161,10 +193,20 @@ export default function AdminProducts() {
 
   const archive = async (id) => { await api.put(`/admin/products/${id}/archive`); load(); };
   const restore = async (id) => { await api.put(`/admin/products/${id}/restore`); load(); };
-  const remove = async (id) => { await api.delete(`/admin/products/${id}`); load(); };
+  const remove = async (id) => {
+    try {
+      const result = await api.delete(`/admin/products/${id}`);
+      if (result?.pending) setNotice(result.message || 'Deletion request submitted for clerk approval.');
+      else setNotice('');
+      load();
+      loadMyRequests();
+    } catch (err) {
+      setPageError(err.message);
+    }
+  };
 
   const confirmArchive = () => { archive(confirmArchiveId); setConfirmArchiveId(null); };
-  const confirmDelete = () => { remove(confirmDeleteId); setConfirmDeleteId(null); };
+  const confirmDelete = () => { setNotice(''); setPageError(''); remove(confirmDeleteId); setConfirmDeleteId(null); };
 
   return (
     <AdminLayout title="Products" subtitle="View and manage your product catalog.">
@@ -191,19 +233,47 @@ export default function AdminProducts() {
         open={!!confirmDeleteId}
         icon={Trash2}
         tone="delete"
-        title="Permanently delete this product?"
-        message="This cannot be undone."
-        confirmLabel="Delete"
+        title={isAdmin ? 'Permanently delete this product?' : 'Request deletion of this product?'}
+        message={isAdmin ? 'This cannot be undone.' : 'An inventory clerk will need to approve this before the product is removed.'}
+        confirmLabel={isAdmin ? 'Delete' : 'Request Deletion'}
         onConfirm={confirmDelete}
         onCancel={() => setConfirmDeleteId(null)}
       />
+      <ConfirmDialog
+        open={confirmSaveOpen}
+        icon={editingId ? Pencil : Plus}
+        tone={editingId ? 'update' : 'create'}
+        title={editingId ? 'Save changes to this product?' : 'Add this new product?'}
+        message={editingId ? 'This product will be updated immediately and shown to customers right away.' : 'This product will be added to the catalog and shown to customers immediately.'}
+        confirmLabel={editingId ? 'Save Changes' : 'Add Product'}
+        onConfirm={doSubmit}
+        onCancel={() => setConfirmSaveOpen(false)}
+        zIndexClass="z-[110]"
+      />
+
+      {notice && <p className="mb-4 text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">{notice}</p>}
+      {pageError && <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pageError}</p>}
+
+      {isGeneralStaff && myRequests.length > 0 && (
+        <div className="card p-4 mb-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Your Pending Requests</h3>
+          <div className="space-y-1.5">
+            {myRequests.map(r => (
+              <div key={r.id} className="flex items-center justify-between text-sm">
+                <span className="text-gray-600"><span className="capitalize font-medium">{r.action}</span> — {requestLabel(r, products)}</span>
+                <span className="badge bg-amber-100 text-amber-800">Pending clerk review</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           {tab !== 'archived' && (
             <TabButton active={tab === 'active'} onClick={() => setTab('active')}>All Active ({activeCount})</TabButton>
           )}
-          {isAdmin && (
+          {canManageArchive && (
             <TabButton active={tab === 'archived'} onClick={() => setTab('archived')}>Archived ({archivedCount})</TabButton>
           )}
         </div>
@@ -216,7 +286,7 @@ export default function AdminProducts() {
       {showForm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={cancelForm} />
-          <form onSubmit={handleSubmit} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-4 fade-up">
+          <form onSubmit={handleFormSubmit} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-4 fade-up">
             <div className="md:col-span-2 flex items-center justify-between">
               <h3 className="font-semibold text-gray-800 text-lg">{editingId ? 'Edit Product' : 'Add New Product'}</h3>
               <button type="button" onClick={cancelForm} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
@@ -279,18 +349,12 @@ export default function AdminProducts() {
                 <Field label="Add Stock">
                   <input type="number" min="0" placeholder="Additional" value={form.addStock} onChange={e => setForm(f => ({ ...f, addStock: e.target.value }))} className="input-field" />
                 </Field>
-                <div className="md:col-span-2">
-                  <Field label={Number(form.addStock) > 0 ? 'Clerk Code (required to add stock)' : 'Clerk Code'}>
-                    <input
-                      placeholder="e.g. IC001"
-                      value={form.clerkCode}
-                      onChange={e => setForm(f => ({ ...f, clerkCode: e.target.value.toUpperCase() }))}
-                      className="input-field"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">Stock additions must be verified with an inventory clerk's staff code.</p>
-                  </Field>
-                </div>
               </>
+            )}
+            {isGeneralStaff && (
+              <p className="md:col-span-2 text-xs text-gray-400 -mt-1">
+                {editingId ? 'This edit' : 'This product'} won't go live until an inventory clerk reviews and approves it.
+              </p>
             )}
 
             <Field label="Selling Price (₱)" required>
@@ -327,7 +391,9 @@ export default function AdminProducts() {
               <input type="checkbox" checked={form.featured} onChange={e => setForm(f => ({ ...f, featured: e.target.checked }))} /> Featured product
             </label>
 
-            <button type="submit" className="btn-primary md:col-span-2">{editingId ? 'Save Changes' : 'Save Product'}</button>
+            <button type="submit" className="btn-primary md:col-span-2">
+              {isGeneralStaff ? 'Submit for Approval' : editingId ? 'Save Changes' : 'Save Product'}
+            </button>
           </form>
         </div>
       )}
@@ -353,7 +419,8 @@ export default function AdminProducts() {
         />
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
@@ -369,7 +436,7 @@ export default function AdminProducts() {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={7} className="p-8 text-center text-gray-400">No products {tab === 'archived' ? 'archived' : 'found'}.</td></tr>
-            ) : filtered.map(p => (
+            ) : paginated.map(p => (
               <tr key={p.id} className="border-t border-gray-100">
                 <td className="p-3">
                   <div className="flex items-center gap-3">
@@ -403,12 +470,12 @@ export default function AdminProducts() {
                 <td className="p-3">
                   <div className="flex items-center justify-end gap-1.5">
                     {p.archived ? (
-                      isAdmin && <button onClick={() => restore(p.id)} title="Unarchive" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><ArchiveRestore className="w-3.5 h-3.5" /></button>
+                      canManageArchive && <button onClick={() => restore(p.id)} title="Unarchive" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><ArchiveRestore className="w-3.5 h-3.5" /></button>
                     ) : (
                       <>
                         <button onClick={() => startEdit(p)} title="Edit" className="p-1.5 rounded-lg bg-brand-navy/10 text-brand-navy hover:bg-brand-navy/20 transition"><Pencil className="w-3.5 h-3.5" /></button>
-                        {isAdmin && <button onClick={() => setConfirmArchiveId(p.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>}
-                        {isAdmin && <button onClick={() => setConfirmDeleteId(p.id)} title="Delete permanently" className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>}
+                        {canManageArchive && <button onClick={() => setConfirmArchiveId(p.id)} title="Archive" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>}
+                        {(isAdmin || isGeneralStaff) && <button onClick={() => setConfirmDeleteId(p.id)} title={isAdmin ? 'Delete permanently' : 'Request deletion'} className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>}
                       </>
                     )}
                   </div>
@@ -417,6 +484,8 @@ export default function AdminProducts() {
             ))}
           </tbody>
         </table>
+        </div>
+        <Pagination page={page} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </AdminLayout>
   );

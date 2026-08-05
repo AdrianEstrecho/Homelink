@@ -6,13 +6,13 @@ import SafeImage from './SafeImage';
 
 export default function OrderDetailsModal({ order, onClose, person, personLabel = 'Customer' }) {
   useEffect(() => {
-    const cleanup = () => document.body.classList.remove('printing-receipt');
+    const cleanup = () => document.body.classList.remove('printing-active');
     window.addEventListener('afterprint', cleanup);
     return () => { cleanup(); window.removeEventListener('afterprint', cleanup); };
   }, []);
 
   const handlePrint = () => {
-    document.body.classList.add('printing-receipt');
+    document.body.classList.add('printing-active');
     window.print();
   };
 
@@ -23,7 +23,7 @@ export default function OrderDetailsModal({ order, onClose, person, personLabel 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm no-print" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto fade-up receipt-print-area">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto fade-up print-area">
         <div className="hidden print:block text-center px-6 pt-6">
           <p className="font-display text-xl font-bold text-brand-navy">Home<span className="text-brand-orange">Link</span></p>
           <p className="text-xs text-gray-500 tracking-wide uppercase">Official Receipt</p>

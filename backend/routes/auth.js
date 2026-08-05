@@ -91,7 +91,7 @@ router.post('/login', async (req, res) => {
 
 router.post('/google', async (req, res) => {
   try {
-    const { credential } = req.body;
+    const { credential, mode } = req.body;
     if (!credential) return res.status(400).json({ error: 'Missing Google credential' });
     if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'Google sign-in is not configured' });
 
@@ -101,6 +101,10 @@ router.post('/google', async (req, res) => {
 
     const email = payload.email.toLowerCase();
     let user = db.prepare('SELECT * FROM users WHERE google_id = ? OR email = ?').get(payload.sub, email);
+
+    if (!user && mode === 'login') {
+      return res.status(404).json({ error: 'No HomeLink account is registered with this Google account. Please register first.', code: 'not_registered' });
+    }
 
     if (!user) {
       const id = uuid();
