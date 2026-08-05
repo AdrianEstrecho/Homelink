@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: homelink-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: FRONTEND_URL
+        value: https://frontend-amber-ten-34.vercel.app
+      - key: JWT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: APPLE_CLIENT_ID
+        sync: false
+      - key: COMPANY_LAT
+        value: "14.5995"
+      - key: COMPANY_LNG
+        value: "120.9842"
+      - key: COMPANY_ADDRESS
+        value: "123 HomeLink Avenue, Metro Manila, Philippines"
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
