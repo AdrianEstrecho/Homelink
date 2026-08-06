@@ -8,7 +8,7 @@ services:
     startCommand: npm start
     envVars:
       - key: FRONTEND_URL
-        value: https://frontend-amber-ten-34.vercel.app
+        value: https://homelink-frontend-umber.vercel.app
       - key: JWT_SECRET
         sync: false
       - key: GOOGLE_CLIENT_ID
