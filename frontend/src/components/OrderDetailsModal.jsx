@@ -110,7 +110,7 @@ export default function OrderDetailsModal({ order, onClose, person, personLabel 
             )}
             <div className="flex justify-between font-bold text-base pt-1.5 border-t border-gray-100">
               <span>Total</span>
-              <span className="text-brand-orange">{formatPrice(order.total)}</span>
+              <span className="text-brand-navy">{formatPrice(order.total)}</span>
             </div>
           </div>
 

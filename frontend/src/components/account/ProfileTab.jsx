@@ -24,7 +24,7 @@ export default function ProfileTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="font-display font-semibold text-lg text-brand-navy">Profile Details</h2>
+        <h2 className="font-display font-bold text-lg text-brand-ink">Profile Details</h2>
         {!editing ? (
           <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 text-sm font-semibold text-brand-navy hover:text-brand-orange transition">
             <Pencil className="w-4 h-4" /> Edit Profile

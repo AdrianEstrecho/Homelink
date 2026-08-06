@@ -18,7 +18,8 @@ export default function Orders() {
       <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-navy transition mb-4">
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
-      <h1 className="font-display text-3xl font-bold text-brand-navy mb-8">My Orders</h1>
+      <p className="eyebrow mb-3">Order History</p>
+      <h1 className="section-title mb-8">My Orders</h1>
       {orders.length === 0 ? (
         <div className="text-center py-20">
           <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -30,17 +31,17 @@ export default function Orders() {
             <button
               key={o.id}
               onClick={() => setSelectedOrder(o)}
-              className="card p-5 w-full text-left flex flex-wrap items-center justify-between gap-3 hover:shadow-md hover:border-brand-orange/40 transition"
+              className="card p-5 w-full text-left flex flex-wrap items-center justify-between gap-3 hover:border-brand-navy/20 hover:shadow-md transition"
             >
               <div>
-                <p className="font-semibold">Order #{o.id.slice(0, 8).toUpperCase()}</p>
+                <p className="font-semibold text-brand-ink">Order #{o.id.slice(0, 8).toUpperCase()}</p>
                 <p className="text-sm text-gray-500">
                   {new Date(o.created_at).toLocaleDateString()} · {o.items?.length || 0} item{o.items?.length === 1 ? '' : 's'}
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 <span className={`badge ${statusColor(o.status)}`}>{o.status}</span>
-                <span className="font-bold text-brand-orange">{formatPrice(o.total)}</span>
+                <span className="font-bold text-brand-navy">{formatPrice(o.total)}</span>
                 <ChevronRight className="w-4 h-4 text-gray-400" />
               </div>
             </button>

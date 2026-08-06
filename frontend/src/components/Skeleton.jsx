@@ -54,3 +54,15 @@ export function CategorySkeleton() {
     </div>
   );
 }
+
+export function GallerySkeleton() {
+  return (
+    <div>
+      <Skeleton className="w-full h-56 rounded-lg" />
+      <div className="pt-3 space-y-2">
+        <Skeleton className="h-3 w-16" />
+        <Skeleton className="h-4 w-2/3" />
+      </div>
+    </div>
+  );
+}

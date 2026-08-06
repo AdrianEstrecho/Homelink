@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+
 // Tones reuse the same category colors as the admin activity feed
 // (see CATEGORY_ICON in AdminLayout.jsx) so a confirmation's color always
 // matches how that action later shows up in the audit trail.
@@ -24,10 +26,14 @@ export default function ConfirmDialog({
   if (!open) return null;
   const { icon: iconClass, confirm: confirmClass } = TONE_STYLES[tone] || TONE_STYLES.delete;
 
-  return (
+  // Portaled to <body> so `fixed inset-0` centers on the viewport regardless of
+  // where this is invoked from — a caller nested inside anything with a transform,
+  // filter, or backdrop-filter (e.g. Navbar's blurred sticky bar) would otherwise
+  // create a containing block that boxes the dialog into that ancestor instead.
+  return createPortal(
     <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4`}>
-      <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 fade-up">
+      <div className="modal-scrim" onClick={onCancel} />
+      <div className="modal-panel w-full max-w-sm p-6 fade-up">
         {Icon && (
           <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${iconClass}`}>
             <Icon className="w-6 h-6" />
@@ -52,6 +58,7 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

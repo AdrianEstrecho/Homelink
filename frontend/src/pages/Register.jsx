@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
 import { UserPlus, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { usePageTransition } from '../context/PageTransitionContext';
 import PasswordRequirements from '../components/PasswordRequirements';
 import { isPasswordValid } from '../utils/password';
 import AuthLayout from '../components/AuthLayout';
@@ -15,7 +16,9 @@ const appleConfigured = isAppleSignInConfigured();
 
 export default function Register() {
   const { register, loginWithGoogle, loginWithApple } = useAuth();
-  const navigate = useNavigate();
+  // Same full-screen cover the homepage Login button and Login page success
+  // use — keeps signup finishing with the same ceremony as signing in.
+  const coverTransitionTo = usePageTransition();
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', phone: '' });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -45,10 +48,9 @@ export default function Register() {
     setLoading(true);
     try {
       await register({ ...form, acceptedTerms });
-      navigate('/');
+      coverTransitionTo('/');
     } catch (err) {
       setError(err.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -58,10 +60,9 @@ export default function Register() {
     setLoading(true);
     try {
       await loginWithGoogle(credentialResponse.credential);
-      navigate('/');
+      coverTransitionTo('/');
     } catch (err) {
       setError(err.message || 'Google sign-up failed');
-    } finally {
       setLoading(false);
     }
   };
@@ -75,10 +76,9 @@ export default function Register() {
         firstName: response.user?.name?.firstName,
         lastName: response.user?.name?.lastName,
       });
-      navigate('/');
+      coverTransitionTo('/');
     } catch (err) {
       setError(err.message || 'Apple sign-up failed');
-    } finally {
       setLoading(false);
     }
   };

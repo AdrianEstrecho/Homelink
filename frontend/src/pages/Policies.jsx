@@ -9,22 +9,20 @@ const policies = [
 
 export default function Policies() {
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="text-center mb-12">
-        <Shield className="w-12 h-12 text-brand-navy mx-auto mb-4" />
-        <h1 className="font-display text-3xl font-bold text-brand-navy">Policies</h1>
-        <p className="text-gray-600 mt-2">Your trust and satisfaction are our priority</p>
+    <div className="max-w-3xl mx-auto px-4 py-16 md:py-20">
+      <div className="text-center mb-16">
+        <p className="eyebrow justify-center mb-4"><Shield className="w-3.5 h-3.5" /> Trust &amp; Safety</p>
+        <h1 className="section-title">Policies</h1>
+        <p className="text-gray-500 mt-3">Your trust and satisfaction are our priority.</p>
       </div>
-      <div className="space-y-6">
+      <div className="divide-y divide-gray-100 border-t border-gray-100">
         {policies.map(p => (
-          <div key={p.title} className="card p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 bg-brand-light rounded-lg flex items-center justify-center">
-                <p.icon className="w-5 h-5 text-brand-navy" />
-              </div>
-              <h2 className="font-semibold text-lg">{p.title}</h2>
+          <div key={p.title} className="py-8 flex gap-5">
+            <p.icon className="w-5 h-5 text-brand-navy shrink-0 mt-1" />
+            <div>
+              <h2 className="font-display font-bold text-lg text-brand-ink mb-2">{p.title}</h2>
+              <p className="text-gray-500 leading-relaxed">{p.content}</p>
             </div>
-            <p className="text-gray-600 leading-relaxed">{p.content}</p>
           </div>
         ))}
       </div>

@@ -32,7 +32,7 @@ export default function NotificationsTab() {
 
   return (
     <div>
-      <h2 className="font-display font-semibold text-lg text-brand-navy mb-1">Notification Preferences</h2>
+      <h2 className="font-display font-bold text-lg text-brand-ink mb-1">Notification Preferences</h2>
       <p className="text-sm text-gray-500 mb-6">Choose what HomeLink emails you about.</p>
 
       <div className="space-y-3">

@@ -20,6 +20,18 @@ router.get('/featured', (req, res) => {
   res.json(reviews);
 });
 
+router.get('/product/:productId', (req, res) => {
+  const reviews = db.prepare(`
+    SELECT r.id, r.rating, r.comment, r.created_at, u.first_name, u.last_name
+    FROM reviews r JOIN users u ON r.user_id = u.id
+    WHERE r.product_id = ?
+    ORDER BY r.created_at DESC
+  `).all(req.params.productId);
+  const count = reviews.length;
+  const average = count ? reviews.reduce((s, r) => s + r.rating, 0) / count : 0;
+  res.json({ reviews, average, count });
+});
+
 router.get('/my', authenticate, (req, res) => {
   const reviews = db.prepare(`
     SELECT r.*, p.name as product_name, p.image as product_image, p.slug as product_slug

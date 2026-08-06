@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
-import { LogIn, Lock, ShieldCheck, AlertCircle } from 'lucide-react';
+import { LogIn, Lock, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { usePageTransition } from '../context/PageTransitionContext';
 import AuthLayout from '../components/AuthLayout';
 import AuthIllustration from '../components/AuthIllustration';
 import AppleSignInButton, { isAppleSignInConfigured } from '../components/AppleSignInButton';
@@ -12,7 +13,11 @@ const appleConfigured = isAppleSignInConfigured();
 
 export default function Login() {
   const { login, logout, loginWithGoogle, loginWithApple } = useAuth();
-  const navigate = useNavigate();
+  // Same full-screen blue cover used when entering login from the homepage —
+  // reused here so a successful sign-in gets the same ceremony, not just the
+  // pre-auth navigation. It owns its own navigate() call, so this replaces
+  // the old local fade-and-navigate.
+  const coverTransitionTo = usePageTransition();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [notRegistered, setNotRegistered] = useState(false);
@@ -28,10 +33,9 @@ export default function Login() {
         logout();
         throw new Error('Staff accounts sign in at the staff portal — press Ctrl+Alt+. to continue there.');
       }
-      navigate('/');
+      coverTransitionTo('/');
     } catch (err) {
       setError(err.message);
-    } finally {
       setLoading(false);
     }
   };
@@ -42,14 +46,13 @@ export default function Login() {
     setLoading(true);
     try {
       await loginWithGoogle(credentialResponse.credential, { mode: 'login' });
-      navigate('/');
+      coverTransitionTo('/');
     } catch (err) {
       if (err.code === 'not_registered') {
         setNotRegistered(true);
       } else {
         setError(err.message || 'Google sign-in failed');
       }
-    } finally {
       setLoading(false);
     }
   };
@@ -63,10 +66,9 @@ export default function Login() {
         firstName: response.user?.name?.firstName,
         lastName: response.user?.name?.lastName,
       });
-      navigate('/');
+      coverTransitionTo('/');
     } catch (err) {
       setError(err.message || 'Apple sign-in failed');
-    } finally {
       setLoading(false);
     }
   };
@@ -90,8 +92,9 @@ export default function Login() {
           </div>
         </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
-        <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 py-3 disabled:opacity-50">
-          <LogIn className="w-4 h-4" /> {loading ? 'Signing in...' : 'Login'}
+        <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 py-3 disabled:opacity-70 transition-opacity">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+          {loading ? 'Signing in...' : 'Login'}
         </button>
         <p className="text-center text-sm text-gray-600">
           Don't have an account? <Link to="/register" className="text-brand-orange font-semibold hover:underline">Sign up</Link>

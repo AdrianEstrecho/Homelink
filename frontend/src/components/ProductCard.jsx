@@ -1,15 +1,30 @@
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Star } from 'lucide-react';
+import { ShoppingCart, Star, Check } from 'lucide-react';
 import { formatPrice } from '../api/client';
 import { useCart } from '../context/CartContext';
+import { useToast } from '../context/ToastContext';
 import SafeImage from './SafeImage';
+import StarRating from './account/StarRating';
 
 export default function ProductCard({ product }) {
   const { addItem } = useCart();
+  const { showToast } = useToast();
   const outOfStock = product.stock === 0;
 
+  const handleAdd = () => {
+    addItem(product);
+    showToast({
+      icon: Check,
+      iconClass: 'bg-green-100 text-green-600',
+      image: product.image,
+      title: 'Added to cart',
+      description: product.name,
+      action: { label: 'View Cart', to: '/cart' },
+    });
+  };
+
   return (
-    <div className="card group hover:shadow-lg hover:-translate-y-0.5 h-full flex flex-col">
+    <div className="card group hover:border-brand-navy/20 hover:shadow-md h-full flex flex-col">
       <Link to={`/products/${product.slug}`} className="block relative overflow-hidden bg-gray-100">
         <SafeImage
           src={product.image}
@@ -27,15 +42,21 @@ export default function ProductCard({ product }) {
           <span className="absolute top-3 right-3 badge bg-red-500 text-white">Low Stock</span>
         )}
       </Link>
-      <div className="p-4 flex flex-col flex-1">
-        <p className="text-xs text-[#00806f] font-semibold uppercase tracking-wide mb-1">{product.category_name}</p>
+      <div className="p-5 flex flex-col flex-1">
+        <p className="text-xs text-brand-teal font-semibold uppercase tracking-wide mb-1.5">{product.category_name}</p>
         <Link to={`/products/${product.slug}`}>
-          <h3 className="font-semibold text-gray-900 hover:text-brand-orange transition line-clamp-2 mb-2">{product.name}</h3>
+          <h3 className="font-semibold text-brand-ink hover:text-brand-orange transition line-clamp-2 mb-2">{product.name}</h3>
         </Link>
-        <div className="flex items-center justify-between gap-2 mt-auto pt-1">
+        {product.review_count > 0 && (
+          <div className="flex items-center gap-1.5 mb-2">
+            <StarRating value={Math.round(product.avg_rating)} readOnly size="w-3.5 h-3.5" />
+            <span className="text-xs text-gray-400">({product.review_count})</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2 mt-auto pt-2">
           <span className="text-lg font-bold text-brand-navy">{formatPrice(product.price)}</span>
           <button
-            onClick={() => addItem(product)}
+            onClick={handleAdd}
             disabled={outOfStock}
             aria-label={outOfStock ? `${product.name} is out of stock` : `Add ${product.name} to cart`}
             className="flex items-center gap-1.5 bg-brand-navy hover:bg-brand-blue text-white text-sm px-3 py-1.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-brand-navy"

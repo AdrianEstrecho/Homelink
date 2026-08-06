@@ -57,7 +57,7 @@ export default function AddressesTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="font-display font-semibold text-lg text-brand-navy">Saved Addresses</h2>
+        <h2 className="font-display font-bold text-lg text-brand-ink">Saved Addresses</h2>
         {!showForm && (
           <button onClick={startAdd} className="flex items-center gap-1.5 text-sm font-semibold text-brand-navy hover:text-brand-orange transition">
             <Plus className="w-4 h-4" /> Add Address
@@ -132,7 +132,7 @@ export default function AddressesTab() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-semibold text-gray-800">{a.label}</p>
-                  {!!a.is_default && <span className="badge bg-brand-teal/15 text-[#00806f] flex items-center gap-1"><Star className="w-3 h-3" /> Default</span>}
+                  {!!a.is_default && <span className="badge bg-brand-teal/15 text-brand-teal flex items-center gap-1"><Star className="w-3 h-3" /> Default</span>}
                 </div>
                 <p className="text-sm text-gray-600 mt-0.5">{[a.house_number, a.street].filter(Boolean).join(' ')}</p>
                 <p className="text-sm text-gray-600">{[a.village, a.city].filter(Boolean).join(', ')}</p>

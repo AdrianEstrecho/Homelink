@@ -41,7 +41,7 @@ export default function SupportTab() {
 
   return (
     <div>
-      <h2 className="font-display font-semibold text-lg text-brand-navy mb-1">Support &amp; Complaints</h2>
+      <h2 className="font-display font-bold text-lg text-brand-ink mb-1">Support &amp; Complaints</h2>
       <p className="text-sm text-gray-500 mb-6">Reach out to our team with a question, issue, or complaint — we'll get back to you.</p>
 
       <form onSubmit={submit} className="space-y-3 mb-8">

@@ -50,7 +50,7 @@ export default function PaymentTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="font-display font-semibold text-lg text-brand-navy">Payment Methods</h2>
+        <h2 className="font-display font-bold text-lg text-brand-ink">Payment Methods</h2>
         {!showForm && (
           <button onClick={startAdd} className="flex items-center gap-1.5 text-sm font-semibold text-brand-navy hover:text-brand-orange transition">
             <Plus className="w-4 h-4" /> Add Card
@@ -90,7 +90,7 @@ export default function PaymentTab() {
           </div>
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <p className="flex items-center gap-1.5 text-xs text-gray-500">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#00806f]" /> We only store your card's brand and last 4 digits — the full number is never saved.
+            <ShieldCheck className="w-3.5 h-3.5 text-brand-teal" /> We only store your card's brand and last 4 digits — the full number is never saved.
           </p>
           <button type="submit" disabled={saving} className="btn-primary text-sm disabled:opacity-60">{saving ? 'Saving...' : 'Save Card'}</button>
         </form>
@@ -113,7 +113,7 @@ export default function PaymentTab() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-semibold text-gray-800">{m.brand} •••• {m.last4}</p>
-                  {!!m.is_default && <span className="badge bg-brand-teal/15 text-[#00806f] flex items-center gap-1"><Star className="w-3 h-3" /> Default</span>}
+                  {!!m.is_default && <span className="badge bg-brand-teal/15 text-brand-teal flex items-center gap-1"><Star className="w-3 h-3" /> Default</span>}
                 </div>
                 <p className="text-sm text-gray-500 mt-0.5">Expires {String(m.exp_month).padStart(2, '0')}/{m.exp_year}</p>
               </div>

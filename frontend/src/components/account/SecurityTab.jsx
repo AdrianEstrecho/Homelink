@@ -32,7 +32,7 @@ export default function SecurityTab() {
 
   return (
     <div>
-      <h2 className="font-display font-semibold text-lg text-brand-navy mb-1">Security</h2>
+      <h2 className="font-display font-bold text-lg text-brand-ink mb-1">Security</h2>
       <p className="text-sm text-gray-500 mb-6">Update your password to keep your account secure.</p>
 
       <form onSubmit={handleSubmit} className="max-w-sm space-y-4">
@@ -49,7 +49,7 @@ export default function SecurityTab() {
           <input type="password" value={form.confirmPassword} onChange={e => { setForm({ ...form, confirmPassword: e.target.value }); setSuccess(false); }} className="input-field" required minLength={6} />
         </div>
         {error && <p className="text-red-600 text-sm">{error}</p>}
-        {success && <p className="flex items-center gap-1.5 text-[#00806f] text-sm font-medium"><CheckCircle2 className="w-4 h-4" /> Password updated successfully.</p>}
+        {success && <p className="flex items-center gap-1.5 text-brand-teal text-sm font-medium"><CheckCircle2 className="w-4 h-4" /> Password updated successfully.</p>}
         <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-60">
           <KeyRound className="w-4 h-4" /> {saving ? 'Updating...' : 'Update Password'}
         </button>

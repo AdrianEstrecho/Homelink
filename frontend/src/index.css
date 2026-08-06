@@ -3,8 +3,15 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  html::-webkit-scrollbar {
+    display: none;
+  }
   body {
-    @apply bg-gray-50 text-gray-900 font-sans antialiased;
+    @apply bg-white text-gray-900 font-sans antialiased;
   }
   ::selection {
     @apply bg-brand-orange/25 text-brand-navy;
@@ -16,22 +23,57 @@
 
 @layer components {
   .btn-primary {
-    @apply bg-brand-orange hover:bg-orange-600 text-white font-semibold px-6 py-2.5 rounded-lg transition-all shadow-md hover:shadow-lg active:scale-[0.98];
+    @apply bg-brand-orange hover:bg-orange-600 text-white font-semibold px-6 py-2.5 rounded-lg transition-all active:scale-[0.98];
   }
   .btn-secondary {
     @apply bg-brand-navy hover:bg-brand-blue text-white font-semibold px-6 py-2.5 rounded-lg transition-all;
   }
+  /* Frosted rather than fully transparent — this doubles as the "outline" button on
+     dark/hero surfaces (see Hero.jsx's secondary CTA) and needs to hold its own
+     shape without the ambient mesh showing through too strongly. Gradient (not flat
+     opacity) so it reads as an angled sheen of light across the glass. */
   .btn-outline {
-    @apply border-2 border-brand-navy text-brand-navy hover:bg-brand-navy hover:text-white font-semibold px-6 py-2.5 rounded-lg transition-all;
+    @apply backdrop-blur-md border border-brand-navy/20 text-brand-navy hover:border-brand-navy/40 font-semibold px-6 py-2.5 rounded-lg transition-all;
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.04));
   }
+  .btn-outline:hover {
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12));
+  }
+  /* The base surface for cards, dropdowns, and panels site-wide. Kept high-opacity
+     (75-90%) and lightly blurred (blur-md, not -xl) on purpose: this class also
+     backs dense admin/employee tables and lists (see AdminLayout.jsx, admin/*.jsx),
+     so legibility wins over a stronger see-through look. Needs the ambient mesh
+     (body::before, below) or a colored section behind it to actually read as glass —
+     on a flat white section it just looks like a plain card, which is the safe
+     fallback. Diagonal gradient rather than a flat tint, so the panel reads as
+     glass catching light rather than a solid color with a blur filter on it. */
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden transition-all duration-300;
+    @apply backdrop-blur-md rounded-2xl border border-white/70 shadow-[0_4px_24px_-8px_rgba(15,43,91,0.10)] overflow-hidden transition-all duration-300;
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.68));
   }
   .input-field {
     @apply w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-orange focus:border-transparent outline-none transition;
   }
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  /* Shared by every modal (ConfirmDialog, PromptDialog, TermsModal, and the two
+     inline modals in AdminLayout) — bolder blur than .card is fine here since a
+     modal panel is the one surface on screen, not competing with dense sibling
+     content for contrast. */
+  .modal-scrim {
+    @apply absolute inset-0 backdrop-blur-md;
+    background-image: linear-gradient(160deg, rgba(15, 43, 91, 0.6), rgba(15, 43, 91, 0.4));
+  }
+  .modal-panel {
+    @apply relative backdrop-blur-xl border border-white/70 rounded-2xl shadow-2xl;
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(255, 255, 255, 0.82));
+  }
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-brand-orange;
+  }
+  .section-title {
+    @apply font-display text-3xl md:text-4xl font-extrabold tracking-tight text-brand-ink;
   }
   .skeleton {
     @apply relative overflow-hidden bg-gray-200 rounded-lg;
@@ -66,8 +108,67 @@
     animation-delay: -3s;
   }
 
+  /* Site-wide backdrop the glass surfaces (.card, .modal-panel, navbar-glass,
+     footer accents) actually blur — without color behind them, a frosted panel
+     over a flat white/light-gray section just reads as a plain white card. Fixed
+     (not absolute) so it stays put as the page scrolls; sits behind everything at
+     -z-10 and is pointer-events-none so it never intercepts clicks. Rendered once
+     in App.jsx, outside the routed page content. AdminLayout's own opaque
+     bg-gray-50 shell fully covers it, so it only shows through on the public
+     storefront/customer pages, which is the intended scope for this pass. */
+  .ambient-mesh {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .ambient-mesh > span {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    opacity: 0.16;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ambient-mesh .float-blob,
+    .ambient-mesh .float-blob-delayed {
+      animation: none;
+    }
+  }
+
   .fade-up {
     animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Route-level entrance (see App.jsx) — opacity only, no translate/scale like
+     .fade-up, so it never establishes a containing block for a page's own
+     position:fixed content (modals, toasts). Applied to a div keyed on the
+     route's pathname, so React mounts a brand-new node per navigation and the
+     animation always plays from 0% rather than relying on a CSS transition
+     (which needs two separately-painted frames and is prone to being
+     collapsed into an instant jump when state flips happen faster than a paint). */
+  .route-fade {
+    animation: routeFadeIn 0.4s ease-out both;
+  }
+
+  /* Full-screen branded transition (see PageTransitionOverlay.jsx) — a slower,
+     more deliberate cover-and-reveal for moments that warrant more ceremony
+     than the default .route-fade (e.g. entering the login flow). Scale kept
+     subtle and the element is always the topmost thing on screen (z-[500]),
+     so its transform never has a fixed-position descendant to conflict with. */
+  .overlay-cover-in {
+    animation: overlayCoverIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .overlay-cover-out {
+    animation: overlayCoverOut 0.4s cubic-bezier(0.7, 0, 0.84, 0) both;
+  }
+
+  .toast-in {
+    animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .toast-progress {
+    width: 100%;
+    animation: toastProgress linear forwards;
   }
 
   /* Thin, near-invisible scrollbar for dark panels (e.g. the admin sidebar) —
@@ -101,6 +202,17 @@
     }
   }
 
+  /* Fully hidden scrollbar (no hover reveal, unlike .scrollbar-ghost above) —
+     for strips like the announcements marquee that are still drag/wheel
+     scrollable but should never show a track/thumb. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .reveal {
       opacity: 1;
@@ -109,7 +221,11 @@
     }
     .float-blob,
     .float-blob-delayed,
-    .fade-up {
+    .fade-up,
+    .toast-in,
+    .route-fade,
+    .overlay-cover-in,
+    .overlay-cover-out {
       animation: none;
     }
   }
@@ -129,6 +245,244 @@
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes routeFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes overlayCoverIn {
+  from { opacity: 0; transform: scale(1.04); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes overlayCoverOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.04); }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes toastProgress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* Marquee showcase band (Home hero-to-content transition): looping text behind a
+   single centered floating image. See .showcase usage in pages/Home.jsx. */
+.marquee-track {
+  display: flex;
+  white-space: nowrap;
+  animation: marqueeScroll 28s linear infinite;
+}
+@keyframes marqueeScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.showcase-float {
+  animation: showcaseFloat 6s ease-in-out infinite;
+}
+@keyframes showcaseFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track,
+  .showcase-float {
+    animation: none;
+  }
+}
+
+/* Pinned scroll hero (Home.jsx <Hero />): the wrap is taller than one viewport so
+   .hero-pin can stick beneath the navbar while the user scrolls through it. A
+   scroll listener (see Hero.jsx) writes --progress (0-1) onto .hero-pin, which
+   the villa scale below reads — kept to a single custom-property write per
+   frame, driving only GPU-friendly `transform`, so the reveal stays smooth.
+   The wrap is pulled up by the navbar's own height (margin-top) so it renders
+   *underneath* the navbar's sticky box instead of starting right after it —
+   that's what lets the transparent navbar (Navbar.jsx) show hero through it
+   at the top of the page. hero-copy's extra top padding keeps the headline
+   clear of the navbar row that now overlaps this section. */
+.hero-wrap {
+  position: relative;
+  height: 200vh;
+  margin-top: -80px;
+}
+.hero-pin {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  min-height: 600px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  background: linear-gradient(180deg, #0a1d42 0%, #123a73 55%, #1a4a8a 100%);
+  --progress: 0;
+}
+/* Sky brightens a touch as the house grows, reinforcing forward motion using
+   only the existing --progress driver — no extra image weight. */
+.hero-pin::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(180deg, #0a1d42 0%, #163f7f 55%, #2f6bb0 100%);
+  opacity: var(--progress);
+  will-change: opacity;
+}
+/* Recedes as the villa grows, so the text reads as moving away/behind rather
+   than just getting occluded — same --progress driver as .villa-stage,
+   scaling/fading/blurring instead of growing. Bottom padding is the buffer
+   zone between the copy block and the house/clouds beneath it — without it
+   the two crowd together as soon as the house starts growing. */
+.hero-copy {
+  position: relative;
+  z-index: 2;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 148px 24px 40px;
+  text-align: center;
+  transform: scale(calc(1 - var(--progress) * 0.16)) translateY(calc(var(--progress) * -16px));
+  opacity: calc(1 - var(--progress) * 0.6);
+  filter: blur(calc(var(--progress) * 2px));
+  will-change: transform, opacity;
+}
+
+/* The villa grows from a fixed base instead of translating upward — a slide-up
+   would vacate empty space below it the moment it clears the viewport floor.
+   Anchoring the scale origin to the bottom keeps its foot planted throughout.
+   Sized in % of .hero-pin's own (already nav-offset) box, not vh — vh always
+   resolves against the raw viewport, which would overshoot here.
+   bottom is a positive offset (raised from the frame's edge, not sunk below
+   it) so the house sits higher in the frame throughout, and the growth
+   multiplier is toned down from 1.3 to 0.9 so the fully-grown house stops
+   short of the copy block above it instead of growing into it — the two
+   changes together are what make room between the text and the house. */
+.villa-stage {
+  position: absolute;
+  z-index: 3;
+  /* bottom is itself progress-driven: at rest (progress 0) it sits slightly
+     lower (-22%) than the fully-grown end state (-21%), so the house still
+     rises a touch as it scales up. */
+  left: 0; right: 0; bottom: calc(-21% - (1 - var(--progress)) * 1%);
+  height: 60%;
+  min-height: 400px;
+  transform-origin: 50% 100%;
+  /* Scale base raised to 1.35 so the house already reads as large on first
+     paint, before any scroll; its --progress multiplier is reduced to 0.55 so
+     the fully-grown end state still lands on the same ~1.9 it was tuned to. */
+  transform: scale(calc(1.35 + var(--progress) * 0.55)) rotate(calc((1 - var(--progress)) * -2.5deg));
+  will-change: transform;
+  pointer-events: none;
+}
+/* Soft contact shadow the house grows into. .villa-stage is anchored 6%
+   below the visible frame (so the roofline grows into view while its base
+   stays cropped, implying the ground continues past the frame) — this sits
+   at the frame's actual visible bottom edge instead, where the crop reads as
+   ground level, or the shadow would be clipped away with it. Kept as its own
+   element (not a child of .villa-stage) so it stays flat rather than
+   inheriting the house's settle-rotation. */
+.villa-ground {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: 0;
+  width: min(70%, 640px);
+  height: 36px;
+  transform: translateX(-50%) scale(calc(0.4 + var(--progress) * 0.9));
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0) 72%);
+  opacity: calc(var(--progress) * 0.8);
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+/* House.svg is a pre-cut transparent cutout (verified: fully opaque on any
+   backdrop, no black background to blend away), so it's a plain <img> —
+   no mix-blend-mode needed. A gentle continuous sway keeps it from reading
+   as a static sticker once it has finished growing into place. */
+.stage-house {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 25px 40px rgba(0,0,0,0.45));
+  transform-origin: 50% 100%;
+  animation: houseSway 7s ease-in-out infinite;
+}
+@keyframes houseSway {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-5px) rotate(0.35deg); }
+}
+
+/* Sits above .villa-stage (z-index 4 > 3) and, unlike it, is NOT scaled by
+   --progress — it stays a fixed band at the visible bottom edge the whole
+   time. That's what makes the house read as rising up out of a cloud bank as
+   it grows, rather than the clouds growing along with it. hero-pin's own
+   overflow:hidden clips anything that spills past the frame, so this doesn't
+   need its own overflow rule.
+   Cloud2.svg is a 960x540 cutout — the cloud puffs only occupy roughly the
+   bottom half of that frame, with the wispy/textured edge sitting well above
+   the very bottom, and dense solid-white below it.
+   Tried and rejected: a CSS background-image with background-size:100% 100%,
+   and an <img> with object-fit:fill, to stretch it independently in both
+   axes and show the whole source (all its texture) without cropping. Both
+   measured a correct 1400x306-ish layout box, but painted the image at only
+   its native aspect ratio anyway, letterboxed with solid color on the sides —
+   a renderer limitation with this specific asset (it wraps a huge embedded
+   base64 raster, and its viewBox doesn't match its width/height attributes),
+   not something fixable from the CSS side. object-fit:cover is the one mode
+   that reliably paints correctly here, so texture selection has to happen via
+   object-position instead: "center bottom" was cropping into the dense,
+   texture-less lower part of the source; "center 28%" lands the crop window
+   on the wispy zone instead. */
+.villa-clouds {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 68%;
+  min-height: 440px;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 35%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 35%);
+}
+.clouds-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 70%;
+}
+
+@media (max-width: 860px) {
+  .villa-stage { transform: scale(calc(1.3 + var(--progress) * 0.7)) rotate(calc((1 - var(--progress)) * -2.5deg)); }
+}
+@media (max-width: 560px) {
+  .hero-copy { padding-top: 148px; }
+  .villa-stage { height: 40%; min-height: 260px; }
+  .villa-clouds { height: 18%; min-height: 110px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-wrap { height: auto; }
+  .hero-pin { position: relative; top: 0; height: auto; padding-bottom: 40px; }
+  .hero-pin::before { opacity: 0.6; }
+  .hero-copy { transform: none; opacity: 1; filter: none; }
+  /* .villa-stage's children are position:absolute, so as a flex item with no
+     in-flow content it would otherwise collapse to width:0 once it's no
+     longer position:absolute itself (which normally exempts it from the
+     parent's flex sizing) — width:100% keeps it full-width here. */
+  .villa-stage { position: relative; width: 100%; height: 46vh; margin-top: 32px; transform: none; }
+  .villa-ground { opacity: 0.5; transform: translateX(-50%) scale(1); }
+  .stage-house { animation: none; }
 }
 
 /* Generic single-area print isolation — toggle .printing-active on <body> and mark

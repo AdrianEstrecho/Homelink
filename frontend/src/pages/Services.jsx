@@ -1,46 +1,128 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { Search, ShieldCheck, Tag, Award, LayoutGrid } from 'lucide-react';
 import { api } from '../api/client';
 import ServiceCard from '../components/ServiceCard';
+import ErrorState from '../components/ErrorState';
+import Reveal from '../components/Reveal';
+import { getServiceCategoryIcon } from '../constants/serviceCategoryIcons';
+import { ServiceCardSkeleton, CategorySkeleton } from '../components/Skeleton';
+
+const TRUST_POINTS = [
+  { icon: ShieldCheck, label: 'Verified Technicians' },
+  { icon: Tag, label: 'Upfront Pricing' },
+  { icon: Award, label: 'Satisfaction Guaranteed' },
+];
 
 export default function Services() {
-  const [services, setServices] = useState([]);
-  const [categories, setCategories] = useState([]);
+  const [services, setServices] = useState({ data: [], loading: true, error: false });
+  const [categories, setCategories] = useState({ data: [], loading: true });
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const category = searchParams.get('category') || '';
 
   useEffect(() => {
-    api.get('/services/categories').then(setCategories).catch(() => {});
+    api.get('/services/categories')
+      .then(data => setCategories({ data, loading: false }))
+      .catch(() => setCategories({ data: [], loading: false }));
   }, []);
 
   useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const loadServices = useCallback(() => {
+    setServices(s => ({ ...s, loading: true, error: false }));
     const params = new URLSearchParams();
     if (category) params.set('category', category);
-    if (search) params.set('search', search);
-    api.get(`/services?${params}`).then(setServices).catch(() => {});
-  }, [category, search]);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    api.get(`/services?${params}`)
+      .then(data => setServices({ data, loading: false, error: false }))
+      .catch(() => setServices({ data: [], loading: false, error: true }));
+  }, [category, debouncedSearch]);
+
+  useEffect(() => { loadServices(); }, [loadServices]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      <h1 className="font-display text-3xl font-bold text-brand-navy mb-2">Professional Services</h1>
-      <p className="text-gray-600 mb-8">Book verified technicians for installation, maintenance, and repair</p>
-
-      <div className="flex flex-wrap gap-2 mb-6">
-        <button onClick={() => setSearchParams({})} className={`px-4 py-2 rounded-full text-sm font-medium transition ${!category ? 'bg-brand-navy text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>All</button>
-        {categories.map(c => (
-          <button key={c} onClick={() => setSearchParams({ category: c })} className={`px-4 py-2 rounded-full text-sm font-medium transition ${category === c ? 'bg-brand-navy text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>{c}</button>
-        ))}
+    <div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-10">
+        <p className="eyebrow mb-3">Book a Pro</p>
+        <h1 className="section-title mb-2">Professional Services</h1>
+        <p className="text-gray-500 max-w-lg mb-5">Book verified technicians for installation, maintenance, and repair.</p>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          {TRUST_POINTS.map(({ icon: Icon, label }) => (
+            <span key={label} className="flex items-center gap-1.5 text-sm font-medium text-gray-500">
+              <Icon className="w-4 h-4 text-brand-teal" /> {label}
+            </span>
+          ))}
+        </div>
       </div>
 
-      <form onSubmit={e => { e.preventDefault(); }} className="relative mb-8 max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input type="text" placeholder="Search services..." value={search} onChange={e => setSearch(e.target.value)} className="input-field pl-10" />
-      </form>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-16">
+        {/* Category filter row — same card treatment as the Products page (which
+            itself ports the homepage's "Shop by category" cards), repurposed as
+            toggleable filters with an "All" card replacing the old text tabs. */}
+        <div className="flex gap-2 sm:gap-4 mb-8">
+          <button
+            onClick={() => setSearchParams({})}
+            className={`card group h-full flex-1 min-w-0 flex flex-col items-center text-center p-3 sm:p-5 gap-2 sm:gap-3 transition ${!category ? 'border-brand-orange/50 ring-1 ring-brand-orange/20' : 'hover:border-brand-orange/40'}`}
+          >
+            <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${!category ? 'bg-brand-orange/10' : 'bg-brand-navy/5 group-hover:bg-brand-orange/10 group-hover:scale-105'}`}>
+              <LayoutGrid className={`w-5 h-5 sm:w-7 sm:h-7 transition-colors ${!category ? 'text-brand-orange' : 'text-brand-navy group-hover:text-brand-orange'}`} />
+            </div>
+            <h3 className={`font-medium text-xs sm:text-sm leading-tight ${!category ? 'text-brand-navy font-semibold' : 'text-gray-800'}`}>All</h3>
+          </button>
+          {categories.loading ? (
+            Array.from({ length: 6 }).map((_, i) => <div key={i} className="flex-1 min-w-0"><CategorySkeleton /></div>)
+          ) : (
+            categories.data.map(c => {
+              const Icon = getServiceCategoryIcon(c);
+              const active = category === c;
+              return (
+                <button
+                  key={c}
+                  onClick={() => setSearchParams({ category: c })}
+                  className={`card group h-full flex-1 min-w-0 flex flex-col items-center text-center p-3 sm:p-5 gap-2 sm:gap-3 transition ${active ? 'border-brand-orange/50 ring-1 ring-brand-orange/20' : 'hover:border-brand-orange/40'}`}
+                >
+                  <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${active ? 'bg-brand-orange/10' : 'bg-brand-navy/5 group-hover:bg-brand-orange/10 group-hover:scale-105'}`}>
+                    <Icon className={`w-5 h-5 sm:w-7 sm:h-7 transition-colors ${active ? 'text-brand-orange' : 'text-brand-navy group-hover:text-brand-orange'}`} />
+                  </div>
+                  <h3 className={`font-medium text-xs sm:text-sm leading-tight ${active ? 'text-brand-navy font-semibold' : 'text-gray-800'}`}>{c}</h3>
+                </button>
+              );
+            })
+          )}
+        </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {services.map(s => <ServiceCard key={s.id} service={s} />)}
+        <form onSubmit={e => e.preventDefault()} className="relative mb-6 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input type="text" placeholder="Search services..." value={search} onChange={e => setSearch(e.target.value)} className="input-field pl-10" />
+        </form>
+        {!services.loading && !services.error && (
+          <p className="text-sm text-gray-400 mb-6">
+            {services.data.length} service{services.data.length === 1 ? '' : 's'} found
+          </p>
+        )}
+
+        {services.loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, i) => <ServiceCardSkeleton key={i} />)}
+          </div>
+        ) : services.error ? (
+          <ErrorState message="Couldn't load services right now." onRetry={loadServices} />
+        ) : services.data.length === 0 ? (
+          <p className="text-center text-gray-500 py-12">No services found.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {services.data.map((s, i) => (
+              <Reveal key={s.id} delay={(i % 6) * 60} className="h-full">
+                <ServiceCard service={s} />
+              </Reveal>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

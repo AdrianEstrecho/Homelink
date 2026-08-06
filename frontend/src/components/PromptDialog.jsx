@@ -25,8 +25,8 @@ export default function PromptDialog({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={onCancel} />
-      <form onSubmit={submit} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 fade-up">
+      <div className="modal-scrim" onClick={onCancel} />
+      <form onSubmit={submit} className="modal-panel w-full max-w-sm p-6 fade-up">
         <h2 className="font-display text-lg font-bold text-brand-navy">{title}</h2>
         {message && <p className="text-sm text-gray-600 mt-1.5">{message}</p>}
         <input

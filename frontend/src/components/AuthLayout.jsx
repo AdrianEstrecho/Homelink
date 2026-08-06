@@ -7,7 +7,7 @@ function Logo() {
       <div className="w-9 h-9 bg-brand-orange rounded-lg flex items-center justify-center group-hover:scale-105 transition">
         <HomeIcon className="w-5 h-5 text-white" />
       </div>
-      <span className="font-display font-bold text-xl tracking-tight text-brand-navy">
+      <span className="font-display font-extrabold text-xl tracking-tight text-brand-navy">
         Home<span className="text-brand-orange">Link</span>
       </span>
     </Link>
@@ -26,8 +26,8 @@ export default function AuthLayout({ title, subtitle, backTo, backLabel = 'Back 
             </Link>
           )}
           <div className="mb-7">
-            <h1 className="font-display text-3xl font-bold text-brand-navy">{title}</h1>
-            {subtitle && <p className="text-gray-600 mt-2">{subtitle}</p>}
+            <h1 className="font-display text-3xl font-extrabold tracking-tight text-brand-ink">{title}</h1>
+            {subtitle && <p className="text-gray-500 mt-2">{subtitle}</p>}
           </div>
           {children}
         </div>

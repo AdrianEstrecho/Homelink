@@ -356,8 +356,8 @@ export default function AdminLayout({ children, title, subtitle }) {
 
       {viewAllOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={() => setViewAllOpen(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col fade-up">
+          <div className="modal-scrim" onClick={() => setViewAllOpen(false)} />
+          <div className="modal-panel w-full max-w-lg max-h-[80vh] flex flex-col fade-up">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
               <h3 className="font-display font-semibold text-lg text-brand-navy">All Notifications</h3>
               <button onClick={() => setViewAllOpen(false)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"><X className="w-4 h-4" /></button>

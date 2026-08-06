@@ -9,12 +9,16 @@ export default {
           blue: '#1a4a8a',
           orange: '#ff6b35',
           teal: '#00a896',
-          light: '#f0f7ff',
+          light: '#f7f5f1',
+          ink: '#14181f',
         },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Poppins', 'system-ui', 'sans-serif'],
+        display: ['Archivo', 'system-ui', 'sans-serif'],
+      },
+      letterSpacing: {
+        tightest: '-0.04em',
       },
     },
   },

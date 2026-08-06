@@ -16,6 +16,13 @@ router.get('/availability', (req, res) => {
   res.json(slots.map(time => ({ time, available: !bookedTimes.includes(time) })));
 });
 
+router.get('/discount-preview', authenticate, (req, res) => {
+  res.json({
+    firstTime: getFirstTimeServiceDiscount(req.user.id),
+    holiday: getHolidayDiscount(),
+  });
+});
+
 router.post('/', authenticate, async (req, res) => {
   try {
     const { serviceId, scheduledDate, scheduledTime, address, notes, paymentMethod } = req.body;

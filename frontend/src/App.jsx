@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
+import PageTransitionOverlay from './components/PageTransitionOverlay';
+import { PageTransitionProvider } from './context/PageTransitionContext';
 import NotFound from './pages/NotFound';
 import Home from './pages/Home';
 import Products from './pages/Products';
@@ -65,6 +67,27 @@ export default function App() {
   const isAuthSection = AUTH_PATHS.includes(location.pathname);
   const hideChrome = isStaffSection || isAuthSection;
 
+  // Full-screen "cover" transition for moments that warrant more ceremony than
+  // the default route-fade: entering login from the homepage, and landing back
+  // on a page after a successful login/signup. Exposed via PageTransitionContext
+  // so Login/Register can trigger it too, not just Navbar (which App.jsx can
+  // prop-drill directly). Navbar/Login/Register all unmount across these
+  // navigations, so the overlay has to live up here to bridge the two pages.
+  // Timings: 300ms to fully cover, a 450ms hold with the spinner (the actual
+  // navigate() fires here, hidden underneath), then 400ms to reveal.
+  const [coverPhase, setCoverPhase] = useState(null); // null | 'in' | 'out'
+  const coverTimers = useRef([]);
+  const coverTransitionTo = (path) => {
+    if (coverPhase) return;
+    coverTimers.current.forEach(clearTimeout);
+    setCoverPhase('in');
+    coverTimers.current = [
+      setTimeout(() => { navigate(path); setCoverPhase('out'); }, 750),
+      setTimeout(() => setCoverPhase(null), 750 + 400),
+    ];
+  };
+  useEffect(() => () => coverTimers.current.forEach(clearTimeout), []);
+
   useEffect(() => {
     if (location.pathname !== '/login') return;
     const handleStaffShortcut = (e) => {
@@ -78,9 +101,30 @@ export default function App() {
   }, [location.pathname, navigate]);
 
   return (
+    <PageTransitionProvider value={coverTransitionTo}>
     <div className="min-h-screen flex flex-col">
-      {!hideChrome && <Navbar />}
+      {!hideChrome && (
+        <div className="ambient-mesh" aria-hidden="true">
+          <span className="float-blob w-[32rem] h-[32rem] -top-40 -right-32 bg-brand-orange" />
+          <span className="float-blob-delayed w-[28rem] h-[28rem] top-[40vh] -left-40 bg-brand-teal" />
+          <span className="float-blob w-[30rem] h-[30rem] bottom-[-10rem] right-[10vw] bg-brand-blue" />
+        </div>
+      )}
+      {!hideChrome && <Navbar onLoginClick={coverTransitionTo} />}
+      {/* key={coverPhase} forces a fresh node for the 'out' stage rather than
+          re-rendering the 'in' one with a swapped animation class — same
+          guaranteed-replay reasoning as route-fade above. */}
+      {coverPhase && <PageTransitionOverlay key={coverPhase} phase={coverPhase} />}
       <main className={hideChrome ? '' : 'flex-1'}>
+        {/* key={location.pathname} forces a fresh DOM node per route, so route-fade's
+            CSS animation (not a transition) reliably replays on every navigation — a
+            transition here would need two distinct painted frames to animate between
+            and is prone to being collapsed into an instant jump; an animation on a
+            freshly-mounted node always plays from its 0% keyframe. Opacity-only (no
+            transform) so it never creates a containing block for a page's fixed-position
+            content (modals, toasts). Skipped for the admin/employee section — staff
+            navigate between pages far more often and the fade only added lag there. */}
+        <div key={location.pathname} className={isStaffSection ? '' : 'route-fade'}>
         <ErrorBoundary key={location.pathname}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -134,8 +178,10 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
         </ErrorBoundary>
+        </div>
       </main>
       {!hideChrome && <Footer />}
     </div>
+    </PageTransitionProvider>
   );
 }

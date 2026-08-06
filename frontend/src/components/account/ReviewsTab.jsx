@@ -46,7 +46,7 @@ export default function ReviewsTab() {
 
   return (
     <div>
-      <h2 className="font-display font-semibold text-lg text-brand-navy mb-1">Reviews</h2>
+      <h2 className="font-display font-bold text-lg text-brand-ink mb-1">Reviews</h2>
       <p className="text-sm text-gray-500 mb-6">Share your experience with products you've purchased.</p>
 
       {/* Products awaiting review */}
