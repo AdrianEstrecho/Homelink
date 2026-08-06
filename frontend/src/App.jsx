@@ -88,6 +88,13 @@ export default function App() {
   };
   useEffect(() => () => coverTimers.current.forEach(clearTimeout), []);
 
+  // Browsers don't reset scroll position on client-side route changes, so a nav
+  // click from partway down one page lands partway down the next. Keyed on
+  // pathname only (not search/hash) so in-page filter changes don't reset scroll.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
   useEffect(() => {
     if (location.pathname !== '/login') return;
     const handleStaffShortcut = (e) => {
