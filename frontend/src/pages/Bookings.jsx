@@ -1,18 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, XCircle } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../api/client';
+import { useToast } from '../context/ToastContext';
+import CancelReasonModal from '../components/CancelReasonModal';
 
 export default function Bookings() {
   const [bookings, setBookings] = useState([]);
+  const [cancelTarget, setCancelTarget] = useState(null);
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   useEffect(() => { api.get('/bookings/my').then(setBookings).catch(() => {}); }, []);
 
-  const cancel = async (id) => {
-    if (!confirm('Cancel this booking?')) return;
-    await api.put(`/bookings/${id}/cancel`);
-    setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b));
+  const submitCancel = async (reason) => {
+    const booking = cancelTarget;
+    await api.put(`/bookings/${booking.id}/cancel`, { reason });
+    setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: 'cancelled', cancel_reason: reason } : b));
+    setCancelTarget(null);
+    showToast({ icon: XCircle, iconClass: 'bg-red-100 text-red-600', title: 'Booking cancelled', description: booking.service_name });
   };
 
   return (
@@ -40,16 +46,30 @@ export default function Bookings() {
                 <p>Address: {b.address}</p>
                 {b.employee_first_name && <p>Technician: {b.employee_first_name} {b.employee_last_name}</p>}
               </div>
+              {b.status === 'cancelled' && b.cancel_reason && (
+                <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2.5 mb-4">
+                  <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">Cancellation Reason</p>
+                  <p className="text-sm text-red-800">{b.cancel_reason}</p>
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <span className="font-bold text-brand-navy">{formatPrice(b.price)}</span>
-                {['pending', 'confirmed'].includes(b.status) && (
-                  <button onClick={() => cancel(b.id)} className="text-sm text-red-600 hover:underline">Cancel</button>
+                {b.status === 'pending' && (
+                  <button onClick={() => setCancelTarget(b)} className="text-sm text-red-600 hover:underline">Cancel</button>
                 )}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <CancelReasonModal
+        open={!!cancelTarget}
+        title="Cancel this booking?"
+        message="This can't be undone once submitted. Let us know why you're cancelling."
+        onSubmit={submitCancel}
+        onCancel={() => setCancelTarget(null)}
+      />
     </div>
   );
 }

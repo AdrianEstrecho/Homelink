@@ -87,4 +87,27 @@ router.get('/:id', authenticate, (req, res) => {
   res.json({ ...order, items });
 });
 
+// Only cancellable while still 'pending' — once it moves into processing/shipped/delivered
+// it's already been confirmed and fulfillment may be underway, so self-service cancellation
+// stops there (same rule as bookings, whose 'confirmed' status this maps onto).
+router.put('/:id/cancel', authenticate, (req, res) => {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  if (order.status === 'cancelled') return res.status(400).json({ error: 'This order has already been cancelled' });
+  if (order.status !== 'pending') return res.status(400).json({ error: 'This order is already confirmed and can no longer be cancelled' });
+
+  const reason = (req.body?.reason || '').trim();
+  if (!reason) return res.status(400).json({ error: 'A cancellation reason is required' });
+
+  db.prepare('UPDATE orders SET status = ?, cancel_reason = ? WHERE id = ?').run('cancelled', reason, order.id);
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  logActivity(req, 'order.cancel', 'order', order.id, {
+    customerName: `${user.first_name} ${user.last_name}`,
+    reason,
+  });
+
+  res.json({ message: 'Order cancelled' });
+});
+
 export default router;

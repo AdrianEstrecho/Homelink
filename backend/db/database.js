@@ -283,6 +283,8 @@ ensureColumn('users', 'bank_account_name', 'TEXT');
 ensureColumn('suppliers', 'bank_name', 'TEXT');
 ensureColumn('suppliers', 'bank_account_number', 'TEXT');
 ensureColumn('suppliers', 'bank_account_name', 'TEXT');
+ensureColumn('orders', 'cancel_reason', 'TEXT');
+ensureColumn('bookings', 'cancel_reason', 'TEXT');
 
 // The customer_support position was retired in favor of Accounting/HR — any existing
 // employee still holding it moves to general_staff (which already shares support-message

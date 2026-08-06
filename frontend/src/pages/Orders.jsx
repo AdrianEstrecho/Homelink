@@ -1,17 +1,30 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ShoppingBag, XCircle } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import OrderDetailsModal from '../components/OrderDetailsModal';
+import CancelReasonModal from '../components/CancelReasonModal';
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   useEffect(() => { api.get('/orders/my').then(setOrders).catch(() => {}); }, []);
+
+  const submitCancel = async (reason) => {
+    const order = cancelTarget;
+    await api.put(`/orders/${order.id}/cancel`, { reason });
+    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'cancelled', cancel_reason: reason } : o));
+    setSelectedOrder(prev => prev && prev.id === order.id ? { ...prev, status: 'cancelled', cancel_reason: reason } : prev);
+    setCancelTarget(null);
+    showToast({ icon: XCircle, iconClass: 'bg-red-100 text-red-600', title: 'Order cancelled', description: `Order #${order.id.slice(0, 8).toUpperCase()}` });
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -55,8 +68,17 @@ export default function Orders() {
           onClose={() => setSelectedOrder(null)}
           person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
           personLabel="Billed To"
+          onCancelOrder={setCancelTarget}
         />
       )}
+
+      <CancelReasonModal
+        open={!!cancelTarget}
+        title="Cancel this order?"
+        message="This can't be undone once submitted. Let us know why you're cancelling."
+        onSubmit={submitCancel}
+        onCancel={() => setCancelTarget(null)}
+      />
     </div>
   );
 }

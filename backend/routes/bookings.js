@@ -69,11 +69,25 @@ router.get('/my', authenticate, (req, res) => {
   res.json(bookings);
 });
 
+// Only cancellable while still 'pending' — once a technician has been assigned and the
+// booking is 'confirmed' (or further along), self-service cancellation stops.
 router.put('/:id/cancel', authenticate, (req, res) => {
   const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!booking) return res.status(404).json({ error: 'Booking not found' });
-  if (booking.status === 'completed') return res.status(400).json({ error: 'Cannot cancel completed booking' });
-  db.prepare('UPDATE bookings SET status = ? WHERE id = ?').run('cancelled', req.params.id);
+  if (booking.status === 'cancelled') return res.status(400).json({ error: 'This booking has already been cancelled' });
+  if (booking.status !== 'pending') return res.status(400).json({ error: 'This booking is already confirmed and can no longer be cancelled' });
+
+  const reason = (req.body?.reason || '').trim();
+  if (!reason) return res.status(400).json({ error: 'A cancellation reason is required' });
+
+  db.prepare('UPDATE bookings SET status = ?, cancel_reason = ? WHERE id = ?').run('cancelled', reason, booking.id);
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  logActivity(req, 'booking.cancel', 'booking', booking.id, {
+    customerName: `${user.first_name} ${user.last_name}`,
+    reason,
+  });
+
   res.json({ message: 'Booking cancelled' });
 });
 

@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, MapPin, CreditCard, Printer, Download } from 'lucide-react';
 import { formatPrice, statusColor } from '../api/client';
 import { downloadReceiptPdf } from '../utils/receiptPdf';
 import SafeImage from './SafeImage';
 
-export default function OrderDetailsModal({ order, onClose, person, personLabel = 'Customer' }) {
+export default function OrderDetailsModal({ order, onClose, person, personLabel = 'Customer', onCancelOrder }) {
   useEffect(() => {
     const cleanup = () => document.body.classList.remove('printing-active');
     window.addEventListener('afterprint', cleanup);
@@ -20,7 +21,10 @@ export default function OrderDetailsModal({ order, onClose, person, personLabel 
 
   const showImages = order.items?.some(i => i.image);
 
-  return (
+  // Portaled to <body> — same reasoning as ConfirmDialog/PromptDialog/TermsModal: rendered
+  // inline, this ended up boxed inside its position in the page (visible page content, e.g.
+  // the footer, painting over the lower half of the panel) instead of sitting above everything.
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm no-print" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto fade-up print-area">
@@ -52,6 +56,13 @@ export default function OrderDetailsModal({ order, onClose, person, personLabel 
             <span className={`badge capitalize ${statusColor(order.status)}`}>{order.status}</span>
             <span className={`badge ${statusColor(order.payment_status)}`}>{order.payment_status}</span>
           </div>
+
+          {order.status === 'cancelled' && order.cancel_reason && (
+            <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2.5">
+              <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">Cancellation Reason</p>
+              <p className="text-sm text-red-800">{order.cancel_reason}</p>
+            </div>
+          )}
 
           {person && (
             <div>
@@ -115,8 +126,18 @@ export default function OrderDetailsModal({ order, onClose, person, personLabel 
           </div>
 
           <p className="hidden print:block text-center text-xs text-gray-400 pt-4">Thank you for shopping with HomeLink!</p>
+
+          {onCancelOrder && order.status === 'pending' && (
+            <button
+              onClick={() => onCancelOrder(order)}
+              className="no-print w-full border border-red-200 text-red-600 rounded-lg py-2.5 font-semibold text-sm hover:bg-red-50 transition"
+            >
+              Cancel Order
+            </button>
+          )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
