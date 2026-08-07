@@ -93,6 +93,7 @@ export default function ProductDetail() {
   };
 
   const handleAdd = () => {
+    if (user?.role !== 'customer') { navigate('/login'); return; }
     if (wishlisted) { setConfirmAddToCart(true); return; }
     addToCart();
   };
@@ -103,6 +104,7 @@ export default function ProductDetail() {
   };
 
   const handleBuyNow = () => {
+    if (user?.role !== 'customer') { navigate('/login'); return; }
     addItem(product, qty);
     if (wishlisted) removeWishlistItem(product.id);
     navigate('/checkout');

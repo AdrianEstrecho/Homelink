@@ -36,6 +36,7 @@ export default function ProductCard({ product }) {
   };
 
   const handleAdd = () => {
+    if (user?.role !== 'customer') { navigate('/login'); return; }
     if (wishlisted) { setConfirmAddToCart(true); return; }
     addToCart();
   };
