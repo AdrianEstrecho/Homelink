@@ -12,9 +12,12 @@ export default function Cart() {
   const { items, removeItem, updateQty, clearCart, total, count } = useCart();
   const { showToast } = useToast();
   const [confirmClear, setConfirmClear] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState(null);
 
-  const handleRemove = (item) => {
+  const handleConfirmRemove = () => {
+    const item = removeTarget;
     removeItem(item.productId);
+    setRemoveTarget(null);
     showToast({
       icon: Trash2,
       iconClass: 'bg-red-100 text-red-600',
@@ -98,7 +101,7 @@ export default function Cart() {
                       </div>
                       <p className="font-bold w-20 text-right text-brand-ink shrink-0">{formatPrice(item.price * item.quantity)}</p>
                       <button
-                        onClick={() => handleRemove(item)}
+                        onClick={() => setRemoveTarget(item)}
                         aria-label={`Remove ${item.name} from cart`}
                         className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
                       >
@@ -162,6 +165,16 @@ export default function Cart() {
         tone="delete"
         onConfirm={handleClear}
         onCancel={() => setConfirmClear(false)}
+      />
+      <ConfirmDialog
+        open={!!removeTarget}
+        icon={Trash2}
+        title="Remove this item?"
+        message={removeTarget ? `"${removeTarget.name}" will be removed from your cart.` : ''}
+        confirmLabel="Remove"
+        tone="delete"
+        onConfirm={handleConfirmRemove}
+        onCancel={() => setRemoveTarget(null)}
       />
     </div>
   );

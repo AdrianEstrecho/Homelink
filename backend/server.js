@@ -16,6 +16,7 @@ import reviewRoutes from './routes/reviews.js';
 import supportRoutes from './routes/support.js';
 import notificationRoutes from './routes/notifications.js';
 import messageRoutes from './routes/messages.js';
+import wishlistRoutes from './routes/wishlist.js';
 import db from './db/database.js';
 
 dotenv.config();
@@ -50,6 +51,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/wishlist', wishlistRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

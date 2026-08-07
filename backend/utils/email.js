@@ -22,8 +22,23 @@ export async function sendEmail({ to, subject, html }) {
   });
 }
 
+function capitalize(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 export function orderConfirmationEmail(order, items, user) {
-  const itemRows = items.map(i => `<tr><td>${i.name}</td><td>${i.quantity}</td><td>₱${i.price.toLocaleString()}</td></tr>`).join('');
+  const money = (n) => `₱${Number(n).toLocaleString('en-PH')}`;
+  const itemRows = items.map(i => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${i.name} <span style="color:#9ca3af">× ${i.quantity}</span></td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right">${money(i.price)}</td>
+    </tr>`).join('');
+  const discountRow = order.discount > 0 ? `
+    <tr>
+      <td style="padding:8px;color:#16a34a">Discount${order.promo_code ? ` (${order.promo_code})` : ''}</td>
+      <td style="padding:8px;text-align:right;color:#16a34a">-${money(order.discount)}</td>
+    </tr>` : '';
+
   return sendEmail({
     to: user.email,
     subject: `HomeLink Order Confirmation #${order.id.slice(0, 8).toUpperCase()}`,
@@ -34,14 +49,25 @@ export function orderConfirmationEmail(order, items, user) {
           <p style="margin:5px 0 0">Your Home Improvement Partner</p>
         </div>
         <div style="padding:20px">
-          <h2>Order Confirmed!</h2>
-          <p>Hi ${user.first_name}, thank you for your order.</p>
-          <p><strong>Order ID:</strong> ${order.id.slice(0, 8).toUpperCase()}</p>
+          <h2 style="margin-top:0">Order Confirmed!</h2>
+          <p>Hi ${user.first_name}, thank you for your order. This email is your official receipt — keep it for your records.</p>
+          <p style="color:#4b5563">
+            <strong>Order ID:</strong> ${order.id.slice(0, 8).toUpperCase()}<br>
+            <strong>Placed:</strong> ${new Date(order.created_at || Date.now()).toLocaleString('en-PH')}
+          </p>
           <table style="width:100%;border-collapse:collapse;margin:16px 0">
-            <tr style="background:#f3f4f6"><th style="padding:8px;text-align:left">Item</th><th>Qty</th><th>Price</th></tr>
+            <tr style="background:#f3f4f6"><th style="padding:8px;text-align:left">Item</th><th style="padding:8px;text-align:right">Amount</th></tr>
             ${itemRows}
+            <tr><td style="padding:8px">Subtotal</td><td style="padding:8px;text-align:right">${money(order.subtotal)}</td></tr>
+            ${discountRow}
+            <tr>
+              <td style="padding:8px;font-weight:bold;border-top:2px solid #0f2b5b">Total</td>
+              <td style="padding:8px;text-align:right;font-weight:bold;border-top:2px solid #0f2b5b">${money(order.total)}</td>
+            </tr>
           </table>
-          <p><strong>Total:</strong> ₱${order.total.toLocaleString()}</p>
+          ${order.shipping_address ? `<p><strong>Shipping to:</strong> ${order.shipping_address}</p>` : ''}
+          ${order.payment_method ? `<p><strong>Payment method:</strong> ${capitalize(order.payment_method)}</p>` : ''}
+          <p style="color:#9ca3af;font-size:12px;margin-top:24px">Questions about this order? Reply to this email or reach us from your HomeLink account.</p>
         </div>
       </div>`,
   });

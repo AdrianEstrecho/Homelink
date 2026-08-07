@@ -3,8 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Check, X, Lock, ShieldCheck, Truck, Sparkles, ShoppingBag } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import AddressPicker from '../components/AddressPicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
+import OrderDetailsModal from '../components/OrderDetailsModal';
 
 function calcDiscount(amount, promo) {
   if (!promo) return 0;
@@ -13,6 +15,7 @@ function calcDiscount(amount, promo) {
 
 export default function Checkout() {
   const { items, total: subtotal, clearCart } = useCart();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const addressRef = useRef(null);
   const paymentRef = useRef(null);
@@ -23,8 +26,10 @@ export default function Checkout() {
   const [promoError, setPromoError] = useState('');
   const [applyingPromo, setApplyingPromo] = useState(false);
 
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pendingOrder, setPendingOrder] = useState(null);
+  const [placingOrder, setPlacingOrder] = useState(false);
+  const [confirmedOrder, setConfirmedOrder] = useState(null);
 
   useEffect(() => {
     api.get('/promos/active').then(setActivePromos).catch(() => setActivePromos({ holiday: null, vouchers: [] }));
@@ -52,30 +57,80 @@ export default function Checkout() {
   const voucherAmt = appliedPromo ? calcDiscount(subtotal - holidayAmt, appliedPromo) : 0;
   const orderTotal = Math.max(0, subtotal - holidayAmt - voucherAmt);
 
-  const handleSubmit = async (e) => {
+  // Step 1: build a receipt preview from what's already validated on the client — nothing is
+  // sent to the server yet, so nothing is charged, no stock moves, and no email goes out.
+  const handleReview = (e) => {
     e.preventDefault();
     const selectedAddress = addressRef.current?.validate();
     if (!selectedAddress) { setError('Please select or add a shipping address.'); return; }
     const payment = paymentRef.current?.validate();
     if (!payment) return;
 
-    setLoading(true);
+    setError('');
+    setPendingOrder({
+      items: items.map(i => ({ id: i.productId, name: i.name, image: i.image, price: i.price, quantity: i.quantity })),
+      shipping_address: selectedAddress.fullAddress,
+      payment_method: payment.method,
+      promo_code: appliedPromo?.code || null,
+      subtotal,
+      discount: holidayAmt + voucherAmt,
+      total: orderTotal,
+    });
+  };
+
+  // Step 2: only now does the order actually get placed — this is the one call that creates
+  // the order row, deducts stock, and triggers the confirmation email.
+  const handleConfirmOrder = async () => {
+    setPlacingOrder(true);
     setError('');
     try {
-      await api.post('/orders', {
-        items: items.map(i => ({ productId: i.productId, quantity: i.quantity })),
-        shippingAddress: selectedAddress.fullAddress,
-        paymentMethod: payment.method,
-        promoCode: appliedPromo?.code,
+      const order = await api.post('/orders', {
+        items: pendingOrder.items.map(i => ({ productId: i.id, quantity: i.quantity })),
+        shippingAddress: pendingOrder.shipping_address,
+        paymentMethod: pendingOrder.payment_method,
+        promoCode: pendingOrder.promo_code || undefined,
       });
       clearCart();
-      navigate('/orders');
+      setPendingOrder(null);
+      setConfirmedOrder(order);
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setPlacingOrder(false);
     }
   };
+
+  // Show the receipt — with its own confirmation banner — before sending the customer
+  // anywhere else. Checked ahead of the empty-cart guard below, since clearCart() just ran
+  // and would otherwise make that guard hijack this render with "your cart is empty".
+  if (confirmedOrder) {
+    return (
+      <OrderDetailsModal
+        order={confirmedOrder}
+        justConfirmed
+        person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
+        personLabel="Billed To"
+        onClose={() => navigate('/orders')}
+      />
+    );
+  }
+
+  // Step in between: the reviewable receipt with the "Confirm & Place Order" button. Sits
+  // above the empty-cart guard too, since the cart still holds items at this point anyway.
+  if (pendingOrder) {
+    return (
+      <OrderDetailsModal
+        order={pendingOrder}
+        previewing
+        confirmLoading={placingOrder}
+        onConfirm={handleConfirmOrder}
+        error={error}
+        person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
+        personLabel="Billed To"
+        onClose={() => { setPendingOrder(null); setError(''); }}
+      />
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -93,7 +148,7 @@ export default function Checkout() {
       <p className="eyebrow mb-3">Final Step</p>
       <h1 className="section-title mb-8">Checkout</h1>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8 items-start">
+      <form onSubmit={handleReview} className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8 items-start">
         <div className="space-y-6">
           <section className="card p-6">
             <AddressPicker ref={addressRef} stepNumber={1} title="Shipping Address" />
@@ -171,8 +226,8 @@ export default function Checkout() {
               <span className="text-brand-navy">{formatPrice(orderTotal)}</span>
             </div>
 
-            <button type="submit" disabled={loading} className="btn-primary w-full py-3 mt-5 disabled:opacity-50">
-              {loading ? 'Placing Order...' : `Place Order — ${formatPrice(orderTotal)}`}
+            <button type="submit" className="btn-primary w-full py-3 mt-5">
+              Place Order — {formatPrice(orderTotal)}
             </button>
             <p className="text-center text-xs text-gray-400 mt-3">Payments are processed securely. We never store your card details.</p>
 

@@ -1,11 +1,14 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, MapPin, CreditCard, Printer, Download } from 'lucide-react';
+import { X, MapPin, CreditCard, Printer, Download, CheckCircle2 } from 'lucide-react';
 import { formatPrice, statusColor } from '../api/client';
 import { downloadReceiptPdf } from '../utils/receiptPdf';
 import SafeImage from './SafeImage';
 
-export default function OrderDetailsModal({ order, onClose, person, personLabel = 'Customer', onCancelOrder }) {
+export default function OrderDetailsModal({
+  order, onClose, person, personLabel = 'Customer', onCancelOrder, justConfirmed = false,
+  previewing = false, onConfirm, confirmLoading = false, error,
+}) {
   useEffect(() => {
     const cleanup = () => document.body.classList.remove('printing-active');
     window.addEventListener('afterprint', cleanup);
@@ -35,27 +38,51 @@ export default function OrderDetailsModal({ order, onClose, person, personLabel 
 
         <div className="flex items-start justify-between p-6 pb-4 sticky top-0 bg-white border-b border-gray-100">
           <div>
-            <h2 className="font-display text-lg font-bold text-brand-navy">Order #{order.id.slice(0, 8).toUpperCase()}</h2>
-            <p className="text-sm text-gray-500">{new Date(order.created_at).toLocaleString()}</p>
+            <h2 className="font-display text-lg font-bold text-brand-navy">
+              {previewing ? 'Review Your Order' : `Order #${order.id.slice(0, 8).toUpperCase()}`}
+            </h2>
+            <p className="text-sm text-gray-500">
+              {previewing ? 'Nothing is placed yet — check the details below.' : new Date(order.created_at).toLocaleString()}
+            </p>
           </div>
           <div className="flex items-center gap-1 no-print">
-            <button onClick={handleDownload} title="Download PDF" className="p-1.5 rounded-lg hover:bg-gray-100 transition">
-              <Download className="w-5 h-5 text-gray-500" />
-            </button>
-            <button onClick={handlePrint} title="Print receipt" className="p-1.5 rounded-lg hover:bg-gray-100 transition">
-              <Printer className="w-5 h-5 text-gray-500" />
-            </button>
-            <button onClick={onClose} title="Close" className="p-1.5 rounded-lg hover:bg-gray-100 transition">
+            {!previewing && (
+              <>
+                <button onClick={handleDownload} title="Download PDF" className="p-1.5 rounded-lg hover:bg-gray-100 transition">
+                  <Download className="w-5 h-5 text-gray-500" />
+                </button>
+                <button onClick={handlePrint} title="Print receipt" className="p-1.5 rounded-lg hover:bg-gray-100 transition">
+                  <Printer className="w-5 h-5 text-gray-500" />
+                </button>
+              </>
+            )}
+            <button onClick={onClose} title={previewing ? 'Back to edit' : 'Close'} className="p-1.5 rounded-lg hover:bg-gray-100 transition">
               <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
         </div>
 
         <div className="p-6 pt-4 space-y-5">
-          <div className="flex gap-2">
-            <span className={`badge capitalize ${statusColor(order.status)}`}>{order.status}</span>
-            <span className={`badge ${statusColor(order.payment_status)}`}>{order.payment_status}</span>
-          </div>
+          {justConfirmed && (
+            <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl p-4 no-print">
+              <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-green-800 text-sm">Order confirmed!</p>
+                <p className="text-sm text-green-700 mt-0.5">
+                  {person?.email
+                    ? `We've emailed a copy of this receipt to ${person.email}.`
+                    : "We've emailed a copy of this receipt to your account email."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!previewing && (
+            <div className="flex gap-2">
+              <span className={`badge capitalize ${statusColor(order.status)}`}>{order.status}</span>
+              <span className={`badge ${statusColor(order.payment_status)}`}>{order.payment_status}</span>
+            </div>
+          )}
 
           {order.status === 'cancelled' && order.cancel_reason && (
             <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2.5">
@@ -126,6 +153,26 @@ export default function OrderDetailsModal({ order, onClose, person, personLabel 
           </div>
 
           <p className="hidden print:block text-center text-xs text-gray-400 pt-4">Thank you for shopping with HomeLink!</p>
+
+          {justConfirmed && (
+            <button onClick={onClose} className="btn-primary w-full py-3 no-print">
+              Continue to My Orders
+            </button>
+          )}
+
+          {previewing && (
+            <div className="no-print space-y-3">
+              {error && <p className="text-red-600 text-sm">{error}</p>}
+              <div className="flex gap-3">
+                <button onClick={onClose} disabled={confirmLoading} className="btn-secondary flex-1 py-3 disabled:opacity-50">
+                  Edit Order
+                </button>
+                <button onClick={onConfirm} disabled={confirmLoading} className="btn-primary flex-1 py-3 disabled:opacity-50">
+                  {confirmLoading ? 'Placing Order...' : 'Confirm & Place Order'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {onCancelOrder && order.status === 'pending' && (
             <button

@@ -165,6 +165,14 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS wishlists (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    product_id TEXT REFERENCES products(id) ON DELETE CASCADE,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_wishlists_user_product ON wishlists(user_id, product_id);
+
   CREATE TABLE IF NOT EXISTS support_messages (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id) ON DELETE CASCADE,

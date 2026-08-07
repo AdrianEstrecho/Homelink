@@ -1,8 +1,9 @@
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingCart, User, Menu, X, Home, Wrench, LayoutDashboard, ShieldCheck, LogOut } from 'lucide-react';
+import { ShoppingCart, Heart, User, Menu, X, Home, Wrench, LayoutDashboard, ShieldCheck, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import ConfirmDialog from './ConfirmDialog';
 import PageTransitionOverlay from './PageTransitionOverlay';
 import { landingFor } from '../utils/staffLanding';
@@ -19,6 +20,7 @@ const NAV_LINKS = [
 export default function Navbar({ onLoginClick }) {
   const { user, logout } = useAuth();
   const { count } = useCart();
+  const { count: wishlistCount } = useWishlist();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -117,6 +119,12 @@ export default function Navbar({ onLoginClick }) {
 
           <div className="flex items-center gap-3">
             {user?.role === 'customer' && (
+              <Link to="/wishlist" className={`relative p-2 rounded-lg transition ${solidWhite ? 'text-gray-600 hover:bg-gray-100' : 'text-white hover:bg-white/10'}`}>
+                <Heart className="w-5 h-5" />
+                {wishlistCount > 0 && <span className="absolute -top-1 -right-1 bg-brand-orange text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold text-white">{wishlistCount}</span>}
+              </Link>
+            )}
+            {user?.role === 'customer' && (
               <Link to="/cart" className={`relative p-2 rounded-lg transition ${solidWhite ? 'text-gray-600 hover:bg-gray-100' : 'text-white hover:bg-white/10'}`}>
                 <ShoppingCart className="w-5 h-5" />
                 {count > 0 && <span className="absolute -top-1 -right-1 bg-brand-orange text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold text-white">{count}</span>}
@@ -166,6 +174,11 @@ export default function Navbar({ onLoginClick }) {
           ))}
           {user ? (
             <>
+              {user.role === 'customer' && (
+                <Link to="/wishlist" className="flex items-center gap-1.5 px-2 py-2 rounded-lg hover:bg-white/5" onClick={() => setOpen(false)}>
+                  <Heart className="w-4 h-4" /> Wishlist{wishlistCount > 0 ? ` (${wishlistCount})` : ''}
+                </Link>
+              )}
               {dashLink && (
                 <Link to={dashLink} className="block px-2 py-2 rounded-lg hover:bg-white/5" onClick={() => setOpen(false)}>Dashboard</Link>
               )}

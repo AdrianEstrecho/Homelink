@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Check, ChevronRight, Truck, ShieldCheck, Wrench, Star, Zap } from 'lucide-react';
+import { ShoppingCart, Check, ChevronRight, Truck, ShieldCheck, Wrench, Star, Zap, Heart } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '../context/ToastContext';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
@@ -10,6 +12,7 @@ import ProductCard from '../components/ProductCard';
 import SafeImage from '../components/SafeImage';
 import { Skeleton } from '../components/Skeleton';
 import StarRating from '../components/account/StarRating';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const TABS = ['Description', 'Specifications', 'Reviews'];
 
@@ -19,11 +22,15 @@ export default function ProductDetail() {
   const [product, setProduct] = useState(null);
   const [error, setError] = useState(false);
   const [qty, setQty] = useState(1);
+  const { user } = useAuth();
   const { addItem } = useCart();
+  const { has, addItem: addWishlistItem, removeItem: removeWishlistItem } = useWishlist();
   const { showToast } = useToast();
   const [reviews, setReviews] = useState(null);
   const [related, setRelated] = useState([]);
   const [tab, setTab] = useState('Description');
+  const [confirmUnfavorite, setConfirmUnfavorite] = useState(false);
+  const [confirmAddToCart, setConfirmAddToCart] = useState(false);
 
   const loadProduct = useCallback(() => {
     setProduct(null);
@@ -70,8 +77,11 @@ export default function ProductDetail() {
     );
   }
 
-  const handleAdd = () => {
+  const wishlisted = has(product.id);
+
+  const addToCart = () => {
     addItem(product, qty);
+    if (wishlisted) removeWishlistItem(product.id);
     showToast({
       icon: Check,
       iconClass: 'bg-green-100 text-green-600',
@@ -82,9 +92,30 @@ export default function ProductDetail() {
     });
   };
 
+  const handleAdd = () => {
+    if (wishlisted) { setConfirmAddToCart(true); return; }
+    addToCart();
+  };
+
+  const handleConfirmAddToCart = () => {
+    addToCart();
+    setConfirmAddToCart(false);
+  };
+
   const handleBuyNow = () => {
     addItem(product, qty);
+    if (wishlisted) removeWishlistItem(product.id);
     navigate('/checkout');
+  };
+
+  const handleWishlistToggle = () => {
+    if (user?.role !== 'customer') { navigate('/login'); return; }
+    if (wishlisted) { setConfirmUnfavorite(true); return; }
+    addWishlistItem(product);
+  };
+  const handleConfirmUnfavorite = () => {
+    removeWishlistItem(product.id);
+    setConfirmUnfavorite(false);
   };
 
   const inStock = product.stock > 0;
@@ -141,7 +172,9 @@ export default function ProductDetail() {
 
             <p className="text-sm mb-6">
               {inStock ? (
-                <span className="text-green-600 font-medium">{lowStock ? `Only ${product.stock} left in stock` : 'In stock'}</span>
+                <span className="text-green-600 font-medium">
+                  {lowStock ? `Only ${product.stock} left in stock` : `${product.stock} in stock`}
+                </span>
               ) : (
                 <span className="text-red-600 font-medium">Out of stock</span>
               )}
@@ -155,6 +188,14 @@ export default function ProductDetail() {
               </div>
               <button onClick={handleAdd} disabled={!inStock} className="btn-primary flex items-center gap-2 flex-1 justify-center disabled:opacity-50">
                 <ShoppingCart className="w-5 h-5" /> Add to Cart
+              </button>
+              <button
+                onClick={handleWishlistToggle}
+                aria-label={wishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+                aria-pressed={wishlisted}
+                className="shrink-0 w-12 h-12 flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+              >
+                <Heart className={`w-5 h-5 transition ${wishlisted ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} />
               </button>
             </div>
             <button onClick={handleBuyNow} disabled={!inStock} className="btn-secondary flex items-center gap-2 w-full justify-center mb-6 disabled:opacity-50">
@@ -256,6 +297,27 @@ export default function ProductDetail() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmUnfavorite}
+        icon={Heart}
+        title="Remove from wishlist?"
+        message={`"${product.name}" will be removed from your saved items.`}
+        confirmLabel="Remove"
+        tone="delete"
+        onConfirm={handleConfirmUnfavorite}
+        onCancel={() => setConfirmUnfavorite(false)}
+      />
+      <ConfirmDialog
+        open={confirmAddToCart}
+        icon={ShoppingCart}
+        title="Add to cart?"
+        message={`"${product.name}" will be added to your cart and removed from your wishlist.`}
+        confirmLabel="Add to Cart"
+        tone="create"
+        onConfirm={handleConfirmAddToCart}
+        onCancel={() => setConfirmAddToCart(false)}
+      />
     </div>
   );
 }
