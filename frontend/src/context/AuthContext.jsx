@@ -35,13 +35,6 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const loginWithApple = async ({ identityToken, firstName, lastName }) => {
-    const data = await api.post('/auth/apple', { identityToken, firstName, lastName });
-    localStorage.setItem('homelink_token', data.token);
-    setUser(data.user);
-    return data.user;
-  };
-
   const logout = () => {
     localStorage.removeItem('homelink_token');
     setUser(null);
@@ -59,7 +52,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, loginWithGoogle, loginWithApple, logout, updateProfile, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, loginWithGoogle, logout, updateProfile, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

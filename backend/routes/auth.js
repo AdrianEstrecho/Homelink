@@ -4,7 +4,6 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { v4 as uuid } from 'uuid';
 import { OAuth2Client } from 'google-auth-library';
-import appleSignin from 'apple-signin-auth';
 import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendEmail, passwordResetEmail } from '../utils/email.js';
@@ -135,53 +134,6 @@ router.post('/google', async (req, res) => {
     });
   } catch (err) {
     res.status(401).json({ error: 'Google sign-in failed' });
-  }
-});
-
-router.post('/apple', async (req, res) => {
-  try {
-    const { identityToken, firstName, lastName } = req.body;
-    if (!identityToken) return res.status(400).json({ error: 'Missing Apple identity token' });
-    if (!process.env.APPLE_CLIENT_ID) return res.status(503).json({ error: 'Apple sign-in is not configured' });
-
-    const payload = await appleSignin.verifyIdToken(identityToken, { audience: process.env.APPLE_CLIENT_ID });
-    if (!payload?.sub) return res.status(400).json({ error: 'Apple account has no verified identity' });
-
-    const email = (payload.email || '').toLowerCase();
-    let user = db.prepare('SELECT * FROM users WHERE apple_id = ? OR (email = ? AND email != \'\')').get(payload.sub, email);
-
-    if (!user) {
-      const id = uuid();
-      const randomPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
-      const fallbackEmail = email || `${payload.sub}@appleid.homelink`;
-      db.prepare('INSERT INTO users (id, email, password, first_name, last_name, apple_id, verified, terms_accepted_at) VALUES (?,?,?,?,?,?,1,?)')
-        .run(id, fallbackEmail, randomPassword, firstName || 'HomeLink', lastName || 'User', payload.sub, new Date().toISOString());
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-      if (email) {
-        await sendEmail({
-          to: email,
-          subject: 'Welcome to HomeLink!',
-          html: `<div style="font-family:Arial"><h2>Welcome to HomeLink, ${user.first_name}!</h2><p>Your account was created using Sign in with Apple. Start shopping for home improvement products and book professional services today.</p></div>`,
-        });
-      }
-    } else if (!user.apple_id) {
-      db.prepare('UPDATE users SET apple_id = ? WHERE id = ?').run(payload.sub, user.id);
-    }
-
-    if (user.role !== 'customer') {
-      return res.status(403).json({ error: 'Apple sign-in is only available for customer accounts' });
-    }
-
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET || 'homelink-super-secret-key-change-in-production', { expiresIn: '7d' });
-    res.json({
-      token,
-      user: {
-        id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, phone: user.phone, address: user.address, role: user.role, createdAt: user.created_at,
-        notifyOrders: !!user.notify_orders, notifyBookings: !!user.notify_bookings, notifyPromotions: !!user.notify_promotions,
-      },
-    });
-  } catch (err) {
-    res.status(401).json({ error: 'Apple sign-in failed' });
   }
 });
 

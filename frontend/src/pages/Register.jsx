@@ -8,14 +8,12 @@ import PasswordRequirements from '../components/PasswordRequirements';
 import { isPasswordValid } from '../utils/password';
 import AuthLayout from '../components/AuthLayout';
 import AuthIllustration from '../components/AuthIllustration';
-import AppleSignInButton, { isAppleSignInConfigured } from '../components/AppleSignInButton';
 import TermsModal from '../components/TermsModal';
 
 const googleConfigured = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
-const appleConfigured = isAppleSignInConfigured();
 
 export default function Register() {
-  const { register, loginWithGoogle, loginWithApple } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   // Same full-screen cover the homepage Login button and Login page success
   // use — keeps signup finishing with the same ceremony as signing in.
   const coverTransitionTo = usePageTransition();
@@ -63,22 +61,6 @@ export default function Register() {
       coverTransitionTo('/');
     } catch (err) {
       setError(err.message || 'Google sign-up failed');
-      setLoading(false);
-    }
-  };
-
-  const handleAppleSuccess = async (response) => {
-    setError('');
-    setLoading(true);
-    try {
-      await loginWithApple({
-        identityToken: response.authorization?.id_token,
-        firstName: response.user?.name?.firstName,
-        lastName: response.user?.name?.lastName,
-      });
-      coverTransitionTo('/');
-    } catch (err) {
-      setError(err.message || 'Apple sign-up failed');
       setLoading(false);
     }
   };
@@ -155,23 +137,16 @@ export default function Register() {
           Already have an account? <Link to="/login" className="text-brand-orange font-semibold hover:underline">Login</Link>
         </p>
 
-        {(googleConfigured || appleConfigured) && (
+        {googleConfigured && (
           <>
             <div className="relative text-center pt-2">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
               <span className="relative bg-white px-3 text-xs text-gray-400 uppercase">Or sign up with</span>
             </div>
             <div className="space-y-3 flex flex-col items-center">
-              {googleConfigured && (
-                <div className="w-[320px] rounded-lg overflow-hidden">
-                  <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError('Google sign-up failed')} text="signup_with" width="320" />
-                </div>
-              )}
-              {appleConfigured && (
-                <div className="w-[320px]">
-                  <AppleSignInButton onSuccess={handleAppleSuccess} onError={(msg) => setError(msg)} label="Sign up with Apple" />
-                </div>
-              )}
+              <div className="w-[320px] rounded-lg overflow-hidden">
+                <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError('Google sign-up failed')} text="signup_with" width="320" />
+              </div>
             </div>
           </>
         )}

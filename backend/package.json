@@ -10,7 +10,6 @@
     "seed": "node db/seed.js"
   },
   "dependencies": {
-    "apple-signin-auth": "^2.1.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^13.0.2",
     "cors": "^2.8.5",

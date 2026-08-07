@@ -13,8 +13,6 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
-      - key: APPLE_CLIENT_ID
-        sync: false
       - key: COMPANY_LAT
         value: "14.5995"
       - key: COMPANY_LNG

@@ -6,13 +6,11 @@ import { useAuth } from '../context/AuthContext';
 import { usePageTransition } from '../context/PageTransitionContext';
 import AuthLayout from '../components/AuthLayout';
 import AuthIllustration from '../components/AuthIllustration';
-import AppleSignInButton, { isAppleSignInConfigured } from '../components/AppleSignInButton';
 
 const googleConfigured = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
-const appleConfigured = isAppleSignInConfigured();
 
 export default function Login() {
-  const { login, logout, loginWithGoogle, loginWithApple } = useAuth();
+  const { login, logout, loginWithGoogle } = useAuth();
   // Same full-screen blue cover used when entering login from the homepage —
   // reused here so a successful sign-in gets the same ceremony, not just the
   // pre-auth navigation. It owns its own navigate() call, so this replaces
@@ -57,22 +55,6 @@ export default function Login() {
     }
   };
 
-  const handleAppleSuccess = async (response) => {
-    setError('');
-    setLoading(true);
-    try {
-      await loginWithApple({
-        identityToken: response.authorization?.id_token,
-        firstName: response.user?.name?.firstName,
-        lastName: response.user?.name?.lastName,
-      });
-      coverTransitionTo('/');
-    } catch (err) {
-      setError(err.message || 'Apple sign-in failed');
-      setLoading(false);
-    }
-  };
-
   return (
     <AuthLayout
       title="Login"
@@ -100,34 +82,27 @@ export default function Login() {
           Don't have an account? <Link to="/register" className="text-brand-orange font-semibold hover:underline">Sign up</Link>
         </p>
 
-        {(googleConfigured || appleConfigured) && (
+        {googleConfigured && (
           <>
             <div className="relative text-center pt-2">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
               <span className="relative bg-white px-3 text-xs text-gray-400 uppercase">Or login with</span>
             </div>
             <div className="space-y-3 flex flex-col items-center">
-              {googleConfigured && (
-                <div className="w-[320px] space-y-2">
-                  <div className="rounded-lg overflow-hidden">
-                    <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError('Google sign-in failed')} width="320" />
+              <div className="w-[320px] space-y-2">
+                <div className="rounded-lg overflow-hidden">
+                  <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError('Google sign-in failed')} width="320" />
+                </div>
+                {notRegistered && (
+                  <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <p>
+                      We couldn't find a HomeLink account for this Google account.{' '}
+                      <Link to="/register" className="font-semibold underline hover:text-amber-900">Register first</Link> to continue.
+                    </p>
                   </div>
-                  {notRegistered && (
-                    <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
-                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <p>
-                        We couldn't find a HomeLink account for this Google account.{' '}
-                        <Link to="/register" className="font-semibold underline hover:text-amber-900">Register first</Link> to continue.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-              {appleConfigured && (
-                <div className="w-[320px]">
-                  <AppleSignInButton onSuccess={handleAppleSuccess} onError={(msg) => setError(msg)} label="Sign in with Apple" />
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </>
         )}
