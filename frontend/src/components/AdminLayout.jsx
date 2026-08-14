@@ -67,7 +67,7 @@ const POSITION_NAV_PATHS = {
   general_staff: ['/admin/products', '/admin/services', '/admin/orders', '/admin/bookings', '/admin/vouchers', '/admin/support'],
   booking_coordinator: ['/admin/bookings', '/admin/technicians', '/admin/messages', '/admin/approvals'],
   accounting: ['/admin/payroll', '/admin/payroll/revenue'],
-  hr: ['/admin/hr/employees', '/admin/suppliers'],
+  hr: ['/admin/hr/employees', '/admin/suppliers', '/admin/approvals'],
   installer: ['/admin/messages'],
 };
 
@@ -128,6 +128,9 @@ const EMPLOYEE_NOTIF_META = {
   'message.new': { Icon: MessageSquare, className: 'bg-teal-100 text-[#00806f]' },
   'booking.completed': { Icon: CheckCircle, className: 'bg-green-100 text-green-700' },
   'booking.complete_requested': { Icon: ClipboardCheck, className: 'bg-amber-100 text-amber-700' },
+  'support.resolve_requested': { Icon: LifeBuoy, className: 'bg-amber-100 text-amber-700' },
+  'support.resolved': { Icon: CheckCircle, className: 'bg-green-100 text-green-700' },
+  'support.resolve_rejected': { Icon: LifeBuoy, className: 'bg-red-100 text-red-700' },
 };
 
 const AVATAR_COLORS = ['bg-brand-navy', 'bg-brand-blue', 'bg-[#00806f]', 'bg-[#c8461a]'];

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Package, Wrench, Ticket, Check, X, Clock, Users, Truck, Wallet, Send, Calendar } from 'lucide-react';
+import { Package, Wrench, Ticket, Check, X, Clock, Users, Truck, Wallet, Send, Calendar, LifeBuoy } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useAuth } from '../../context/AuthContext';
 import { POSITION_LABELS } from '../../data/auditActions';
+import { formatTicketNo } from '../../utils/ticketNumber';
 
 const ENTITY_META = {
   product: { label: 'Product', Icon: Package },
@@ -15,6 +16,7 @@ const ENTITY_META = {
   salary: { label: 'Salary', Icon: Wallet },
   payment: { label: 'Payment', Icon: Send },
   booking: { label: 'Job Completion', Icon: Calendar },
+  support: { label: 'Support Ticket', Icon: LifeBuoy },
 };
 
 // Which positions this page's requests can come from — mirrors the entity types above
@@ -90,6 +92,11 @@ function describePayload(cr, current) {
     return `"${service}" for ${who} — mark Installed Completed${p.completionNotes ? ` · "${p.completionNotes}"` : ''}`;
   }
 
+  if (cr.entity_type === 'support') {
+    const who = current ? `${current.first_name} ${current.last_name}` : 'a customer';
+    return current ? `${formatTicketNo(current.ticket_number)} — "${current.subject}" (${who}) — mark Resolved` : 'Ticket no longer exists';
+  }
+
   if (cr.action === 'delete') {
     if (cr.entity_type === 'product') return current ? `"${current.name}" — ${formatPrice(current.price)}, stock ${current.stock}` : 'Product no longer exists';
     if (cr.entity_type === 'service') return current ? `"${current.name}" — ${formatPrice(current.base_price)}` : 'Service no longer exists';
@@ -131,8 +138,10 @@ export default function Approvals() {
   const [employees, setEmployees] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [tickets, setTickets] = useState([]);
   const canReviewCatalog = isAdmin || user?.position === 'inventory_clerk';
   const canReviewBookings = isAdmin || user?.position === 'booking_coordinator';
+  const canReviewSupport = isAdmin || user?.position === 'hr';
   const [confirmApproveId, setConfirmApproveId] = useState(null);
   const [confirmRejectId, setConfirmRejectId] = useState(null);
   const [error, setError] = useState('');
@@ -140,7 +149,8 @@ export default function Approvals() {
   // Employee/supplier requests (and their lookups) are admin-only — inventory clerks never
   // see them, so there's no reason for them to fetch /admin/users or /admin/suppliers here.
   // Products/services/vouchers are only relevant to admin and inventory clerks; bookings
-  // only to admin and booking coordinators — same idea, gated the same way.
+  // only to admin and booking coordinators; support tickets only to admin and HR — same
+  // idea, gated the same way.
   const loadLookups = () => {
     if (canReviewCatalog) {
       api.get('/admin/products').then(setProducts).catch(() => {});
@@ -154,8 +164,11 @@ export default function Approvals() {
     if (canReviewBookings) {
       api.get('/admin/bookings').then(setBookings).catch(() => {});
     }
+    if (canReviewSupport) {
+      api.get('/admin/support-messages').then(setTickets).catch(() => {});
+    }
   };
-  useEffect(loadLookups, [isAdmin, canReviewCatalog, canReviewBookings]);
+  useEffect(loadLookups, [isAdmin, canReviewCatalog, canReviewBookings, canReviewSupport]);
 
   const load = () => api.get(`/admin/approvals?status=${tab}`).then(setRequests).catch(() => {});
   useEffect(() => { setRequests(null); load(); }, [tab]);
@@ -167,6 +180,7 @@ export default function Approvals() {
     if (cr.entity_type === 'employee') return employees.find(e => e.id === cr.entity_id);
     if (cr.entity_type === 'supplier') return suppliers.find(s => s.id === cr.entity_id);
     if (cr.entity_type === 'booking') return bookings.find(b => b.id === cr.entity_id);
+    if (cr.entity_type === 'support') return tickets.find(t => t.id === cr.entity_id);
     return null;
   };
 
@@ -207,6 +221,7 @@ export default function Approvals() {
     <AdminLayout title="Approvals" subtitle={
       isAdmin ? "Review general staff's, HR's, and installers' pending requests." :
       user?.position === 'booking_coordinator' ? "Review installers' job completions before they're finalized." :
+      user?.position === 'hr' ? "Review support ticket resolutions before they're finalized." :
       "Review general staff's product, service, and voucher requests."
     }>
       <ConfirmDialog

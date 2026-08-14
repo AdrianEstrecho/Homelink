@@ -7,6 +7,7 @@ import { logActivity } from '../utils/audit.js';
 import { generateStaffCode } from '../utils/staffCode.js';
 import { notifyUser } from '../utils/notify.js';
 import { createChangeRequest } from '../utils/changeRequests.js';
+import { formatTicketNo } from '../utils/ticketNumber.js';
 
 const router = Router();
 router.use(authenticate);
@@ -562,23 +563,73 @@ router.delete('/vouchers/:id', authorizeAdminOr('general_staff', 'inventory_cler
   res.json({ message: 'Deleted' });
 });
 
-// Support messages — general staff and inventory clerks handle these day-to-day alongside admins.
+// Support messages — general staff and inventory clerks handle these day-to-day alongside
+// admins: they can reply (shown on the customer's Support tab) and reopen freely, but marking
+// a ticket resolved only *proposes* it via change_requests (entity_type='support') — same
+// pattern as an installer's job completion — until HR (or admin) approves it below.
 router.get('/support-messages', authorizeAdminOr('general_staff', 'inventory_clerk'), (req, res) => {
   const messages = db.prepare(`
     SELECT s.*, u.first_name, u.last_name, u.email
     FROM support_messages s JOIN users u ON s.user_id = u.id
     ORDER BY s.status ASC, s.created_at DESC
   `).all();
-  res.json(messages);
+  if (messages.length === 0) return res.json(messages);
+
+  const ids = messages.map(m => m.id);
+  const replies = db.prepare(`
+    SELECT r.id, r.message_id, r.body, r.created_at, u.first_name as author_first_name, u.last_name as author_last_name
+    FROM support_replies r JOIN users u ON r.author_id = u.id
+    WHERE r.message_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY r.created_at ASC
+  `).all(...ids);
+  const repliesByMessage = {};
+  for (const r of replies) (repliesByMessage[r.message_id] ||= []).push(r);
+
+  res.json(messages.map(m => ({ ...m, replies: repliesByMessage[m.id] || [] })));
 });
 
-router.put('/support-messages/:id/toggle', authorizeAdminOr('general_staff', 'inventory_clerk'), (req, res) => {
+router.post('/support-messages/:id/reply', authorizeAdminOr('general_staff', 'inventory_clerk'), (req, res) => {
   const msg = db.prepare('SELECT * FROM support_messages WHERE id = ?').get(req.params.id);
   if (!msg) return res.status(404).json({ error: 'Message not found' });
-  const nextStatus = msg.status === 'open' ? 'resolved' : 'open';
-  db.prepare('UPDATE support_messages SET status = ? WHERE id = ?').run(nextStatus, req.params.id);
-  logActivity(req, nextStatus === 'resolved' ? 'support.resolve' : 'support.reopen', 'support', req.params.id, { subject: msg.subject });
-  res.json({ message: 'Updated', status: nextStatus });
+  const body = (req.body.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Reply cannot be empty.' });
+
+  const id = uuid();
+  db.prepare('INSERT INTO support_replies (id, message_id, author_id, body) VALUES (?,?,?,?)').run(id, req.params.id, req.user.id, body);
+  logActivity(req, 'support.reply', 'support', req.params.id, { subject: msg.subject, ticketNumber: msg.ticket_number, preview: body.slice(0, 80) });
+
+  const reply = db.prepare(`
+    SELECT r.id, r.message_id, r.body, r.created_at, u.first_name as author_first_name, u.last_name as author_last_name
+    FROM support_replies r JOIN users u ON r.author_id = u.id WHERE r.id = ?
+  `).get(id);
+  res.status(201).json(reply);
+});
+
+router.put('/support-messages/:id/resolve', authorizeAdminOr('general_staff', 'inventory_clerk'), (req, res) => {
+  const msg = db.prepare('SELECT * FROM support_messages WHERE id = ?').get(req.params.id);
+  if (!msg) return res.status(404).json({ error: 'Message not found' });
+  if (msg.status === 'resolved') return res.status(400).json({ error: 'This ticket is already resolved.' });
+  const alreadyPending = db.prepare("SELECT id FROM change_requests WHERE entity_type='support' AND entity_id=? AND status='pending'").get(req.params.id);
+  if (alreadyPending) return res.status(400).json({ error: 'A resolution request for this ticket is already pending approval.' });
+
+  const requestId = createChangeRequest('support', 'update', req.params.id, { status: 'resolved' }, req.user.id);
+  logActivity(req, 'support.request_resolve', 'support', req.params.id, { subject: msg.subject, ticketNumber: msg.ticket_number });
+
+  const staff = db.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(req.user.id);
+  const staffName = staff ? `${staff.first_name} ${staff.last_name}` : 'A staff member';
+  const reviewers = db.prepare("SELECT id FROM users WHERE role='employee' AND position='hr'").all();
+  reviewers.forEach(r => notifyUser(r.id, 'support.resolve_requested', 'Resolution Needs Approval', `${staffName} requested approval to resolve ${formatTicketNo(msg.ticket_number)} — "${msg.subject}".`, '/admin/approvals'));
+
+  res.status(202).json({ pending: true, requestId, message: 'Submitted for HR/admin approval.' });
+});
+
+router.put('/support-messages/:id/reopen', authorizeAdminOr('general_staff', 'inventory_clerk'), (req, res) => {
+  const msg = db.prepare('SELECT * FROM support_messages WHERE id = ?').get(req.params.id);
+  if (!msg) return res.status(404).json({ error: 'Message not found' });
+  if (msg.status !== 'resolved') return res.status(400).json({ error: 'Only resolved tickets can be reopened.' });
+  db.prepare("UPDATE support_messages SET status = 'open' WHERE id = ?").run(req.params.id);
+  logActivity(req, 'support.reopen', 'support', req.params.id, { subject: msg.subject, ticketNumber: msg.ticket_number });
+  res.json({ message: 'Reopened', status: 'open' });
 });
 
 // Change requests — general staff's product/service/voucher create/update/delete calls,
@@ -595,13 +646,14 @@ const APPROVAL_REVIEWER_POSITIONS = {
   service: ['inventory_clerk'],
   voucher: ['inventory_clerk'],
   booking: ['booking_coordinator'],
+  support: ['hr'],
 };
 function canReviewApproval(user, entityType) {
   if (user.role === 'admin') return true;
   return (APPROVAL_REVIEWER_POSITIONS[entityType] || []).includes(user.position);
 }
 
-router.get('/approvals', authorizeAdminOr('inventory_clerk', 'booking_coordinator'), (req, res) => {
+router.get('/approvals', authorizeAdminOr('inventory_clerk', 'booking_coordinator', 'hr'), (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : 'pending';
   // Non-admin reviewers only ever see the entity types their own position is scoped to
   // review — an inventory clerk never sees booking requests and vice versa.
@@ -632,7 +684,7 @@ router.get('/approvals/mine', (req, res) => {
   res.json(rows.map(r => ({ ...r, payload: r.payload ? JSON.parse(r.payload) : null })));
 });
 
-router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'booking_coordinator'), (req, res) => {
+router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'booking_coordinator', 'hr'), (req, res) => {
   const cr = db.prepare('SELECT * FROM change_requests WHERE id = ?').get(req.params.id);
   if (!cr) return res.status(404).json({ error: 'Request not found' });
   if (cr.status !== 'pending') return res.status(400).json({ error: 'This request has already been reviewed.' });
@@ -759,6 +811,13 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
     if (installer) {
       notifyUser(installer.id, 'booking.completed', 'Completion Verified', `${reviewer.first_name} ${reviewer.last_name} verified your completion of ${serviceName} for ${customerName}.`, '/employee');
     }
+  } else if (cr.entity_type === 'support') {
+    const ticket = db.prepare('SELECT * FROM support_messages WHERE id = ?').get(cr.entity_id);
+    if (!ticket) return res.status(404).json({ error: 'The ticket no longer exists.' });
+    db.prepare("UPDATE support_messages SET status = 'resolved' WHERE id = ?").run(cr.entity_id);
+    logAction = 'support.resolve';
+    logDetails = { subject: ticket.subject, ticketNumber: ticket.ticket_number };
+    notifyUser(cr.requested_by, 'support.resolved', 'Resolution Approved', `${reviewer.first_name} ${reviewer.last_name} approved the resolution for ${formatTicketNo(ticket.ticket_number)} — "${ticket.subject}".`, '/admin/support');
   }
 
   db.prepare("UPDATE change_requests SET status='approved', reviewed_by=?, reviewed_at=datetime('now') WHERE id=?").run(req.user.id, cr.id);
@@ -766,15 +825,24 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
   res.json({ message: 'Approved' });
 });
 
-router.put('/approvals/:id/reject', authorizeAdminOr('inventory_clerk', 'booking_coordinator'), (req, res) => {
+router.put('/approvals/:id/reject', authorizeAdminOr('inventory_clerk', 'booking_coordinator', 'hr'), (req, res) => {
   const cr = db.prepare('SELECT * FROM change_requests WHERE id = ?').get(req.params.id);
   if (!cr) return res.status(404).json({ error: 'Request not found' });
   if (cr.status !== 'pending') return res.status(400).json({ error: 'This request has already been reviewed.' });
   if (!canReviewApproval(req.user, cr.entity_type)) {
     return res.status(403).json({ error: 'You are not authorized to review this request.' });
   }
+  const note = (req.body.note || '').trim() || null;
   db.prepare("UPDATE change_requests SET status='rejected', reviewed_by=?, reviewed_at=datetime('now'), review_note=? WHERE id=?")
-    .run(req.user.id, (req.body.note || '').trim() || null, cr.id);
+    .run(req.user.id, note, cr.id);
+
+  if (cr.entity_type === 'support') {
+    const ticket = db.prepare('SELECT subject, ticket_number FROM support_messages WHERE id = ?').get(cr.entity_id);
+    const reviewer = db.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(req.user.id);
+    const ticketLabel = ticket ? `${formatTicketNo(ticket.ticket_number)} — "${ticket.subject}"` : 'a ticket';
+    notifyUser(cr.requested_by, 'support.resolve_rejected', 'Resolution Rejected', `${reviewer.first_name} ${reviewer.last_name} rejected the resolution request for ${ticketLabel}${note ? `: "${note}"` : '.'}`, '/admin/support');
+  }
+
   res.json({ message: 'Rejected' });
 });
 

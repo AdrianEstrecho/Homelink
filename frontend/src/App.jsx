@@ -158,7 +158,7 @@ export default function App() {
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/products/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk']} redirectTo="/admin/login"><InventoryDashboard /></ProtectedRoute>} />
-          <Route path="/admin/approvals" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk', 'booking_coordinator']} redirectTo="/admin/login"><Approvals /></ProtectedRoute>} />
+          <Route path="/admin/approvals" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk', 'booking_coordinator', 'hr']} redirectTo="/admin/login"><Approvals /></ProtectedRoute>} />
           <Route path="/admin/products" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk', 'general_staff']} redirectTo="/admin/login"><AdminProducts /></ProtectedRoute>} />
           <Route path="/admin/services" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk', 'general_staff']} redirectTo="/admin/login"><AdminServices /></ProtectedRoute>} />
           <Route path="/admin/orders/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff']} redirectTo="/admin/login"><OrdersDashboard /></ProtectedRoute>} />
