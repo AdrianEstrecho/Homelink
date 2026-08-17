@@ -83,6 +83,27 @@ db.exec(`
     price REAL NOT NULL
   );
 
+  -- Holds a validated cart snapshot between "redirect out to PayMongo" and "webhook/poll
+  -- confirms payment" for card (3DS) and GCash checkouts, since the real order can't be
+  -- created — and stock can't be deducted — until the charge is actually confirmed.
+  CREATE TABLE IF NOT EXISTS pending_checkouts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id),
+    items TEXT NOT NULL,
+    subtotal REAL NOT NULL,
+    discount REAL DEFAULT 0,
+    total REAL NOT NULL,
+    payment_method TEXT NOT NULL CHECK(payment_method IN ('card','gcash')),
+    shipping_address TEXT,
+    promo_code TEXT,
+    applied_promo TEXT,
+    paymongo_payment_intent_id TEXT,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending','succeeded','failed')),
+    order_id TEXT REFERENCES orders(id),
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_pending_checkouts_intent ON pending_checkouts(paymongo_payment_intent_id);
+
   CREATE TABLE IF NOT EXISTS bookings (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id),
@@ -183,6 +204,20 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 
+  -- Staff (general staff / inventory clerk) replies to a customer's ticket — kept as its
+  -- own table rather than a column so a ticket can carry a full back-and-forth thread.
+  -- Resolving a ticket doesn't write here at all; that goes through change_requests
+  -- (entity_type='support') the same way an installer's job completion does, since it
+  -- needs HR/admin sign-off before support_messages.status actually flips to 'resolved'.
+  CREATE TABLE IF NOT EXISTS support_replies (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL REFERENCES support_messages(id) ON DELETE CASCADE,
+    author_id TEXT NOT NULL REFERENCES users(id),
+    body TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_support_replies_message ON support_replies(message_id);
+
   CREATE TABLE IF NOT EXISTS audit_logs (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -203,7 +238,7 @@ db.exec(`
   -- entity doesn't exist yet.
   CREATE TABLE IF NOT EXISTS change_requests (
     id TEXT PRIMARY KEY,
-    entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking')),
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking','support')),
     entity_id TEXT,
     action TEXT NOT NULL CHECK(action IN ('create','update','delete','archive','restore')),
     payload TEXT,
@@ -293,6 +328,23 @@ ensureColumn('suppliers', 'bank_account_number', 'TEXT');
 ensureColumn('suppliers', 'bank_account_name', 'TEXT');
 ensureColumn('orders', 'cancel_reason', 'TEXT');
 ensureColumn('bookings', 'cancel_reason', 'TEXT');
+ensureColumn('orders', 'paymongo_payment_intent_id', 'TEXT');
+ensureColumn('orders', 'paymongo_payment_id', 'TEXT');
+ensureColumn('pending_checkouts', 'applied_promo', 'TEXT');
+ensureColumn('support_messages', 'ticket_number', 'INTEGER');
+
+// Backfills sequential ticket numbers (see utils/ticketNumber.js) for tickets that predate
+// the column, in creation order — mirrors backfillStaffCodes below. New tickets get theirs
+// assigned directly at insert time (support.js), so this only ever runs once per row.
+const backfillTicketNumbers = db.transaction(() => {
+  const unnumbered = db.prepare('SELECT id FROM support_messages WHERE ticket_number IS NULL ORDER BY created_at ASC').all();
+  let next = db.prepare('SELECT COALESCE(MAX(ticket_number),0) as n FROM support_messages').get().n + 1;
+  for (const t of unnumbered) {
+    db.prepare('UPDATE support_messages SET ticket_number = ? WHERE id = ?').run(next, t.id);
+    next++;
+  }
+});
+backfillTicketNumbers();
 
 // The customer_support position was retired in favor of Accounting/HR — any existing
 // employee still holding it moves to general_staff (which already shares support-message
@@ -310,6 +362,32 @@ if (changeRequestsSql && !changeRequestsSql.includes("'booking'")) {
     CREATE TABLE change_requests (
       id TEXT PRIMARY KEY,
       entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking')),
+      entity_id TEXT,
+      action TEXT NOT NULL CHECK(action IN ('create','update','delete','archive','restore')),
+      payload TEXT,
+      requested_by TEXT NOT NULL REFERENCES users(id),
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+      reviewed_by TEXT REFERENCES users(id),
+      review_note TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      reviewed_at TEXT
+    );
+    INSERT INTO change_requests SELECT * FROM change_requests_old;
+    DROP TABLE change_requests_old;
+    CREATE INDEX IF NOT EXISTS idx_change_requests_status ON change_requests(status);
+  `);
+}
+
+// Same trick again to add 'support' — ticket resolutions proposed by general staff/inventory
+// clerks now go through this table too, reviewed by HR (or admin) before support_messages.status
+// actually flips to 'resolved'. See admin.js's APPROVAL_REVIEWER_POSITIONS.
+const changeRequestsSql2 = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='change_requests'").get()?.sql || '';
+if (changeRequestsSql2 && !changeRequestsSql2.includes("'support'")) {
+  db.exec(`
+    ALTER TABLE change_requests RENAME TO change_requests_old;
+    CREATE TABLE change_requests (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking','support')),
       entity_id TEXT,
       action TEXT NOT NULL CHECK(action IN ('create','update','delete','archive','restore')),
       payload TEXT,

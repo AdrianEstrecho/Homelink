@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { LifeBuoy, Send } from 'lucide-react';
 import { api } from '../../api/client';
 import Select from '../Select';
+import { formatTicketNo } from '../../utils/ticketNumber';
 
 const TYPE_OPTIONS = [
   { value: 'support', label: 'Support Inquiry' },
@@ -78,11 +79,26 @@ export default function SupportTab() {
           {messages.map(m => (
             <div key={m.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="text-sm font-semibold text-gray-800">{m.subject}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-xs font-semibold text-brand-navy bg-brand-navy/10 rounded px-1.5 py-0.5">{formatTicketNo(m.ticket_number)}</span>
+                  <p className="text-sm font-semibold text-gray-800">{m.subject}</p>
+                </div>
                 <span className={`badge capitalize ${STATUS_STYLE[m.status]}`}>{m.status}</span>
               </div>
               <p className="text-sm text-gray-600 mt-1">{m.message}</p>
               <p className="text-xs text-gray-400 mt-2">{m.type === 'complaint' ? 'Complaint' : 'Support Inquiry'} · {new Date(m.created_at).toLocaleDateString()}</p>
+
+              {m.replies?.length > 0 && (
+                <div className="mt-3 space-y-2 border-t border-gray-200 pt-3">
+                  {m.replies.map(r => (
+                    <div key={r.id} className="bg-white rounded-lg px-3 py-2 border border-gray-100">
+                      <p className="text-xs font-semibold text-brand-navy mb-0.5">HomeLink Support</p>
+                      <p className="text-sm text-gray-700">{r.body}</p>
+                      <p className="text-xs text-gray-400 mt-1">{new Date(r.created_at).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -1,3 +1,5 @@
+import { formatTicketNo } from '../utils/ticketNumber';
+
 export const POSITION_LABELS = {
   inventory_clerk: 'Inventory Clerk',
   booking_coordinator: 'Booking Coordinator',
@@ -25,9 +27,11 @@ export const ACTION_META = {
   'order.create': { category: 'create', entity: 'Order', describe: d => `${d.customerName || 'A customer'} placed an order for ${d.itemCount || ''} item${d.itemCount === 1 ? '' : 's'} (₱${Number(d.total || 0).toLocaleString('en-PH')})` },
   'order.status_update': { category: 'update', entity: 'Order', describe: d => `Status changed: ${d.from || '—'} → ${d.to}` },
   'order.cancel': { category: 'update', entity: 'Order', describe: d => `${d.customerName || 'A customer'} cancelled their order${d.reason ? ` — "${d.reason}"` : ''}` },
-  'support.create': { category: 'create', entity: 'Support', describe: d => `${d.customerName || 'A customer'} sent a ${d.type || 'support'} message: "${d.subject}"` },
-  'support.resolve': { category: 'update', entity: 'Support', describe: d => `Marked resolved: "${d.subject}"` },
-  'support.reopen': { category: 'update', entity: 'Support', describe: d => `Reopened: "${d.subject}"` },
+  'support.create': { category: 'create', entity: 'Support', describe: d => `${d.customerName || 'A customer'} sent a ${d.type || 'support'} message${d.ticketNumber ? ` (${formatTicketNo(d.ticketNumber)})` : ''}: "${d.subject}"` },
+  'support.reply': { category: 'update', entity: 'Support', describe: d => `Replied to ${d.ticketNumber ? formatTicketNo(d.ticketNumber) : `"${d.subject}"`}${d.preview ? `: "${d.preview}"` : ''}` },
+  'support.request_resolve': { category: 'update', entity: 'Support', describe: d => `Requested resolution approval for ${d.ticketNumber ? formatTicketNo(d.ticketNumber) : `"${d.subject}"`}` },
+  'support.resolve': { category: 'update', entity: 'Support', describe: d => `Marked resolved: ${d.ticketNumber ? formatTicketNo(d.ticketNumber) : ''} "${d.subject}"` },
+  'support.reopen': { category: 'update', entity: 'Support', describe: d => `Reopened: ${d.ticketNumber ? formatTicketNo(d.ticketNumber) : ''} "${d.subject}"` },
   'product.create': { category: 'create', entity: 'Product', describe: d => `Created product "${d.name}"` },
   'product.update': { category: 'update', entity: 'Product', describe: d => `Updated product "${d.name}"` },
   'product.restock': { category: 'update', entity: 'Product', describe: d => `Added ${d.quantity} units to "${d.name}" (${d.from} → ${d.to}) — verified by ${d.clerkName} (${d.clerkCode})` },

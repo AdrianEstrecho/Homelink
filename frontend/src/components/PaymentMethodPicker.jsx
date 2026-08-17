@@ -1,6 +1,5 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
-import { CreditCard, Smartphone, Landmark, Plus, Check, ShieldCheck, Copy } from 'lucide-react';
-import { api } from '../api/client';
+import { forwardRef, useImperativeHandle, useState } from 'react';
+import { CreditCard, Smartphone, Landmark, ShieldCheck, Copy, Check } from 'lucide-react';
 import Select from './Select';
 
 const PAYMENT_METHODS = [
@@ -11,47 +10,19 @@ const PAYMENT_METHODS = [
 
 const BANK_DETAILS = { bank: 'BDO Unibank', accountName: 'HomeLink Home Improvement Inc.', accountNumber: '0012 3456 7890' };
 
-const emptyCardForm = { cardNumber: '', expMonth: '', expYear: '' };
+const emptyCardForm = { cardNumber: '', expMonth: '', expYear: '', cvc: '' };
 const cardYearOptions = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() + i);
 
 const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber = 2 }, ref) {
   const [method, setMethod] = useState('card');
 
-  const [savedCards, setSavedCards] = useState(null);
-  const [selectedCardId, setSelectedCardId] = useState(null);
-  const [showCardForm, setShowCardForm] = useState(false);
   const [cardForm, setCardForm] = useState(emptyCardForm);
-  const [savingCard, setSavingCard] = useState(false);
   const [cardError, setCardError] = useState('');
 
   const [gcashNumber, setGcashNumber] = useState('');
   const [gcashError, setGcashError] = useState('');
 
   const [bankCopied, setBankCopied] = useState(false);
-
-  useEffect(() => {
-    api.get('/payment-methods/my').then(data => {
-      setSavedCards(data);
-      const def = data.find(c => c.is_default) || data[0];
-      if (def) setSelectedCardId(def.id); else setShowCardForm(true);
-    }).catch(() => { setSavedCards([]); setShowCardForm(true); });
-  }, []);
-
-  const handleSaveCard = async () => {
-    setSavingCard(true);
-    setCardError('');
-    try {
-      const saved = await api.post('/payment-methods', cardForm);
-      setSavedCards(prev => [saved, ...(prev || [])]);
-      setSelectedCardId(saved.id);
-      setShowCardForm(false);
-      setCardForm(emptyCardForm);
-    } catch (err) {
-      setCardError(err.message);
-    } finally {
-      setSavingCard(false);
-    }
-  };
 
   const handleCopyBank = () => {
     if (!navigator.clipboard) return;
@@ -64,17 +35,26 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
   useImperativeHandle(ref, () => ({
     validate: () => {
       if (method === 'card') {
-        if (!savedCards?.find(c => c.id === selectedCardId)) { setCardError('Please select or add a card.'); return null; }
+        const digits = cardForm.cardNumber.replace(/\D/g, '');
+        if (digits.length < 12 || digits.length > 19) { setCardError('Enter a valid card number'); return null; }
+        const month = Number(cardForm.expMonth), year = Number(cardForm.expYear);
+        if (!month || month < 1 || month > 12 || !year) { setCardError('Enter a valid expiry date'); return null; }
+        if (!/^\d{3,4}$/.test(cardForm.cvc)) { setCardError('Enter a valid CVC'); return null; }
+        setCardError('');
+        return { method, card: { cardNumber: digits, expMonth: month, expYear: year, cvc: cardForm.cvc } };
       }
       if (method === 'gcash') {
-        if (!/^09\d{9}$/.test(gcashNumber.replace(/\s/g, ''))) {
+        const digits = gcashNumber.replace(/\s/g, '');
+        if (!/^09\d{9}$/.test(digits)) {
           setGcashError('Enter a valid GCash number (e.g. 09171234567).');
           return null;
         }
+        setGcashError('');
+        return { method, gcashNumber: digits };
       }
-      return { method, cardId: method === 'card' ? selectedCardId : null, gcashNumber: method === 'gcash' ? gcashNumber : null };
+      return { method };
     },
-  }), [method, savedCards, selectedCardId, gcashNumber]);
+  }), [method, cardForm, gcashNumber]);
 
   return (
     <div>
@@ -94,58 +74,29 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
       </div>
 
       {method === 'card' && (
-        <div className="mt-5 pt-5 border-t border-gray-100">
-          {savedCards === null ? (
-            <p className="text-sm text-gray-400">Loading cards...</p>
-          ) : savedCards.length > 0 ? (
-            <div className="space-y-2.5 mb-4">
-              {savedCards.map(c => (
-                <label key={c.id} className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition ${selectedCardId === c.id ? 'border-brand-orange bg-brand-orange/5' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input type="radio" name="card" checked={selectedCardId === c.id} onChange={() => setSelectedCardId(c.id)} className="accent-brand-orange" />
-                  <CreditCard className="w-4 h-4 text-gray-400 shrink-0" />
-                  <span className="text-sm font-medium text-brand-ink flex-1">{c.brand} •••• {c.last4}</span>
-                  <span className="text-xs text-gray-400">Exp {String(c.exp_month).padStart(2, '0')}/{c.exp_year}</span>
-                  {!!c.is_default && <span className="badge bg-brand-teal/15 text-brand-teal">Default</span>}
-                </label>
-              ))}
+        <div className="mt-5 pt-5 border-t border-gray-100 space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1.5 text-gray-700">Card Number</label>
+            <input value={cardForm.cardNumber} onChange={e => setCardForm({ ...cardForm, cardNumber: e.target.value })} placeholder="1234 5678 9012 3456" className="input-field" inputMode="numeric" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-gray-700">Month</label>
+              <Select value={cardForm.expMonth} onChange={expMonth => setCardForm({ ...cardForm, expMonth })} placeholder="MM" options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: String(i + 1).padStart(2, '0') }))} />
             </div>
-          ) : null}
-
-          {showCardForm ? (
-            <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1.5 text-gray-700">Card Number</label>
-                <input value={cardForm.cardNumber} onChange={e => setCardForm({ ...cardForm, cardNumber: e.target.value })} placeholder="1234 5678 9012 3456" className="input-field" inputMode="numeric" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1.5 text-gray-700">Expiry Month</label>
-                  <Select value={cardForm.expMonth} onChange={expMonth => setCardForm({ ...cardForm, expMonth })} placeholder="Month" options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: String(i + 1).padStart(2, '0') }))} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1.5 text-gray-700">Expiry Year</label>
-                  <Select value={cardForm.expYear} onChange={expYear => setCardForm({ ...cardForm, expYear })} placeholder="Year" options={cardYearOptions.map(y => ({ value: String(y), label: String(y) }))} />
-                </div>
-              </div>
-              {cardError && <p className="text-red-600 text-sm">{cardError}</p>}
-              <p className="flex items-center gap-1.5 text-xs text-gray-500">
-                <ShieldCheck className="w-3.5 h-3.5 text-brand-teal" /> We only store your card's brand and last 4 digits.
-              </p>
-              <div className="flex gap-2">
-                <button type="button" onClick={handleSaveCard} disabled={savingCard} className="btn-primary text-sm py-2 disabled:opacity-60">
-                  {savingCard ? 'Saving...' : 'Save & Use This Card'}
-                </button>
-                {savedCards?.length > 0 && (
-                  <button type="button" onClick={() => { setShowCardForm(false); setCardError(''); }} className="text-sm font-medium text-gray-500 hover:text-gray-700">Cancel</button>
-                )}
-              </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-gray-700">Year</label>
+              <Select value={cardForm.expYear} onChange={expYear => setCardForm({ ...cardForm, expYear })} placeholder="YYYY" options={cardYearOptions.map(y => ({ value: String(y), label: String(y) }))} />
             </div>
-          ) : (
-            <button type="button" onClick={() => { setShowCardForm(true); setCardError(''); }} className="flex items-center gap-1 text-sm font-semibold text-brand-teal hover:underline">
-              <Plus className="w-3.5 h-3.5" /> Add New Card
-            </button>
-          )}
-          {!showCardForm && cardError && <p className="text-red-600 text-sm mt-2">{cardError}</p>}
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-gray-700">CVC</label>
+              <input value={cardForm.cvc} onChange={e => setCardForm({ ...cardForm, cvc: e.target.value.replace(/\D/g, '') })} placeholder="123" maxLength={4} className="input-field" inputMode="numeric" />
+            </div>
+          </div>
+          {cardError && <p className="text-red-600 text-sm">{cardError}</p>}
+          <p className="flex items-center gap-1.5 text-xs text-gray-500">
+            <ShieldCheck className="w-3.5 h-3.5 text-brand-teal" /> Your card details go directly and securely to PayMongo, our payment processor — HomeLink never sees or stores your card number or CVC.
+          </p>
         </div>
       )}
 
@@ -160,7 +111,7 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
             className="input-field max-w-xs"
           />
           {gcashError && <p className="text-red-600 text-sm mt-1.5">{gcashError}</p>}
-          <p className="text-xs text-gray-400 mt-2">We'll send a payment request to this number once confirmed.</p>
+          <p className="text-xs text-gray-400 mt-2">You'll be redirected to GCash to authorize this payment.</p>
         </div>
       )}
 
