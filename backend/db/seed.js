@@ -4,9 +4,10 @@ import db from './database.js';
 
 console.log('Seeding HomeLink database...');
 
-// reviews.order_id has no cascade, so it must go before orders; same for subcategories,
-// which self-reference their parent via parent_id and must go before the parent row.
-await db.exec('DELETE FROM reviews; DELETE FROM order_items; DELETE FROM orders; DELETE FROM bookings; DELETE FROM vouchers; DELETE FROM products; DELETE FROM services; DELETE FROM categories WHERE parent_id IS NOT NULL; DELETE FROM categories; DELETE FROM announcements; DELETE FROM gallery; DELETE FROM audit_logs; DELETE FROM users;');
+// reviews.order_id and pending_checkouts/pending_bookings.order_id/booking_id have no cascade,
+// so they must go before orders/bookings; same for subcategories, which self-reference their
+// parent via parent_id and must go before the parent row.
+await db.exec('DELETE FROM reviews; DELETE FROM order_items; DELETE FROM pending_checkouts; DELETE FROM orders; DELETE FROM pending_bookings; DELETE FROM bookings; DELETE FROM vouchers; DELETE FROM products; DELETE FROM services; DELETE FROM categories WHERE parent_id IS NOT NULL; DELETE FROM categories; DELETE FROM announcements; DELETE FROM gallery; DELETE FROM audit_logs; DELETE FROM users;');
 
 const adminId = uuid();
 const emp1 = uuid();

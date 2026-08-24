@@ -29,3 +29,7 @@ services:
         sync: false
       - key: SMTP_PASS
         sync: false
+      - key: PAYMONGO_SECRET_KEY
+        sync: false
+      - key: PAYMONGO_WEBHOOK_SECRET
+        sync: false
