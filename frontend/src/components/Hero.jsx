@@ -50,7 +50,7 @@ export default function Hero() {
           </div>
 
           <h1
-            className="fade-up font-display font-extrabold tracking-tightest leading-[0.98] text-white mb-4 text-[clamp(2.5rem,6.5vw,4.75rem)]"
+            className="fade-up font-display font-extrabold tracking-tightest leading-[0.98] text-white mb-4 text-[clamp(2rem,5vw,3.75rem)]"
             style={{ animationDelay: '90ms' }}
           >
             Shop products.<br />Book services.

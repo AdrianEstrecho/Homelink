@@ -25,7 +25,24 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
+// The web frontend's origin, plus the Angular mobile app's dev server and its
+// packaged Capacitor WebView origins (https://localhost is the Android default;
+// http://localhost covers an androidScheme override). Additive to the existing
+// single-origin config -- doesn't change the web app's CORS behavior.
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+  'http://localhost:4200',
+  'https://localhost',
+  'http://localhost',
+  ...(process.env.ADDITIONAL_CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
+];
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
 
 // Must precede express.json() — PayMongo webhook signature verification needs the exact raw
 // bytes of the request body, which express.json() would otherwise parse away.
