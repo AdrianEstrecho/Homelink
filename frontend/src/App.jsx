@@ -27,7 +27,8 @@ import Orders from './pages/Orders';
 import Bookings from './pages/Bookings';
 import Policies from './pages/Policies';
 import Location from './pages/Location';
-import Gallery from './pages/Gallery';
+import About from './pages/About';
+import FAQ from './pages/FAQ';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminProducts from './pages/admin/Products';
@@ -156,7 +157,8 @@ export default function App() {
           <Route path="/bookings" element={<ProtectedRoute roles={['customer']}><Bookings /></ProtectedRoute>} />
           <Route path="/policies" element={<Policies />} />
           <Route path="/location" element={<Location />} />
-          <Route path="/gallery" element={<Gallery />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/faq" element={<FAQ />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/products/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk']} redirectTo="/admin/login"><InventoryDashboard /></ProtectedRoute>} />

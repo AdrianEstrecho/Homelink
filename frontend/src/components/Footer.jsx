@@ -47,6 +47,8 @@ export default function Footer() {
         <div className="border-t border-white/10 mt-12 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-500">
           <p>&copy; {new Date().getFullYear()} HomeLink. All rights reserved.</p>
           <div className="flex items-center gap-4">
+            <Link to="/about" className="hover:text-white transition">About</Link>
+            <Link to="/faq" className="hover:text-white transition">FAQs</Link>
             <Link to="/policies" className="hover:text-white transition">Policies</Link>
             <Link to="/location" className="hover:text-white transition">Find Us</Link>
           </div>
