@@ -71,28 +71,4 @@ router.delete('/', authenticate, async (req, res) => {
   res.json([]);
 });
 
-// Folds a guest (localStorage) cart into the signed-in user's account cart on login --
-// summing into any matching items already there -- then returns the merged cart.
-router.post('/merge', authenticate, async (req, res) => {
-  const { items } = req.body;
-  if (!Array.isArray(items) || !items.length) return res.json(await getCart(req.user.id));
-
-  for (const item of items) {
-    if (!item?.productId) continue;
-    const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
-
-    const product = await db.prepare('SELECT id FROM products WHERE id = ?').get(item.productId);
-    if (!product) continue;
-
-    const existing = await db.prepare('SELECT id, quantity FROM cart_items WHERE user_id = ? AND product_id = ?').get(req.user.id, item.productId);
-    if (existing) {
-      await db.prepare('UPDATE cart_items SET quantity = ? WHERE id = ?').run(existing.quantity + qty, existing.id);
-    } else {
-      await db.prepare('INSERT INTO cart_items (id, user_id, product_id, quantity) VALUES (?,?,?,?)').run(uuid(), req.user.id, item.productId, qty);
-    }
-  }
-
-  res.json(await getCart(req.user.id));
-});
-
 export default router;
