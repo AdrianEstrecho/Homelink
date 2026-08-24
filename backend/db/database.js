@@ -314,6 +314,17 @@ await db.exec(`
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_wishlists_user_product ON wishlists(user_id, product_id);
 
+  -- A signed-in customer's shopping cart, kept server-side so it follows the account across
+  -- devices/browsers instead of living only in one browser's localStorage.
+  CREATE TABLE IF NOT EXISTS cart_items (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    product_id TEXT REFERENCES products(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_cart_items_user_product ON cart_items(user_id, product_id);
+
   CREATE TABLE IF NOT EXISTS support_messages (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
