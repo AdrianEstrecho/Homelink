@@ -8,13 +8,13 @@ export function getHolidayDiscount() {
   return HOLIDAYS.includes(mmdd) ? { type: 'percent', value: 10, label: 'Holiday Discount (10%)' } : null;
 }
 
-export function getFirstTimeServiceDiscount(userId) {
-  const count = db.prepare('SELECT COUNT(*) as c FROM bookings WHERE user_id = ?').get(userId);
+export async function getFirstTimeServiceDiscount(userId) {
+  const count = await db.prepare('SELECT COUNT(*) as c FROM bookings WHERE user_id = ?').get(userId);
   return count.c === 0 ? { type: 'percent', value: 15, label: 'First-Time Service Discount (15%)' } : null;
 }
 
-export function validateVoucher(code, orderTotal) {
-  const voucher = db.prepare('SELECT * FROM vouchers WHERE code = ? AND active = 1').get(code.toUpperCase());
+export async function validateVoucher(code, orderTotal) {
+  const voucher = await db.prepare('SELECT * FROM vouchers WHERE code = ? AND active = 1').get(code.toUpperCase());
   if (!voucher) return { valid: false, error: 'Invalid voucher code' };
   if (voucher.used_count >= voucher.max_uses) return { valid: false, error: 'Voucher has reached maximum uses' };
   const now = new Date().toISOString();
@@ -30,6 +30,6 @@ export function calculateDiscount(amount, promo) {
   return Math.min(promo.value, amount);
 }
 
-export function applyVoucherUse(code) {
-  db.prepare('UPDATE vouchers SET used_count = used_count + 1 WHERE code = ?').run(code.toUpperCase());
+export async function applyVoucherUse(code) {
+  await db.prepare('UPDATE vouchers SET used_count = used_count + 1 WHERE code = ?').run(code.toUpperCase());
 }

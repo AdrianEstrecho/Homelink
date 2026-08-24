@@ -11,8 +11,8 @@ const POSITION_PREFIX = {
 
 // Staff codes are assigned once and kept for life — a later position change
 // (e.g. promotion to a different role) does not renumber or reprefix them.
-export function generateStaffCode(role, position) {
+export async function generateStaffCode(role, position) {
   const prefix = role === 'admin' ? 'SA' : (POSITION_PREFIX[position] || 'EMP');
-  const { c } = db.prepare('SELECT COUNT(*) as c FROM users WHERE staff_code LIKE ?').get(`${prefix}%`);
+  const { c } = await db.prepare('SELECT COUNT(*) as c FROM users WHERE staff_code ILIKE ?').get(`${prefix}%`);
   return `${prefix}${String(c + 1).padStart(3, '0')}`;
 }

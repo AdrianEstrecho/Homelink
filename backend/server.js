@@ -17,6 +17,7 @@ import supportRoutes from './routes/support.js';
 import notificationRoutes from './routes/notifications.js';
 import messageRoutes from './routes/messages.js';
 import wishlistRoutes from './routes/wishlist.js';
+import paymentRoutes, { paymongoWebhookHandler } from './routes/payments.js';
 import db from './db/database.js';
 
 dotenv.config();
@@ -25,16 +26,21 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
+
+// Must precede express.json() — PayMongo webhook signature verification needs the exact raw
+// bytes of the request body, which express.json() would otherwise parse away.
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), paymongoWebhookHandler);
+
 app.use(express.json());
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', name: 'HomeLink API' }));
 
-app.get('/api/announcements', (req, res) => {
-  res.json(db.prepare('SELECT * FROM announcements WHERE active = 1 ORDER BY created_at DESC').all());
+app.get('/api/announcements', async (req, res) => {
+  res.json(await db.prepare('SELECT * FROM announcements WHERE active = 1 ORDER BY created_at DESC').all());
 });
 
-app.get('/api/gallery', (req, res) => {
-  res.json(db.prepare('SELECT * FROM gallery ORDER BY sort_order').all());
+app.get('/api/gallery', async (req, res) => {
+  res.json(await db.prepare('SELECT * FROM gallery ORDER BY sort_order').all());
 });
 
 app.use('/api/auth', authRoutes);
@@ -52,6 +58,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/payments', paymentRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

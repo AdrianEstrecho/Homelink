@@ -10,8 +10,8 @@ const RATING_COLUMNS = `
   (SELECT COUNT(*) FROM reviews r WHERE r.product_id = p.id) as review_count
 `;
 
-router.get('/my', authenticate, (req, res) => {
-  const items = db.prepare(`
+router.get('/my', authenticate, async (req, res) => {
+  const items = await db.prepare(`
     SELECT w.created_at as wishlisted_at, p.*, c.name as category_name, c.slug as category_slug, ${RATING_COLUMNS}
     FROM wishlists w
     JOIN products p ON w.product_id = p.id
@@ -26,24 +26,24 @@ router.get('/my', authenticate, (req, res) => {
   })));
 });
 
-router.post('/', authenticate, (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   const { productId } = req.body;
   if (!productId) return res.status(400).json({ error: 'Product is required' });
 
-  const product = db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
+  const product = await db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
-  const existing = db.prepare('SELECT id FROM wishlists WHERE user_id = ? AND product_id = ?').get(req.user.id, productId);
+  const existing = await db.prepare('SELECT id FROM wishlists WHERE user_id = ? AND product_id = ?').get(req.user.id, productId);
   if (existing) return res.status(200).json({ message: 'Already in wishlist' });
 
-  db.prepare('INSERT INTO wishlists (id, user_id, product_id) VALUES (?,?,?)').run(uuid(), req.user.id, productId);
+  await db.prepare('INSERT INTO wishlists (id, user_id, product_id) VALUES (?,?,?)').run(uuid(), req.user.id, productId);
   res.status(201).json({ message: 'Added to wishlist' });
 });
 
-router.delete('/:productId', authenticate, (req, res) => {
-  const existing = db.prepare('SELECT id FROM wishlists WHERE user_id = ? AND product_id = ?').get(req.user.id, req.params.productId);
+router.delete('/:productId', authenticate, async (req, res) => {
+  const existing = await db.prepare('SELECT id FROM wishlists WHERE user_id = ? AND product_id = ?').get(req.user.id, req.params.productId);
   if (!existing) return res.status(404).json({ error: 'Item not found in wishlist' });
-  db.prepare('DELETE FROM wishlists WHERE id = ?').run(existing.id);
+  await db.prepare('DELETE FROM wishlists WHERE id = ?').run(existing.id);
   res.json({ message: 'Removed from wishlist' });
 });
 

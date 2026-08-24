@@ -6,7 +6,7 @@ console.log('Seeding HomeLink database...');
 
 // reviews.order_id has no cascade, so it must go before orders; same for subcategories,
 // which self-reference their parent via parent_id and must go before the parent row.
-db.exec('DELETE FROM reviews; DELETE FROM order_items; DELETE FROM orders; DELETE FROM bookings; DELETE FROM vouchers; DELETE FROM products; DELETE FROM services; DELETE FROM categories WHERE parent_id IS NOT NULL; DELETE FROM categories; DELETE FROM announcements; DELETE FROM gallery; DELETE FROM audit_logs; DELETE FROM users;');
+await db.exec('DELETE FROM reviews; DELETE FROM order_items; DELETE FROM orders; DELETE FROM bookings; DELETE FROM vouchers; DELETE FROM products; DELETE FROM services; DELETE FROM categories WHERE parent_id IS NOT NULL; DELETE FROM categories; DELETE FROM announcements; DELETE FROM gallery; DELETE FROM audit_logs; DELETE FROM users;');
 
 const adminId = uuid();
 const emp1 = uuid();
@@ -17,17 +17,17 @@ const custId = uuid();
 const hash = await bcrypt.hash('password123', 10);
 const adminHash = await bcrypt.hash('admin123', 10);
 
-db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, staff_code, verified) VALUES (?,?,?,?,?,?,?,?,?,1)')
+await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, staff_code, verified) VALUES (?,?,?,?,?,?,?,?,?,1)')
   .run(adminId, 'admin@homelink.com', adminHash, 'System', 'Admin', '09171234567', '123 HomeLink Ave', 'admin', 'SA001');
-db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, staff_code, verified) VALUES (?,?,?,?,?,?,?,?,?,1)')
+await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, staff_code, verified) VALUES (?,?,?,?,?,?,?,?,?,1)')
   .run(emp1, 'juan.delacruz@homelink.com', hash, 'Juan', 'Delacruz', '09181111111', 'Manila', 'employee', 'EMP001');
-db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, staff_code, verified) VALUES (?,?,?,?,?,?,?,?,?,1)')
+await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, staff_code, verified) VALUES (?,?,?,?,?,?,?,?,?,1)')
   .run(emp2, 'maria.santos@homelink.com', hash, 'Maria', 'Santos', '09182222222', 'Quezon City', 'employee', 'EMP002');
-db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, position, staff_code, salary, verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)')
+await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, position, staff_code, salary, verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)')
   .run(accountingEmp, 'accounting@homelink.com', hash, 'Ramon', 'Cruz', '09184444444', 'Pasig City', 'employee', 'accounting', 'AC001', 35000);
-db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, position, staff_code, salary, verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)')
+await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, position, staff_code, salary, verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)')
   .run(hrEmp, 'hr@homelink.com', hash, 'Liza', 'Fernandez', '09185555555', 'Mandaluyong City', 'employee', 'hr', 'HR001', 32000);
-db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, verified) VALUES (?,?,?,?,?,?,?,?,1)')
+await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, verified) VALUES (?,?,?,?,?,?,?,?,1)')
   .run(custId, 'customer@demo.com', hash, 'Demo', 'Customer', '09183333333', 'Makati City', 'customer');
 
 const categories = [
@@ -43,7 +43,7 @@ const categories = [
 ];
 
 const insertCat = db.prepare('INSERT INTO categories (id, name, slug, description, image) VALUES (?,?,?,?,?)');
-categories.forEach(c => insertCat.run(c.id, c.name, c.slug, c.description, c.image));
+for (const c of categories) await insertCat.run(c.id, c.name, c.slug, c.description, c.image);
 
 const catMap = Object.fromEntries(categories.map(c => [c.slug, c.id]));
 
@@ -55,7 +55,7 @@ const subcategories = [
   { id: uuid(), name: 'IP Cameras', slug: 'cctv-ip-cameras', parentSlug: 'cctv-security' },
 ];
 const insertSubcat = db.prepare('INSERT INTO categories (id, name, slug, description, image, parent_id) VALUES (?,?,?,?,?,?)');
-subcategories.forEach(s => insertSubcat.run(s.id, s.name, s.slug, null, null, catMap[s.parentSlug]));
+for (const s of subcategories) await insertSubcat.run(s.id, s.name, s.slug, null, null, catMap[s.parentSlug]);
 const subcatMap = Object.fromEntries(subcategories.map(s => [s.slug, s.id]));
 
 const products = [
@@ -79,9 +79,9 @@ const products = [
 
 const allCatMap = { ...catMap, ...subcatMap };
 const insertProd = db.prepare('INSERT INTO products (id, category_id, name, slug, description, specifications, price, stock, image, featured, brand, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
-products.forEach(p => {
-  insertProd.run(uuid(), allCatMap[p.cat], p.name, p.slug, `Premium ${p.name} for your home improvement needs. Professional installation available.`, JSON.stringify(p.specs), p.price, p.stock, p.image, p.featured, p.specs.brand || null, 'active');
-});
+for (const p of products) {
+  await insertProd.run(uuid(), allCatMap[p.cat], p.name, p.slug, `Premium ${p.name} for your home improvement needs. Professional installation available.`, JSON.stringify(p.specs), p.price, p.stock, p.image, p.featured, p.specs.brand || null, 'active');
+}
 
 const services = [
   { name: 'Air Conditioner Installation', slug: 'ac-installation', category: 'Air Conditioning', price: 3500, desc: 'Professional split or window AC installation with leak testing.' },
@@ -101,18 +101,18 @@ const services = [
 ];
 
 const insertSvc = db.prepare('INSERT INTO services (id, name, slug, description, category, base_price, duration_hours, image) VALUES (?,?,?,?,?,?,?,?)');
-services.forEach(s => insertSvc.run(uuid(), s.name, s.slug, s.desc, s.category, s.price, 2 + Math.random() * 3, 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=600'));
+for (const s of services) await insertSvc.run(uuid(), s.name, s.slug, s.desc, s.category, s.price, 2 + Math.random() * 3, 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=600');
 
-db.prepare('INSERT INTO vouchers (id, code, discount_type, discount_value, min_order, max_uses, valid_from, valid_until) VALUES (?,?,?,?,?,?,?,?)')
+await db.prepare('INSERT INTO vouchers (id, code, discount_type, discount_value, min_order, max_uses, valid_from, valid_until) VALUES (?,?,?,?,?,?,?,?)')
   .run(uuid(), 'HOMELINK10', 'percent', 10, 5000, 100, '2025-01-01', '2027-12-31');
-db.prepare('INSERT INTO vouchers (id, code, discount_type, discount_value, min_order, max_uses, valid_from, valid_until) VALUES (?,?,?,?,?,?,?,?)')
+await db.prepare('INSERT INTO vouchers (id, code, discount_type, discount_value, min_order, max_uses, valid_from, valid_until) VALUES (?,?,?,?,?,?,?,?)')
   .run(uuid(), 'SAVE500', 'fixed', 500, 3000, 50, '2025-01-01', '2027-12-31');
-db.prepare('INSERT INTO vouchers (id, code, discount_type, discount_value, min_order, max_uses, valid_from, valid_until) VALUES (?,?,?,?,?,?,?,?)')
+await db.prepare('INSERT INTO vouchers (id, code, discount_type, discount_value, min_order, max_uses, valid_from, valid_until) VALUES (?,?,?,?,?,?,?,?)')
   .run(uuid(), 'NEWHOME20', 'percent', 20, 10000, 30, '2025-01-01', '2027-12-31');
 
-db.prepare('INSERT INTO announcements (id, title, content, type) VALUES (?,?,?,?)')
+await db.prepare('INSERT INTO announcements (id, title, content, type) VALUES (?,?,?,?)')
   .run(uuid(), 'Summer AC Sale!', 'Get up to 20% off on all air conditioners this summer. Free installation on select models.', 'promo');
-db.prepare('INSERT INTO announcements (id, title, content, type) VALUES (?,?,?,?)')
+await db.prepare('INSERT INTO announcements (id, title, content, type) VALUES (?,?,?,?)')
   .run(uuid(), 'New Solar Panel Kits Available', 'Go green with our new 3kW and 5kW solar panel starter kits. Book installation today!', 'info');
 
 const galleryItems = [
@@ -124,7 +124,10 @@ const galleryItems = [
   { title: 'Plumbing Renovation', category: 'Plumbing', image: 'https://images.unsplash.com/photo-1521207418485-99c705420785?w=800' },
 ];
 const insertGal = db.prepare('INSERT INTO gallery (id, title, image, category, sort_order) VALUES (?,?,?,?,?)');
-galleryItems.forEach((g, i) => insertGal.run(uuid(), g.title, g.image, g.category, i));
+for (let i = 0; i < galleryItems.length; i++) {
+  const g = galleryItems[i];
+  await insertGal.run(uuid(), g.title, g.image, g.category, i);
+}
 
 const reviewers = [
   { name: ['Anna', 'Reyes'], email: 'anna.reyes@example.com', phone: '09171112222', address: 'Pasig City' },
@@ -132,15 +135,16 @@ const reviewers = [
   { name: ['Grace', 'Tan'], email: 'grace.tan@example.com', phone: '09173334444', address: 'Quezon City' },
   { name: ['Carlo', 'Mendoza'], email: 'carlo.mendoza@example.com', phone: '09174445555', address: 'Manila' },
 ];
-const reviewerIds = reviewers.map(r => {
+const reviewerIds = [];
+for (const r of reviewers) {
   const id = uuid();
-  db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, verified) VALUES (?,?,?,?,?,?,?,?,1)')
+  await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, verified) VALUES (?,?,?,?,?,?,?,?,1)')
     .run(id, r.email, hash, r.name[0], r.name[1], r.phone, r.address, 'customer');
-  return id;
-});
+  reviewerIds.push(id);
+}
 
 const productBySlug = Object.fromEntries(
-  db.prepare('SELECT id, slug FROM products').all().map(p => [p.slug, p.id])
+  (await db.prepare('SELECT id, slug FROM products').all()).map(p => [p.slug, p.id])
 );
 const reviews = [
   { user: reviewerIds[0], slug: 'daikin-inverter-1-5hp', rating: 5, comment: 'Cools the room fast and barely makes a sound. Installation crew was on time and cleaned up after themselves.' },
@@ -151,7 +155,7 @@ const reviews = [
   { user: reviewerIds[0], slug: 'samsung-fridge-2door', rating: 5, comment: 'Spacious and quiet. Delivery and installation were scheduled within two days of ordering.' },
 ];
 const insertReview = db.prepare('INSERT INTO reviews (id, user_id, product_id, rating, comment) VALUES (?,?,?,?,?)');
-reviews.forEach(r => insertReview.run(uuid(), r.user, productBySlug[r.slug], r.rating, r.comment));
+for (const r of reviews) await insertReview.run(uuid(), r.user, productBySlug[r.slug], r.rating, r.comment);
 
 console.log('Seed complete!');
 console.log('Admin: admin@homelink.com / admin123');

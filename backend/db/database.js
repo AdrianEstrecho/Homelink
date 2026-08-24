@@ -1,20 +1,88 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import pg from 'pg';
+import dotenv from 'dotenv';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database(path.join(__dirname, 'homelink.db'));
+// This module reads process.env.DATABASE_URL as soon as it's imported, which in an ESM
+// graph can happen before server.js's own dotenv.config() call runs (imported modules are
+// evaluated before the importing module's own top-level statements). Load env vars here too
+// so the pool always sees DATABASE_URL regardless of import order elsewhere.
+dotenv.config();
 
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const { Pool } = pg;
 
-// addresses moved from a single free-text blob to structured fields — drop the old shape so it's recreated below
-const legacyAddressCols = db.prepare("PRAGMA table_info(addresses)").all();
-if (legacyAddressCols.some(c => c.name === 'full_address')) {
-  db.exec('DROP TABLE addresses');
+// pg returns bigint (COUNT(*), SUM() over integer columns) as a string by default, to avoid
+// silent precision loss past Number.MAX_SAFE_INTEGER. This app's counts/sums never get
+// remotely close to that, and every dashboard stat (`c + 1`, `c === 0`, etc.) expects a plain
+// number the way better-sqlite3 always returned one — so parse OID 20 (int8) as a JS number.
+pg.types.setTypeParser(20, (val) => parseInt(val, 10));
+// Same story for numeric/decimal (OID 1700) — e.g. ROUND(AVG(rating), 1) — which pg also
+// returns as a string by default to avoid precision loss. better-sqlite3 always returned a
+// plain number here (products.js/wishlist.js's avg_rating), so match that.
+pg.types.setTypeParser(1700, (val) => parseFloat(val));
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+function toPgSql(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
 }
 
-db.exec(`
+// Wraps anything shaped like { query(text, params) } — the pool itself, or a single
+// checked-out client inside a transaction — behind the same db.prepare(sql).get/all/run()
+// shape the codebase already uses, so route handlers only need `await` + `async` added
+// rather than being restructured around pool.query(...).rows.
+function wrapExecutor(rawQuery) {
+  return {
+    prepare(sql) {
+      const text = toPgSql(sql);
+      return {
+        async get(...params) {
+          const { rows } = await rawQuery(text, params);
+          return rows[0];
+        },
+        async all(...params) {
+          const { rows } = await rawQuery(text, params);
+          return rows;
+        },
+        async run(...params) {
+          const result = await rawQuery(text, params);
+          return { changes: result.rowCount, lastInsertRowid: undefined };
+        },
+      };
+    },
+    // Multi-statement DDL: calling query(text) with no params array uses pg's simple query
+    // protocol, which (unlike the extended/parameterized protocol) allows several
+    // ';'-separated statements in one call — the same role better-sqlite3's db.exec() played.
+    async exec(sql) {
+      await rawQuery(sql);
+    },
+  };
+}
+
+const db = wrapExecutor((text, params) => pool.query(text, params));
+
+// Runs fn against a single checked-out client wrapped in BEGIN/COMMIT/ROLLBACK. Postgres
+// requires every statement in a transaction to share one connection, not the shared pool, so
+// fn receives its own {prepare} bound to that client rather than the module-level `db`.
+export async function withTransaction(fn) {
+  const client = await pool.connect();
+  const tx = wrapExecutor((text, params) => client.query(text, params));
+  try {
+    await client.query('BEGIN');
+    const result = await fn(tx);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+await db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
@@ -25,15 +93,32 @@ db.exec(`
     address TEXT,
     role TEXT DEFAULT 'customer' CHECK(role IN ('customer','employee','admin')),
     verified INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    notify_orders INTEGER DEFAULT 1,
+    notify_bookings INTEGER DEFAULT 1,
+    notify_promotions INTEGER DEFAULT 1,
+    position TEXT,
+    google_id TEXT,
+    apple_id TEXT,
+    reset_token TEXT,
+    reset_token_expires TEXT,
+    staff_code TEXT,
+    terms_accepted_at TEXT,
+    archived INTEGER DEFAULT 0,
+    salary DOUBLE PRECISION DEFAULT 0,
+    bank_name TEXT,
+    bank_account_number TEXT,
+    bank_account_name TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
   );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_staff_code ON users(staff_code) WHERE staff_code IS NOT NULL;
 
   CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
     description TEXT,
-    image TEXT
+    image TEXT,
+    parent_id TEXT REFERENCES categories(id)
   );
 
   CREATE TABLE IF NOT EXISTS products (
@@ -43,11 +128,15 @@ db.exec(`
     slug TEXT UNIQUE NOT NULL,
     description TEXT,
     specifications TEXT,
-    price REAL NOT NULL,
+    price DOUBLE PRECISION NOT NULL,
     stock INTEGER DEFAULT 0,
     image TEXT,
     featured INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    archived INTEGER DEFAULT 0,
+    brand TEXT,
+    discount DOUBLE PRECISION DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT now()
   );
 
   CREATE TABLE IF NOT EXISTS services (
@@ -56,23 +145,29 @@ db.exec(`
     slug TEXT UNIQUE NOT NULL,
     description TEXT,
     category TEXT NOT NULL,
-    base_price REAL NOT NULL,
-    duration_hours REAL DEFAULT 2,
-    image TEXT
+    base_price DOUBLE PRECISION NOT NULL,
+    duration_hours DOUBLE PRECISION DEFAULT 2,
+    image TEXT,
+    archived INTEGER DEFAULT 0,
+    discount DOUBLE PRECISION DEFAULT 0,
+    status TEXT DEFAULT 'active'
   );
 
   CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id),
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending','processing','shipped','delivered','cancelled')),
-    subtotal REAL NOT NULL,
-    discount REAL DEFAULT 0,
-    total REAL NOT NULL,
+    subtotal DOUBLE PRECISION NOT NULL,
+    discount DOUBLE PRECISION DEFAULT 0,
+    total DOUBLE PRECISION NOT NULL,
     payment_status TEXT DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','refunded')),
     payment_method TEXT,
     shipping_address TEXT,
     promo_code TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    cancel_reason TEXT,
+    paymongo_payment_intent_id TEXT,
+    paymongo_payment_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
   );
 
   CREATE TABLE IF NOT EXISTS order_items (
@@ -80,8 +175,29 @@ db.exec(`
     order_id TEXT REFERENCES orders(id) ON DELETE CASCADE,
     product_id TEXT REFERENCES products(id),
     quantity INTEGER NOT NULL,
-    price REAL NOT NULL
+    price DOUBLE PRECISION NOT NULL
   );
+
+  -- Holds a validated cart snapshot between "redirect out to PayMongo" and "webhook/poll
+  -- confirms payment" for card (3DS) and GCash checkouts, since the real order can't be
+  -- created — and stock can't be deducted — until the charge is actually confirmed.
+  CREATE TABLE IF NOT EXISTS pending_checkouts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id),
+    items TEXT NOT NULL,
+    subtotal DOUBLE PRECISION NOT NULL,
+    discount DOUBLE PRECISION DEFAULT 0,
+    total DOUBLE PRECISION NOT NULL,
+    payment_method TEXT NOT NULL CHECK(payment_method IN ('card','gcash')),
+    shipping_address TEXT,
+    promo_code TEXT,
+    applied_promo TEXT,
+    paymongo_payment_intent_id TEXT,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending','succeeded','failed')),
+    order_id TEXT REFERENCES orders(id),
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_pending_checkouts_intent ON pending_checkouts(paymongo_payment_intent_id);
 
   CREATE TABLE IF NOT EXISTS bookings (
     id TEXT PRIMARY KEY,
@@ -93,19 +209,44 @@ db.exec(`
     scheduled_time TEXT NOT NULL,
     address TEXT NOT NULL,
     notes TEXT,
-    price REAL NOT NULL,
-    discount REAL DEFAULT 0,
+    price DOUBLE PRECISION NOT NULL,
+    discount DOUBLE PRECISION DEFAULT 0,
     payment_status TEXT DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','refunded')),
     completion_notes TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    cancel_reason TEXT,
+    payment_method TEXT,
+    paymongo_payment_intent_id TEXT,
+    paymongo_payment_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
   );
+
+  -- Same purpose as pending_checkouts, but for service bookings: holds a validated booking
+  -- request between "redirect out to PayMongo" and "webhook/poll confirms payment" for card
+  -- (3DS) and GCash — the real booking row can't be created until the charge is confirmed.
+  CREATE TABLE IF NOT EXISTS pending_bookings (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id),
+    service_id TEXT REFERENCES services(id),
+    scheduled_date TEXT NOT NULL,
+    scheduled_time TEXT NOT NULL,
+    address TEXT NOT NULL,
+    notes TEXT,
+    price DOUBLE PRECISION NOT NULL,
+    discount DOUBLE PRECISION DEFAULT 0,
+    payment_method TEXT NOT NULL CHECK(payment_method IN ('card','gcash')),
+    paymongo_payment_intent_id TEXT,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending','succeeded','failed')),
+    booking_id TEXT REFERENCES bookings(id),
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_pending_bookings_intent ON pending_bookings(paymongo_payment_intent_id);
 
   CREATE TABLE IF NOT EXISTS vouchers (
     id TEXT PRIMARY KEY,
     code TEXT UNIQUE NOT NULL,
     discount_type TEXT CHECK(discount_type IN ('percent','fixed')),
-    discount_value REAL NOT NULL,
-    min_order REAL DEFAULT 0,
+    discount_value DOUBLE PRECISION NOT NULL,
+    min_order DOUBLE PRECISION DEFAULT 0,
     max_uses INTEGER DEFAULT 100,
     used_count INTEGER DEFAULT 0,
     valid_from TEXT,
@@ -119,7 +260,7 @@ db.exec(`
     content TEXT,
     type TEXT DEFAULT 'info',
     active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT now()
   );
 
   CREATE TABLE IF NOT EXISTS gallery (
@@ -141,7 +282,7 @@ db.exec(`
     province TEXT NOT NULL,
     postal_code TEXT NOT NULL,
     is_default INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT now()
   );
 
   CREATE TABLE IF NOT EXISTS payment_methods (
@@ -152,7 +293,7 @@ db.exec(`
     exp_month INTEGER NOT NULL,
     exp_year INTEGER NOT NULL,
     is_default INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT now()
   );
 
   CREATE TABLE IF NOT EXISTS reviews (
@@ -162,14 +303,14 @@ db.exec(`
     order_id TEXT REFERENCES orders(id),
     rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
     comment TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT now()
   );
 
   CREATE TABLE IF NOT EXISTS wishlists (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     product_id TEXT REFERENCES products(id) ON DELETE CASCADE,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT now()
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_wishlists_user_product ON wishlists(user_id, product_id);
 
@@ -180,8 +321,23 @@ db.exec(`
     subject TEXT NOT NULL,
     message TEXT NOT NULL,
     status TEXT DEFAULT 'open' CHECK(status IN ('open','resolved')),
-    created_at TEXT DEFAULT (datetime('now'))
+    ticket_number INTEGER,
+    created_at TIMESTAMPTZ DEFAULT now()
   );
+
+  -- Staff (general staff / inventory clerk) replies to a customer's ticket — kept as its
+  -- own table rather than a column so a ticket can carry a full back-and-forth thread.
+  -- Resolving a ticket doesn't write here at all; that goes through change_requests
+  -- (entity_type='support') the same way an installer's job completion does, since it
+  -- needs HR/admin sign-off before support_messages.status actually flips to 'resolved'.
+  CREATE TABLE IF NOT EXISTS support_replies (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL REFERENCES support_messages(id) ON DELETE CASCADE,
+    author_id TEXT NOT NULL REFERENCES users(id),
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_support_replies_message ON support_replies(message_id);
 
   CREATE TABLE IF NOT EXISTS audit_logs (
     id TEXT PRIMARY KEY,
@@ -191,7 +347,7 @@ db.exec(`
     entity_id TEXT,
     details TEXT,
     ip_address TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
   CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
@@ -203,7 +359,7 @@ db.exec(`
   -- entity doesn't exist yet.
   CREATE TABLE IF NOT EXISTS change_requests (
     id TEXT PRIMARY KEY,
-    entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking')),
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking','support')),
     entity_id TEXT,
     action TEXT NOT NULL CHECK(action IN ('create','update','delete','archive','restore')),
     payload TEXT,
@@ -211,8 +367,8 @@ db.exec(`
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
     reviewed_by TEXT REFERENCES users(id),
     review_note TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    reviewed_at TEXT
+    created_at TIMESTAMPTZ DEFAULT now(),
+    reviewed_at TIMESTAMPTZ
   );
   CREATE INDEX IF NOT EXISTS idx_change_requests_status ON change_requests(status);
 
@@ -226,7 +382,10 @@ db.exec(`
     category TEXT,
     status TEXT DEFAULT 'active' CHECK(status IN ('active','inactive')),
     notes TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    bank_name TEXT,
+    bank_account_number TEXT,
+    bank_account_name TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
   );
 
   -- Personal, per-recipient notifications (job assignments, new messages) — distinct from
@@ -240,7 +399,7 @@ db.exec(`
     message TEXT NOT NULL,
     link TEXT,
     is_read INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
 
@@ -253,94 +412,9 @@ db.exec(`
     recipient_id TEXT NOT NULL REFERENCES users(id),
     body TEXT NOT NULL,
     is_read INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMPTZ DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS idx_staff_messages_parties ON staff_messages(sender_id, recipient_id);
 `);
-
-function ensureColumn(table, column, definition) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
-  if (!cols.some(c => c.name === column)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  }
-}
-
-ensureColumn('users', 'notify_orders', 'INTEGER DEFAULT 1');
-ensureColumn('users', 'notify_bookings', 'INTEGER DEFAULT 1');
-ensureColumn('users', 'notify_promotions', 'INTEGER DEFAULT 1');
-ensureColumn('products', 'archived', 'INTEGER DEFAULT 0');
-ensureColumn('services', 'archived', 'INTEGER DEFAULT 0');
-ensureColumn('users', 'position', 'TEXT');
-ensureColumn('users', 'google_id', 'TEXT');
-ensureColumn('users', 'apple_id', 'TEXT');
-ensureColumn('users', 'reset_token', 'TEXT');
-ensureColumn('users', 'reset_token_expires', 'TEXT');
-ensureColumn('users', 'staff_code', 'TEXT');
-ensureColumn('users', 'terms_accepted_at', 'TEXT');
-ensureColumn('users', 'archived', 'INTEGER DEFAULT 0');
-ensureColumn('services', 'discount', 'REAL DEFAULT 0');
-ensureColumn('services', 'status', "TEXT DEFAULT 'active'");
-ensureColumn('categories', 'parent_id', 'TEXT REFERENCES categories(id)');
-ensureColumn('products', 'brand', 'TEXT');
-ensureColumn('products', 'discount', 'REAL DEFAULT 0');
-ensureColumn('products', 'status', "TEXT DEFAULT 'active'");
-ensureColumn('users', 'salary', 'REAL DEFAULT 0');
-ensureColumn('users', 'bank_name', 'TEXT');
-ensureColumn('users', 'bank_account_number', 'TEXT');
-ensureColumn('users', 'bank_account_name', 'TEXT');
-ensureColumn('suppliers', 'bank_name', 'TEXT');
-ensureColumn('suppliers', 'bank_account_number', 'TEXT');
-ensureColumn('suppliers', 'bank_account_name', 'TEXT');
-ensureColumn('orders', 'cancel_reason', 'TEXT');
-ensureColumn('bookings', 'cancel_reason', 'TEXT');
-
-// The customer_support position was retired in favor of Accounting/HR — any existing
-// employee still holding it moves to general_staff (which already shares support-message
-// access) rather than being left pointing at a position that no longer exists.
-db.exec("UPDATE users SET position = 'general_staff' WHERE position = 'customer_support'");
-
-// SQLite can't ALTER a CHECK constraint in place, so a database created before
-// 'employee'/'supplier'/'salary'/'payment'/'booking' entity types (and HR's 'archive'/'restore'
-// actions on them) were added to change_requests needs the table rebuilt to widen it. Guarded by
-// inspecting the stored schema so this only runs once per missing entity type.
-const changeRequestsSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='change_requests'").get()?.sql || '';
-if (changeRequestsSql && !changeRequestsSql.includes("'booking'")) {
-  db.exec(`
-    ALTER TABLE change_requests RENAME TO change_requests_old;
-    CREATE TABLE change_requests (
-      id TEXT PRIMARY KEY,
-      entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking')),
-      entity_id TEXT,
-      action TEXT NOT NULL CHECK(action IN ('create','update','delete','archive','restore')),
-      payload TEXT,
-      requested_by TEXT NOT NULL REFERENCES users(id),
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
-      reviewed_by TEXT REFERENCES users(id),
-      review_note TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      reviewed_at TEXT
-    );
-    INSERT INTO change_requests SELECT * FROM change_requests_old;
-    DROP TABLE change_requests_old;
-    CREATE INDEX IF NOT EXISTS idx_change_requests_status ON change_requests(status);
-  `);
-}
-
-// A staff code must be unique once assigned — enforced at the DB level so a
-// bug (e.g. two overlapping backfill runs during a --watch restart) fails
-// loudly instead of silently handing two people the same code.
-db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_staff_code ON users(staff_code) WHERE staff_code IS NOT NULL');
-
-// Backfill staff codes for admin/employee rows that predate the staff_code column.
-const STAFF_CODE_PREFIX = { inventory_clerk: 'IC', booking_coordinator: 'BC', installer: 'IN', accounting: 'AC', hr: 'HR', general_staff: 'GS' };
-const backfillStaffCodes = db.transaction(() => {
-  const uncoded = db.prepare("SELECT id, role, position FROM users WHERE role IN ('admin','employee') AND staff_code IS NULL ORDER BY created_at ASC").all();
-  for (const u of uncoded) {
-    const prefix = u.role === 'admin' ? 'SA' : (STAFF_CODE_PREFIX[u.position] || 'EMP');
-    const { c } = db.prepare('SELECT COUNT(*) as c FROM users WHERE staff_code LIKE ?').get(`${prefix}%`);
-    db.prepare('UPDATE users SET staff_code = ? WHERE id = ?').run(`${prefix}${String(c + 1).padStart(3, '0')}`, u.id);
-  }
-});
-backfillStaffCodes();
 
 export default db;

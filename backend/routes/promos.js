@@ -5,16 +5,16 @@ import { validateVoucher, getHolidayDiscount } from '../utils/promos.js';
 
 const router = Router();
 
-router.post('/validate-voucher', authenticate, (req, res) => {
+router.post('/validate-voucher', authenticate, async (req, res) => {
   const { code, amount } = req.body;
-  const result = validateVoucher(code, amount || 0);
+  const result = await validateVoucher(code, amount || 0);
   if (!result.valid) return res.status(400).json({ error: result.error });
   res.json({ valid: true, discountType: result.voucher.discount_type, discountValue: result.voucher.discount_value });
 });
 
-router.get('/active', authenticate, (req, res) => {
+router.get('/active', authenticate, async (req, res) => {
   const holiday = getHolidayDiscount();
-  const vouchers = db.prepare('SELECT code, discount_type, discount_value, min_order FROM vouchers WHERE active = 1 AND used_count < max_uses ORDER BY discount_value DESC LIMIT 5').all();
+  const vouchers = await db.prepare('SELECT code, discount_type, discount_value, min_order FROM vouchers WHERE active = 1 AND used_count < max_uses ORDER BY discount_value DESC LIMIT 5').all();
   res.json({ holiday, vouchers });
 });
 

@@ -3,63 +3,175 @@ import { v4 as uuid } from 'uuid';
 import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { getFirstTimeServiceDiscount, getHolidayDiscount, calculateDiscount } from '../utils/promos.js';
-import { bookingConfirmationEmail } from '../utils/email.js';
+import { fulfillBooking } from '../utils/bookingFulfillment.js';
+import { createPaymentIntent, retrievePaymentIntent } from '../utils/paymongo.js';
 import { logActivity } from '../utils/audit.js';
 
 const router = Router();
 
-router.get('/availability', (req, res) => {
+router.get('/availability', async (req, res) => {
   const { date } = req.query;
   const slots = ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'];
-  const booked = db.prepare('SELECT scheduled_time FROM bookings WHERE scheduled_date = ? AND status NOT IN (\'cancelled\')').all(date || new Date().toISOString().split('T')[0]);
+  const booked = await db.prepare('SELECT scheduled_time FROM bookings WHERE scheduled_date = ? AND status NOT IN (\'cancelled\')').all(date || new Date().toISOString().split('T')[0]);
   const bookedTimes = booked.map(b => b.scheduled_time);
   res.json(slots.map(time => ({ time, available: !bookedTimes.includes(time) })));
 });
 
-router.get('/discount-preview', authenticate, (req, res) => {
+router.get('/discount-preview', authenticate, async (req, res) => {
   res.json({
-    firstTime: getFirstTimeServiceDiscount(req.user.id),
+    firstTime: await getFirstTimeServiceDiscount(req.user.id),
     holiday: getHolidayDiscount(),
   });
 });
 
+// Shared by the bank-transfer path and /intent so both price a booking the exact same way.
+async function priceService(serviceId, userId) {
+  const service = await db.prepare('SELECT * FROM services WHERE id = ?').get(serviceId);
+  if (!service) return null;
+
+  let price = service.base_price;
+  let discount = 0;
+  const firstTime = await getFirstTimeServiceDiscount(userId);
+  if (firstTime) discount += calculateDiscount(price, firstTime);
+  const holiday = getHolidayDiscount();
+  if (holiday) discount += calculateDiscount(price - discount, holiday);
+  price = Math.max(0, price - discount);
+
+  return { service, price, discount };
+}
+
+// Reconstructs a bookings.create-shaped row from a pending_bookings row and fulfills it —
+// mirrors finalizePendingCheckout() in payments.js. Exported so the shared PayMongo webhook
+// handler can finalize card/GCash bookings the same way it finalizes product orders.
+export async function finalizePendingBooking(pending, req) {
+  if (pending.booking_id) {
+    return await db.prepare(`
+      SELECT b.*, s.name as service_name, s.category as service_category, s.image as service_image,
+      e.first_name as employee_first_name, e.last_name as employee_last_name
+      FROM bookings b JOIN services s ON b.service_id = s.id
+      LEFT JOIN users e ON b.employee_id = e.id
+      WHERE b.id = ?
+    `).get(pending.booking_id);
+  }
+
+  const booking = await fulfillBooking({
+    userId: pending.user_id,
+    serviceId: pending.service_id,
+    scheduledDate: pending.scheduled_date,
+    scheduledTime: pending.scheduled_time,
+    address: pending.address,
+    notes: pending.notes,
+    price: pending.price,
+    discount: pending.discount,
+    paymentMethod: pending.payment_method,
+    paymentStatus: 'paid',
+    paymongoPaymentIntentId: pending.paymongo_payment_intent_id,
+  }, req || { user: { id: pending.user_id }, ip: null });
+
+  await db.prepare("UPDATE pending_bookings SET status = 'succeeded', booking_id = ? WHERE id = ?").run(booking.id, pending.id);
+
+  return booking;
+}
+
+// Only bank transfer goes through this endpoint — it's manual/informational, so the booking
+// is created immediately with payment_status 'pending' until an admin verifies the deposit.
+// Card and GCash are real, gateway-verified charges and must go through /api/bookings/intent,
+// which only creates the booking once PayMongo confirms the payment actually succeeded.
 router.post('/', authenticate, async (req, res) => {
   try {
     const { serviceId, scheduledDate, scheduledTime, address, notes, paymentMethod } = req.body;
-    const service = db.prepare('SELECT * FROM services WHERE id = ?').get(serviceId);
-    if (!service) return res.status(404).json({ error: 'Service not found' });
+    if (paymentMethod !== 'bank') {
+      return res.status(400).json({ error: 'Use /api/bookings/intent for card or GCash checkout' });
+    }
 
-    let price = service.base_price;
-    let discount = 0;
-    const firstTime = getFirstTimeServiceDiscount(req.user.id);
-    if (firstTime) discount += calculateDiscount(price, firstTime);
-    const holiday = getHolidayDiscount();
-    if (holiday) discount += calculateDiscount(price - discount, holiday);
-    price = Math.max(0, price - discount);
+    const priced = await priceService(serviceId, req.user.id);
+    if (!priced) return res.status(404).json({ error: 'Service not found' });
 
-    const id = uuid();
-    db.prepare(`INSERT INTO bookings (id, user_id, service_id, scheduled_date, scheduled_time, address, notes, price, discount, payment_status)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, req.user.id, serviceId, scheduledDate, scheduledTime, address, notes || '', price, discount, 'paid');
-
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-    const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
-    await bookingConfirmationEmail(booking, service, user);
-
-    logActivity(req, 'booking.create', 'booking', id, {
-      customerName: `${user.first_name} ${user.last_name}`,
-      serviceName: service.name,
+    const booking = await fulfillBooking({
+      userId: req.user.id,
+      serviceId,
       scheduledDate,
-    });
+      scheduledTime,
+      address,
+      notes,
+      price: priced.price,
+      discount: priced.discount,
+      paymentMethod: 'bank',
+      paymentStatus: 'pending',
+    }, req);
 
-    res.status(201).json({ bookingId: id, price, discount, status: 'pending' });
+    res.status(201).json(booking);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/my', authenticate, (req, res) => {
-  const bookings = db.prepare(`
+router.post('/intent', authenticate, async (req, res) => {
+  try {
+    const { serviceId, scheduledDate, scheduledTime, address, notes, paymentMethod } = req.body;
+    if (!['card', 'gcash'].includes(paymentMethod)) {
+      return res.status(400).json({ error: 'paymentMethod must be "card" or "gcash"' });
+    }
+    if (!scheduledDate || !scheduledTime || !address) {
+      return res.status(400).json({ error: 'scheduledDate, scheduledTime, and address are required' });
+    }
+
+    const priced = await priceService(serviceId, req.user.id);
+    if (!priced) return res.status(404).json({ error: 'Service not found' });
+
+    const pendingId = uuid();
+    await db.prepare(`
+      INSERT INTO pending_bookings (id, user_id, service_id, scheduled_date, scheduled_time, address, notes, price, discount, payment_method)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+    `).run(pendingId, req.user.id, serviceId, scheduledDate, scheduledTime, address, notes || '', priced.price, priced.discount, paymentMethod);
+
+    const intent = await createPaymentIntent({
+      amount: Math.round(priced.price * 100),
+      paymentMethodAllowed: [paymentMethod],
+      description: `HomeLink service booking (checkout ${pendingId})`,
+      metadata: { pending_booking_id: pendingId, user_id: req.user.id },
+      idempotencyKey: pendingId,
+    });
+
+    await db.prepare('UPDATE pending_bookings SET paymongo_payment_intent_id = ? WHERE id = ?').run(intent.id, pendingId);
+
+    res.status(201).json({ pendingBookingId: pendingId, paymentIntentId: intent.id, clientKey: intent.clientKey });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/status/:pendingBookingId', authenticate, async (req, res) => {
+  try {
+    const pending = await db.prepare('SELECT * FROM pending_bookings WHERE id = ? AND user_id = ?').get(req.params.pendingBookingId, req.user.id);
+    if (!pending) return res.status(404).json({ error: 'Booking checkout not found' });
+
+    if (pending.status === 'succeeded') {
+      const booking = await finalizePendingBooking(pending, req);
+      return res.json({ status: 'succeeded', booking });
+    }
+    if (pending.status === 'failed') {
+      return res.json({ status: 'failed' });
+    }
+
+    const intent = await retrievePaymentIntent(pending.paymongo_payment_intent_id);
+    if (intent.status === 'succeeded') {
+      const booking = await finalizePendingBooking(pending, req);
+      return res.json({ status: 'succeeded', booking });
+    }
+    if (intent.status === 'awaiting_payment_method') {
+      await db.prepare("UPDATE pending_bookings SET status = 'failed' WHERE id = ?").run(pending.id);
+      return res.json({ status: 'failed', error: intent.lastPaymentError?.detail || 'Payment was declined' });
+    }
+    // 'processing' or 'awaiting_next_action' — still in flight, caller should keep polling
+    return res.json({ status: 'processing' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/my', authenticate, async (req, res) => {
+  const bookings = await db.prepare(`
     SELECT b.*, s.name as service_name, s.category as service_category, s.image as service_image,
     e.first_name as employee_first_name, e.last_name as employee_last_name
     FROM bookings b JOIN services s ON b.service_id = s.id
@@ -71,8 +183,8 @@ router.get('/my', authenticate, (req, res) => {
 
 // Only cancellable while still 'pending' — once a technician has been assigned and the
 // booking is 'confirmed' (or further along), self-service cancellation stops.
-router.put('/:id/cancel', authenticate, (req, res) => {
-  const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+router.put('/:id/cancel', authenticate, async (req, res) => {
+  const booking = await db.prepare('SELECT * FROM bookings WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!booking) return res.status(404).json({ error: 'Booking not found' });
   if (booking.status === 'cancelled') return res.status(400).json({ error: 'This booking has already been cancelled' });
   if (booking.status !== 'pending') return res.status(400).json({ error: 'This booking is already confirmed and can no longer be cancelled' });
@@ -80,10 +192,10 @@ router.put('/:id/cancel', authenticate, (req, res) => {
   const reason = (req.body?.reason || '').trim();
   if (!reason) return res.status(400).json({ error: 'A cancellation reason is required' });
 
-  db.prepare('UPDATE bookings SET status = ?, cancel_reason = ? WHERE id = ?').run('cancelled', reason, booking.id);
+  await db.prepare('UPDATE bookings SET status = ?, cancel_reason = ? WHERE id = ?').run('cancelled', reason, booking.id);
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-  logActivity(req, 'booking.cancel', 'booking', booking.id, {
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  await logActivity(req, 'booking.cancel', 'booking', booking.id, {
     customerName: `${user.first_name} ${user.last_name}`,
     reason,
   });
