@@ -35,14 +35,12 @@ export async function fulfillOrder({
     JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?
   `).all(orderId);
 
-  // The order is already committed and stock already deducted at this point, so a flaky
-  // SMTP connection must not turn a successful purchase into a 500 for the customer.
-  try {
-    const emailItems = fullItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price * i.quantity }));
-    await orderConfirmationEmail(orderRow, emailItems, user);
-  } catch (emailErr) {
+  // The order is already committed and stock already deducted at this point, so email sending
+  // must not block or fail the response to the customer — fire it and log failures async.
+  const emailItems = fullItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price * i.quantity }));
+  orderConfirmationEmail(orderRow, emailItems, user).catch((emailErr) => {
     console.error(`Failed to send order confirmation email for order ${orderId}:`, emailErr.message);
-  }
+  });
 
   await logActivity(actorReq, 'order.create', 'order', orderId, {
     customerName: `${user.first_name} ${user.last_name}`,

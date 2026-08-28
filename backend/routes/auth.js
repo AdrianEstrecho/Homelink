@@ -43,11 +43,11 @@ router.post('/register', async (req, res) => {
     await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, verified, terms_accepted_at) VALUES (?,?,?,?,?,?,?,1,?)')
       .run(id, email.toLowerCase(), hash, firstName, lastName, phone || '', address || '', new Date().toISOString());
 
-    await sendEmail({
+    sendEmail({
       to: email,
       subject: 'Welcome to HomeLink!',
       html: `<div style="font-family:Arial"><h2>Welcome to HomeLink, ${firstName}!</h2><p>Your account has been created. Start shopping for home improvement products and book professional services today.</p></div>`,
-    });
+    }).catch((emailErr) => console.error(`Failed to send welcome email to ${email}:`, emailErr.message));
 
     const token = jwt.sign({ id, email, role: 'customer' }, process.env.JWT_SECRET || 'homelink-super-secret-key-change-in-production', { expiresIn: '7d' });
     const created = await db.prepare('SELECT created_at FROM users WHERE id = ?').get(id);
@@ -111,11 +111,11 @@ router.post('/google', async (req, res) => {
       await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, google_id, verified, terms_accepted_at) VALUES (?,?,?,?,?,?,1,?)')
         .run(id, email, randomPassword, payload.given_name || 'HomeLink', payload.family_name || 'User', payload.sub, new Date().toISOString());
       user = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-      await sendEmail({
+      sendEmail({
         to: email,
         subject: 'Welcome to HomeLink!',
         html: `<div style="font-family:Arial"><h2>Welcome to HomeLink, ${user.first_name}!</h2><p>Your account was created using your Google sign-in. Start shopping for home improvement products and book professional services today.</p></div>`,
-      });
+      }).catch((emailErr) => console.error(`Failed to send welcome email to ${email}:`, emailErr.message));
     } else if (!user.google_id) {
       await db.prepare('UPDATE users SET google_id = ? WHERE id = ?').run(payload.sub, user.id);
     }
@@ -148,7 +148,7 @@ router.post('/forgot-password', async (req, res) => {
       const code = generateResetCode();
       const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       await db.prepare('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?').run(hashResetCode(code), expires, user.id);
-      await passwordResetEmail(user, code);
+      passwordResetEmail(user, code).catch((emailErr) => console.error(`Failed to send password reset email to ${user.email}:`, emailErr.message));
     }
 
     res.json({ message: 'If an account exists for that email, a verification code has been sent.' });

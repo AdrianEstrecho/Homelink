@@ -22,13 +22,11 @@ export async function fulfillBooking({
 
   const booking = await db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
 
-  // Already committed at this point, so a flaky SMTP connection must not turn a successful
-  // booking into a 500 for the customer.
-  try {
-    await bookingConfirmationEmail(booking, service, user);
-  } catch (emailErr) {
+  // Already committed at this point, so email sending must not block or fail the response
+  // to the customer — fire it and log failures async.
+  bookingConfirmationEmail(booking, service, user).catch((emailErr) => {
     console.error(`Failed to send booking confirmation email for booking ${id}:`, emailErr.message);
-  }
+  });
 
   await logActivity(actorReq, 'booking.create', 'booking', id, {
     customerName: `${user.first_name} ${user.last_name}`,
