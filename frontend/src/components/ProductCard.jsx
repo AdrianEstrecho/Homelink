@@ -1,21 +1,22 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ShoppingCart, Star, Check, Heart } from 'lucide-react';
 import { formatPrice } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '../context/ToastContext';
+import { useLoginPrompt } from '../hooks/useLoginPrompt';
 import SafeImage from './SafeImage';
 import StarRating from './account/StarRating';
 import ConfirmDialog from './ConfirmDialog';
 
 export default function ProductCard({ product }) {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const { addItem } = useCart();
   const { has, addItem: addWishlistItem, removeItem: removeWishlistItem } = useWishlist();
   const { showToast } = useToast();
+  const promptLogin = useLoginPrompt();
   const [confirmUnfavorite, setConfirmUnfavorite] = useState(false);
   const [confirmAddToCart, setConfirmAddToCart] = useState(false);
   const outOfStock = product.stock === 0;
@@ -36,7 +37,7 @@ export default function ProductCard({ product }) {
   };
 
   const handleAdd = () => {
-    if (user?.role !== 'customer') { navigate('/login'); return; }
+    if (user?.role !== 'customer') { promptLogin('Log in to add items to your cart.'); return; }
     if (wishlisted) { setConfirmAddToCart(true); return; }
     addToCart();
   };
@@ -48,7 +49,7 @@ export default function ProductCard({ product }) {
 
   const handleWishlistToggle = (e) => {
     e.preventDefault();
-    if (user?.role !== 'customer') { navigate('/login'); return; }
+    if (user?.role !== 'customer') { promptLogin('Log in to save items to your wishlist.'); return; }
     if (wishlisted) { setConfirmUnfavorite(true); return; }
     addWishlistItem(product);
   };

@@ -1,9 +1,21 @@
 import { Link } from 'react-router-dom';
 import { Wrench, Clock, ArrowRight } from 'lucide-react';
 import { formatPrice } from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import { useLoginPrompt } from '../hooks/useLoginPrompt';
 import SafeImage from './SafeImage';
 
 export default function ServiceCard({ service }) {
+  const { user } = useAuth();
+  const promptLogin = useLoginPrompt();
+
+  const handleBook = (e) => {
+    if (user?.role !== 'customer') {
+      e.preventDefault();
+      promptLogin('Log in to book a service.');
+    }
+  };
+
   return (
     <div className="card hover:border-brand-navy/20 hover:shadow-md group h-full flex flex-col">
       <div className="relative h-40 overflow-hidden bg-gray-100">
@@ -22,7 +34,7 @@ export default function ServiceCard({ service }) {
           <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> ~{Number(service.duration_hours).toFixed(1)}h</span>
           <span className="font-bold text-brand-orange text-base">{formatPrice(service.base_price)}</span>
         </div>
-        <Link to={`/services/${service.slug}/book`} className="flex items-center justify-center gap-2 w-full btn-primary text-sm py-2">
+        <Link to={`/services/${service.slug}/book`} onClick={handleBook} className="flex items-center justify-center gap-2 w-full btn-primary text-sm py-2">
           <Wrench className="w-4 h-4" /> Book Service <ArrowRight className="w-4 h-4" />
         </Link>
       </div>

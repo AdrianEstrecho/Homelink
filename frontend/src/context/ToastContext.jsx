@@ -13,7 +13,13 @@ export function ToastProvider({ children }) {
   const showToast = useCallback((toast) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const duration = toast.duration ?? 4000;
-    setToasts(prev => [...prev, { id, duration, ...toast }]);
+    // A dedupeKey replaces any toast already showing for the same key instead of
+    // stacking a new one on top — used for repeated clicks on a gated action (e.g.
+    // "login required") so the toast just resets rather than piling up.
+    setToasts(prev => {
+      const kept = toast.dedupeKey ? prev.filter(t => t.dedupeKey !== toast.dedupeKey) : prev;
+      return [...kept, { id, duration, ...toast }];
+    });
     setTimeout(() => dismissToast(id), duration);
     return id;
   }, [dismissToast]);

@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '../context/ToastContext';
+import { useLoginPrompt } from '../hooks/useLoginPrompt';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
 import ProductCard from '../components/ProductCard';
@@ -26,6 +27,7 @@ export default function ProductDetail() {
   const { addItem } = useCart();
   const { has, addItem: addWishlistItem, removeItem: removeWishlistItem } = useWishlist();
   const { showToast } = useToast();
+  const promptLogin = useLoginPrompt();
   const [reviews, setReviews] = useState(null);
   const [related, setRelated] = useState([]);
   const [tab, setTab] = useState('Description');
@@ -93,7 +95,7 @@ export default function ProductDetail() {
   };
 
   const handleAdd = () => {
-    if (user?.role !== 'customer') { navigate('/login'); return; }
+    if (user?.role !== 'customer') { promptLogin('Log in to add items to your cart.'); return; }
     if (wishlisted) { setConfirmAddToCart(true); return; }
     addToCart();
   };
@@ -104,14 +106,14 @@ export default function ProductDetail() {
   };
 
   const handleBuyNow = () => {
-    if (user?.role !== 'customer') { navigate('/login'); return; }
+    if (user?.role !== 'customer') { promptLogin('Log in to continue to checkout.'); return; }
     addItem(product, qty);
     if (wishlisted) removeWishlistItem(product.id);
     navigate('/checkout');
   };
 
   const handleWishlistToggle = () => {
-    if (user?.role !== 'customer') { navigate('/login'); return; }
+    if (user?.role !== 'customer') { promptLogin('Log in to save items to your wishlist.'); return; }
     if (wishlisted) { setConfirmUnfavorite(true); return; }
     addWishlistItem(product);
   };

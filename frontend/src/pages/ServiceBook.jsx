@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Calendar, Clock, ChevronRight, ShieldCheck, Award, Timer } from 'lucide-react';
+import { Calendar, Clock, ChevronRight, ShieldCheck, Award, Timer, Plus, X } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
 import AddressPicker from '../components/AddressPicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import ErrorState from '../components/ErrorState';
 import { Skeleton } from '../components/Skeleton';
 import SafeImage from '../components/SafeImage';
+import Select from '../components/Select';
 
 function calcDiscount(amount, promo) {
   if (!promo) return 0;
@@ -23,6 +24,9 @@ export default function ServiceBook() {
   const [loadError, setLoadError] = useState(false);
   const [discounts, setDiscounts] = useState(null);
 
+  const [extraServices, setExtraServices] = useState([]);
+  const [catalog, setCatalog] = useState([]);
+
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [slots, setSlots] = useState([]);
@@ -34,6 +38,7 @@ export default function ServiceBook() {
   const loadService = () => {
     setService(null);
     setLoadError(false);
+    setExtraServices([]);
     api.get(`/services/${slug}`).then(setService).catch(() => setLoadError(true));
   };
 
@@ -41,6 +46,10 @@ export default function ServiceBook() {
 
   useEffect(() => {
     api.get('/bookings/discount-preview').then(setDiscounts).catch(() => setDiscounts({ firstTime: null, holiday: null }));
+  }, []);
+
+  useEffect(() => {
+    api.get('/services').then(setCatalog).catch(() => setCatalog([]));
   }, []);
 
   useEffect(() => {
@@ -70,10 +79,27 @@ export default function ServiceBook() {
     );
   }
 
-  const base = service.base_price;
-  const firstTimeAmt = calcDiscount(base, discounts?.firstTime);
-  const holidayAmt = calcDiscount(base - firstTimeAmt, discounts?.holiday);
-  const total = Math.max(0, base - firstTimeAmt - holidayAmt);
+  const allServices = [service, ...extraServices];
+  const addableServices = catalog.filter(s => !allServices.some(a => a.id === s.id));
+
+  const addService = (id) => {
+    const found = catalog.find(s => s.id === id);
+    if (found) setExtraServices(prev => [...prev, found]);
+  };
+  const removeService = (id) => setExtraServices(prev => prev.filter(s => s.id !== id));
+
+  // Mirrors priceService() on the backend, applied per service in submission order: the
+  // first-time discount only ever lands on the first booking actually created (once that
+  // insert lands, the user no longer qualifies as first-time for the rest of the loop).
+  const lines = allServices.map((s, i) => {
+    const firstTimeAmt = i === 0 ? calcDiscount(s.base_price, discounts?.firstTime) : 0;
+    const holidayAmt = calcDiscount(s.base_price - firstTimeAmt, discounts?.holiday);
+    return { service: s, firstTimeAmt, holidayAmt, total: Math.max(0, s.base_price - firstTimeAmt - holidayAmt) };
+  });
+  const base = lines.reduce((sum, l) => sum + l.service.base_price, 0);
+  const firstTimeAmt = lines[0]?.firstTimeAmt || 0;
+  const holidayAmt = lines.reduce((sum, l) => sum + l.holidayAmt, 0);
+  const total = lines.reduce((sum, l) => sum + l.total, 0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -86,14 +112,16 @@ export default function ServiceBook() {
     setLoading(true);
     setError('');
     try {
-      await api.post('/bookings', {
-        serviceId: service.id,
-        scheduledDate: date,
-        scheduledTime: time,
-        address: selectedAddress.fullAddress,
-        notes,
-        paymentMethod: payment.method,
-      });
+      for (const s of allServices) {
+        await api.post('/bookings', {
+          serviceId: s.id,
+          scheduledDate: date,
+          scheduledTime: time,
+          address: selectedAddress.fullAddress,
+          notes,
+          paymentMethod: payment.method,
+        });
+      }
       navigate('/bookings');
     } catch (err) {
       setError(err.message);
@@ -120,6 +148,49 @@ export default function ServiceBook() {
           <section className="card p-6">
             <h2 className="flex items-center gap-2.5 text-sm font-semibold text-brand-ink mb-5">
               <span className="w-6 h-6 rounded-full bg-brand-navy text-white text-xs font-bold flex items-center justify-center shrink-0">1</span>
+              Services
+            </h2>
+            <div className="space-y-3">
+              {allServices.map((s, i) => (
+                <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
+                  <SafeImage src={s.image} alt={s.name} className="w-12 h-12 rounded-lg object-cover shrink-0 bg-gray-100" iconClassName="w-5 h-5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-brand-ink truncate">{s.name}</p>
+                    <p className="text-xs text-gray-400">{s.category} · ~{Number(s.duration_hours).toFixed(1)}h</p>
+                  </div>
+                  <span className="text-sm font-semibold text-brand-navy shrink-0">{formatPrice(s.base_price)}</span>
+                  {i > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => removeService(s.id)}
+                      aria-label={`Remove ${s.name}`}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {addableServices.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <label className="flex items-center gap-1.5 text-sm font-medium text-brand-ink mb-1.5">
+                  <Plus className="w-4 h-4 text-gray-400" /> Add Another Service
+                </label>
+                <Select
+                  value=""
+                  onChange={addService}
+                  placeholder="Choose a service to add..."
+                  options={addableServices.map(s => ({ value: s.id, label: `${s.name} — ${formatPrice(s.base_price)}` }))}
+                />
+              </div>
+            )}
+          </section>
+
+          <section className="card p-6">
+            <h2 className="flex items-center gap-2.5 text-sm font-semibold text-brand-ink mb-5">
+              <span className="w-6 h-6 rounded-full bg-brand-navy text-white text-xs font-bold flex items-center justify-center shrink-0">2</span>
               Date &amp; Time
             </h2>
             <div>
@@ -153,11 +224,11 @@ export default function ServiceBook() {
           </section>
 
           <section className="card p-6">
-            <AddressPicker ref={addressRef} stepNumber={2} title="Service Address" />
+            <AddressPicker ref={addressRef} stepNumber={3} title="Service Address" />
           </section>
 
           <section className="card p-6">
-            <PaymentMethodPicker ref={paymentRef} stepNumber={3} />
+            <PaymentMethodPicker ref={paymentRef} stepNumber={4} />
           </section>
 
           <section className="card p-6">
@@ -172,12 +243,17 @@ export default function ServiceBook() {
           <div className="card p-6">
             <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400 mb-4">Booking Summary</h2>
 
-            <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-              <SafeImage src={service.image} alt={service.name} className="w-14 h-14 rounded-lg object-cover shrink-0 bg-gray-100" iconClassName="w-5 h-5" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-brand-ink truncate">{service.name}</p>
-                <p className="text-xs text-gray-400">{service.category} · ~{Number(service.duration_hours).toFixed(1)}h</p>
-              </div>
+            <div className="space-y-3 pb-4 border-b border-gray-100">
+              {allServices.map(s => (
+                <div key={s.id} className="flex items-center gap-3">
+                  <SafeImage src={s.image} alt={s.name} className="w-14 h-14 rounded-lg object-cover shrink-0 bg-gray-100" iconClassName="w-5 h-5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-brand-ink truncate">{s.name}</p>
+                    <p className="text-xs text-gray-400">{s.category} · ~{Number(s.duration_hours).toFixed(1)}h</p>
+                  </div>
+                  <span className="text-xs font-medium text-gray-500 shrink-0">{formatPrice(s.base_price)}</span>
+                </div>
+              ))}
             </div>
 
             <div className="space-y-2 text-sm mt-4">
