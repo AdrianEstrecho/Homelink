@@ -43,13 +43,16 @@ router.get('/my', authenticate, async (req, res) => {
 
 router.get('/reviewable', authenticate, async (req, res) => {
   const products = await db.prepare(`
-    SELECT DISTINCT p.id, p.name, p.image, p.slug, oi.order_id
-    FROM order_items oi
-    JOIN orders o ON oi.order_id = o.id
-    JOIN products p ON oi.product_id = p.id
-    WHERE o.user_id = ?
-      AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.user_id = o.user_id AND r.product_id = p.id)
-    ORDER BY o.created_at DESC
+    SELECT id, name, image, slug, order_id FROM (
+      SELECT DISTINCT ON (p.id) p.id, p.name, p.image, p.slug, oi.order_id, o.created_at
+      FROM order_items oi
+      JOIN orders o ON oi.order_id = o.id
+      JOIN products p ON oi.product_id = p.id
+      WHERE o.user_id = ?
+        AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.user_id = o.user_id AND r.product_id = p.id)
+      ORDER BY p.id, o.created_at DESC
+    ) latest_per_product
+    ORDER BY created_at DESC
   `).all(req.user.id);
   res.json(products);
 });
