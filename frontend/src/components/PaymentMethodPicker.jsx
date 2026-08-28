@@ -10,6 +10,14 @@ const PAYMENT_METHODS = [
 
 const BANK_DETAILS = { bank: 'BDO Unibank', accountName: 'HomeLink Home Improvement Inc.', accountNumber: '0012 3456 7890' };
 
+const sanitizeGcashNumber = (raw) => {
+  let digits = raw.replace(/\D/g, '').slice(0, 11);
+  while (digits && !'09'.startsWith(digits) && !digits.startsWith('09')) {
+    digits = digits.slice(0, -1);
+  }
+  return digits;
+};
+
 const emptyCardForm = { cardNumber: '', expMonth: '', expYear: '', cvc: '' };
 const cardYearOptions = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() + i);
 
@@ -105,9 +113,10 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
           <label className="block text-sm font-medium mb-1.5 text-gray-700">GCash Mobile Number</label>
           <input
             value={gcashNumber}
-            onChange={e => { setGcashNumber(e.target.value); setGcashError(''); }}
+            onChange={e => { setGcashNumber(sanitizeGcashNumber(e.target.value)); setGcashError(''); }}
             placeholder="09171234567"
             inputMode="numeric"
+            maxLength={11}
             className="input-field max-w-xs"
           />
           {gcashError && <p className="text-red-600 text-sm mt-1.5">{gcashError}</p>}
