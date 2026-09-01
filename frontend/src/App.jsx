@@ -12,6 +12,7 @@ import Products from './pages/Products';
 import ProductDetail from './pages/ProductDetail';
 import Services from './pages/Services';
 import ServiceBook from './pages/ServiceBook';
+import BookingReturn from './pages/BookingReturn';
 import Cart from './pages/Cart';
 import Wishlist from './pages/Wishlist';
 import Checkout from './pages/Checkout';
@@ -142,6 +143,7 @@ export default function App() {
           <Route path="/products/:slug" element={<ProductDetail />} />
           <Route path="/services" element={<Services />} />
           <Route path="/services/:slug/book" element={<ProtectedRoute roles={['customer']}><ServiceBook /></ProtectedRoute>} />
+          <Route path="/bookings/return" element={<ProtectedRoute roles={['customer']}><BookingReturn /></ProtectedRoute>} />
           <Route path="/cart" element={<ProtectedRoute roles={['customer']}><Cart /></ProtectedRoute>} />
           <Route path="/wishlist" element={<ProtectedRoute roles={['customer']}><Wishlist /></ProtectedRoute>} />
           <Route path="/checkout" element={<ProtectedRoute roles={['customer']}><Checkout /></ProtectedRoute>} />

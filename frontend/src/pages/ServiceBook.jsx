@@ -2,12 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Calendar, Clock, ChevronRight, ShieldCheck, Award, Timer, Plus, X } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
+import { startBookingPayment } from '../utils/bookingCheckout';
+import { useAuth } from '../context/AuthContext';
 import AddressPicker from '../components/AddressPicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import ErrorState from '../components/ErrorState';
 import { Skeleton } from '../components/Skeleton';
 import SafeImage from '../components/SafeImage';
 import Select from '../components/Select';
+
+const BOOKING_QUEUE_KEY = 'homelink_booking_queue';
 
 function calcDiscount(amount, promo) {
   if (!promo) return 0;
@@ -17,6 +21,7 @@ function calcDiscount(amount, promo) {
 export default function ServiceBook() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const addressRef = useRef(null);
   const paymentRef = useRef(null);
 
@@ -112,15 +117,46 @@ export default function ServiceBook() {
     setLoading(true);
     setError('');
     try {
-      for (const s of allServices) {
-        await api.post('/bookings', {
-          serviceId: s.id,
-          scheduledDate: date,
-          scheduledTime: time,
-          address: selectedAddress.fullAddress,
-          notes,
-          paymentMethod: payment.method,
-        });
+      const bookingParams = allServices.map(s => ({
+        serviceId: s.id,
+        scheduledDate: date,
+        scheduledTime: time,
+        address: selectedAddress.fullAddress,
+        notes,
+      }));
+
+      // Only bank transfer is a plain, immediate POST — card and GCash are real, gateway-
+      // verified charges and have to go through the same PayMongo intent flow Checkout.jsx
+      // uses for orders (see startBookingPayment).
+      if (payment.method === 'bank') {
+        for (const bp of bookingParams) {
+          await api.post('/bookings', { ...bp, paymentMethod: 'bank' });
+        }
+        navigate('/bookings');
+        return;
+      }
+
+      if (payment.method === 'gcash') {
+        // GCash always redirects out to authorize, so any extra services picked via "Add
+        // Another Service" can't be charged in this same pass — queue them (plus the number,
+        // needed to mint a fresh token per charge) so BookingReturn can chain through one
+        // authorization at a time until the queue is empty.
+        if (bookingParams.length > 1) {
+          sessionStorage.setItem(BOOKING_QUEUE_KEY, JSON.stringify({
+            gcashNumber: payment.gcashNumber,
+            remaining: bookingParams.slice(1),
+          }));
+        }
+        await startBookingPayment({ ...bookingParams[0], paymentMethod: 'gcash', gcashNumber: payment.gcashNumber, user });
+        return;
+      }
+
+      // card — resolves inline unless PayMongo requires a 3DS step-up. Raw card details
+      // never get persisted anywhere, so if a redirect interrupts a multi-service booking,
+      // the remaining ones are simply left unbooked for the customer to submit again.
+      for (const bp of bookingParams) {
+        const result = await startBookingPayment({ ...bp, paymentMethod: 'card', cardDetails: payment.card, user });
+        if (result.type === 'redirect') return;
       }
       navigate('/bookings');
     } catch (err) {

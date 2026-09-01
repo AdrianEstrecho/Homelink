@@ -1,6 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+// Patches Express's router so a rejected promise in any `async (req, res) => {}` handler
+// below is forwarded to the error middleware instead of becoming an unhandled rejection —
+// which, on modern Node, crashes the whole process (taking down every route, not just the
+// one that errored) rather than just failing the one request. Must load before the routers.
+import 'express-async-errors';
 import './db/database.js';
 import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
