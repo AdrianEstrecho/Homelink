@@ -1,30 +1,22 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-const transporter = process.env.SMTP_USER
-  ? nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: false,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      // Nodemailer's defaults let a stuck connection hang for up to ~2 minutes; fail fast
-      // instead since callers treat email as best-effort and don't want to wait that long.
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 15_000,
-    })
-  : null;
+// Sends over HTTPS rather than a raw SMTP socket — several hosts (Render's free tier
+// included) block outbound SMTP ports to prevent abuse, which HTTPS-based delivery avoids.
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+// Resend's shared sandbox address works with no setup, but — until a sending domain is
+// verified under Domains in the Resend dashboard — can only deliver to the email address
+// the Resend account itself was created with, not to arbitrary recipients.
+const FROM = process.env.EMAIL_FROM || 'HomeLink <onboarding@resend.dev>';
 
 export async function sendEmail({ to, subject, html }) {
-  if (!transporter) {
+  if (!resend) {
     console.log(`[Email Mock] To: ${to} | Subject: ${subject}`);
     return { mock: true };
   }
-  return transporter.sendMail({
-    from: `"HomeLink" <${process.env.SMTP_USER}>`,
-    to,
-    subject,
-    html,
-  });
+  const { error } = await resend.emails.send({ from: FROM, to, subject, html });
+  if (error) throw new Error(error.message || 'Failed to send email');
+  return { sent: true };
 }
 
 function capitalize(s) {
