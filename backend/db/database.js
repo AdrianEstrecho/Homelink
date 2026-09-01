@@ -108,9 +108,27 @@ await db.exec(`
     bank_name TEXT,
     bank_account_number TEXT,
     bank_account_name TEXT,
+    two_factor_enabled INTEGER DEFAULT 0,
+    two_factor_code TEXT,
+    two_factor_code_expires TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_staff_code ON users(staff_code) WHERE staff_code IS NOT NULL;
+  -- CREATE TABLE IF NOT EXISTS skips column additions on a table that already exists in a
+  -- deployed database, so columns added after the table's first deploy need an explicit,
+  -- idempotent ALTER alongside it.
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled INTEGER DEFAULT 0;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_code TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_code_expires TEXT;
+
+  -- Holds a signup email-verification code between "Confirm Email" and account creation.
+  -- Keyed by email rather than user_id since no user row exists yet at this point.
+  CREATE TABLE IF NOT EXISTS signup_verifications (
+    email TEXT PRIMARY KEY,
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
 
   CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY,

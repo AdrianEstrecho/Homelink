@@ -37,10 +37,12 @@ export async function fulfillOrder({
 
   // The order is already committed and stock already deducted at this point, so email sending
   // must not block or fail the response to the customer — fire it and log failures async.
-  const emailItems = fullItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price * i.quantity }));
-  orderConfirmationEmail(orderRow, emailItems, user).catch((emailErr) => {
-    console.error(`Failed to send order confirmation email for order ${orderId}:`, emailErr.message);
-  });
+  if (user.notify_orders) {
+    const emailItems = fullItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price * i.quantity }));
+    orderConfirmationEmail(orderRow, emailItems, user).catch((emailErr) => {
+      console.error(`Failed to send order confirmation email for order ${orderId}:`, emailErr.message);
+    });
+  }
 
   await logActivity(actorReq, 'order.create', 'order', orderId, {
     customerName: `${user.first_name} ${user.last_name}`,

@@ -10,32 +10,83 @@ import AuthIllustration from '../components/AuthIllustration';
 const googleConfigured = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
 export default function Login() {
-  const { login, logout, loginWithGoogle } = useAuth();
+  const { login, verifyTwoFactor, logout, loginWithGoogle } = useAuth();
   // Same full-screen blue cover used when entering login from the homepage —
   // reused here so a successful sign-in gets the same ceremony, not just the
   // pre-auth navigation. It owns its own navigate() call, so this replaces
   // the old local fade-and-navigate.
   const coverTransitionTo = usePageTransition();
   const [form, setForm] = useState({ email: '', password: '' });
+  const [stage, setStage] = useState('credentials'); // 'credentials' | '2fa'
+  const [code, setCode] = useState('');
+  const [resent, setResent] = useState(false);
   const [error, setError] = useState('');
   const [notRegistered, setNotRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Set only when the pending 2FA challenge came from Google sign-in (no password on hand
+  // to resend with in that case) — Google's ID token stays valid for reuse within its window.
+  const [googleCredential, setGoogleCredential] = useState(null);
+
+  const finishLogin = (user) => {
+    if (user.role !== 'customer') {
+      logout();
+      throw new Error('Staff accounts sign in at the staff portal — press Ctrl+Alt+. to continue there.');
+    }
+    coverTransitionTo('/');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      const user = await login(form.email, form.password);
-      if (user.role !== 'customer') {
-        logout();
-        throw new Error('Staff accounts sign in at the staff portal — press Ctrl+Alt+. to continue there.');
+      const result = await login(form.email, form.password);
+      if (result.requires2FA) {
+        setStage('2fa');
+        setLoading(false);
+        return;
       }
-      coverTransitionTo('/');
+      finishLogin(result.user);
     } catch (err) {
       setError(err.message);
       setLoading(false);
     }
+  };
+
+  const handleVerify2FA = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const user = await verifyTwoFactor(form.email, code);
+      finishLogin(user);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError('');
+    setResent(false);
+    try {
+      if (googleCredential) {
+        await loginWithGoogle(googleCredential, { mode: 'login' });
+      } else {
+        await login(form.email, form.password);
+      }
+      setResent(true);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const backToCredentials = () => {
+    setStage('credentials');
+    setCode('');
+    setError('');
+    setResent(false);
+    setGoogleCredential(null);
   };
 
   const handleGoogleSuccess = async (credentialResponse) => {
@@ -43,7 +94,14 @@ export default function Login() {
     setNotRegistered(false);
     setLoading(true);
     try {
-      await loginWithGoogle(credentialResponse.credential, { mode: 'login' });
+      const result = await loginWithGoogle(credentialResponse.credential, { mode: 'login' });
+      if (result.requires2FA) {
+        setForm(f => ({ ...f, email: result.email }));
+        setGoogleCredential(credentialResponse.credential);
+        setStage('2fa');
+        setLoading(false);
+        return;
+      }
       coverTransitionTo('/');
     } catch (err) {
       if (err.code === 'not_registered') {
@@ -54,6 +112,44 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  if (stage === '2fa') {
+    return (
+      <AuthLayout
+        title="Verify it's you"
+        subtitle={`An authentication code has been sent to ${form.email}.`}
+        illustration={<AuthIllustration icon={Lock} badgeIcon={ShieldCheck} />}
+      >
+        <form onSubmit={handleVerify2FA} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Enter Code</label>
+            <input
+              required
+              autoFocus
+              value={code}
+              onChange={e => setCode(e.target.value.toUpperCase())}
+              maxLength={8}
+              className="input-field tracking-widest font-mono uppercase"
+              placeholder="XXXXXXXX"
+            />
+          </div>
+          <p className="text-sm text-gray-600">
+            Didn't receive a code?{' '}
+            <button type="button" onClick={handleResendCode} className="text-brand-orange font-semibold hover:underline">Resend</button>
+            {resent && <span className="text-green-600 ml-2">Sent!</span>}
+          </p>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+          <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 py-3 disabled:opacity-70 transition-opacity">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+            {loading ? 'Verifying...' : 'Verify'}
+          </button>
+          <button type="button" onClick={backToCredentials} className="w-full text-center text-sm text-gray-500 hover:text-brand-navy">
+            Back to login
+          </button>
+        </form>
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout

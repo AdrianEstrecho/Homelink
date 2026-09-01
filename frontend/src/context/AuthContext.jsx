@@ -16,9 +16,25 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const data = await api.post('/auth/login', { email, password });
+    if (data.requires2FA) return { requires2FA: true, email: data.email };
+    localStorage.setItem('homelink_token', data.token);
+    setUser(data.user);
+    return { requires2FA: false, user: data.user };
+  };
+
+  const verifyTwoFactor = async (email, code) => {
+    const data = await api.post('/auth/verify-2fa', { email, code });
     localStorage.setItem('homelink_token', data.token);
     setUser(data.user);
     return data.user;
+  };
+
+  const sendTwoFactorSetupCode = () => api.post('/auth/two-factor/send-code', {});
+
+  const setTwoFactorEnabled = async (enabled, code) => {
+    const data = await api.put('/auth/two-factor', { enabled, code });
+    setUser(prev => ({ ...prev, twoFactorEnabled: data.twoFactorEnabled }));
+    return data;
   };
 
   const register = async (form) => {
@@ -30,9 +46,10 @@ export function AuthProvider({ children }) {
 
   const loginWithGoogle = async (credential, { mode } = {}) => {
     const data = await api.post('/auth/google', { credential, mode });
+    if (data.requires2FA) return { requires2FA: true, email: data.email };
     localStorage.setItem('homelink_token', data.token);
     setUser(data.user);
-    return data.user;
+    return { requires2FA: false, user: data.user };
   };
 
   const logout = () => {
@@ -52,7 +69,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, loginWithGoogle, logout, updateProfile, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, verifyTwoFactor, register, loginWithGoogle, logout, updateProfile, refreshUser, setTwoFactorEnabled, sendTwoFactorSetupCode }}>
       {children}
     </AuthContext.Provider>
   );

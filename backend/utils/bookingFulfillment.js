@@ -24,9 +24,11 @@ export async function fulfillBooking({
 
   // Already committed at this point, so email sending must not block or fail the response
   // to the customer — fire it and log failures async.
-  bookingConfirmationEmail(booking, service, user).catch((emailErr) => {
-    console.error(`Failed to send booking confirmation email for booking ${id}:`, emailErr.message);
-  });
+  if (user.notify_bookings) {
+    bookingConfirmationEmail(booking, service, user).catch((emailErr) => {
+      console.error(`Failed to send booking confirmation email for booking ${id}:`, emailErr.message);
+    });
+  }
 
   await logActivity(actorReq, 'booking.create', 'booking', id, {
     customerName: `${user.first_name} ${user.last_name}`,

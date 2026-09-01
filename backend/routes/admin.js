@@ -8,6 +8,7 @@ import { generateStaffCode } from '../utils/staffCode.js';
 import { notifyUser } from '../utils/notify.js';
 import { createChangeRequest } from '../utils/changeRequests.js';
 import { formatTicketNo } from '../utils/ticketNumber.js';
+import { orderStatusEmail, bookingConfirmedEmail } from '../utils/email.js';
 
 const router = Router();
 router.use(authenticate);
@@ -458,6 +459,18 @@ router.put('/orders/:id/status', authorizeAdminOr('general_staff', 'inventory_cl
   const order = await db.prepare('SELECT status FROM orders WHERE id = ?').get(req.params.id);
   await db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(req.body.status, req.params.id);
   await logActivity(req, 'order.status_update', 'order', req.params.id, { from: order?.status, to: req.body.status });
+
+  // Only email on a real transition, so re-saving the same status doesn't re-notify the customer.
+  if (order && order.status !== req.body.status) {
+    const fullOrder = await db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(fullOrder.user_id);
+    if (user?.notify_orders) {
+      orderStatusEmail(fullOrder, user, req.body.status).catch((emailErr) => {
+        console.error(`Failed to send order status email for order ${req.params.id}:`, emailErr.message);
+      });
+    }
+  }
+
   res.json({ message: 'Status updated' });
 });
 
@@ -502,14 +515,20 @@ router.get('/bookings/stats', authorizeAdminOr('booking_coordinator'), async (re
 router.put('/bookings/:id', authorizeAdminOr('booking_coordinator', 'general_staff', 'inventory_clerk'), async (req, res) => {
   const { status, employeeId } = req.body;
   const booking = await db.prepare('SELECT status, employee_id FROM bookings WHERE id = ?').get(req.params.id);
+  // Assigning an employee (below) always confirms the booking too, overriding whatever
+  // status this first branch set — track the net effect so we know whether this request
+  // is the one that actually confirmed it, not just an unrelated re-save.
+  let finalStatus = booking?.status;
   if (status) {
     await db.prepare('UPDATE bookings SET status = ? WHERE id = ?').run(status, req.params.id);
     await logActivity(req, 'booking.status_update', 'booking', req.params.id, { from: booking?.status, to: status });
+    finalStatus = status;
   }
   if ('employeeId' in req.body) {
     if (employeeId) {
       await db.prepare('UPDATE bookings SET employee_id = ?, status = ? WHERE id = ?').run(employeeId, 'confirmed', req.params.id);
       await logActivity(req, 'booking.assign', 'booking', req.params.id, { fromEmployeeId: booking?.employee_id, toEmployeeId: employeeId });
+      finalStatus = 'confirmed';
       const jobDetails = await db.prepare(`
         SELECT s.name as service_name, u.first_name, u.last_name, b.scheduled_date, b.scheduled_time, b.address
         FROM bookings b JOIN services s ON b.service_id = s.id JOIN users u ON b.user_id = u.id
@@ -525,6 +544,23 @@ router.put('/bookings/:id', authorizeAdminOr('booking_coordinator', 'general_sta
       await logActivity(req, 'booking.unassign', 'booking', req.params.id, { fromEmployeeId: booking?.employee_id });
     }
   }
+
+  // Only email the customer once, on the transition into 'confirmed' — not on every
+  // later edit to an already-confirmed booking (e.g. an unrelated status re-save).
+  if (finalStatus === 'confirmed' && booking?.status !== 'confirmed') {
+    const fullBooking = await db.prepare('SELECT * FROM bookings WHERE id = ?').get(req.params.id);
+    const service = await db.prepare('SELECT * FROM services WHERE id = ?').get(fullBooking.service_id);
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(fullBooking.user_id);
+    const technician = fullBooking.employee_id
+      ? await db.prepare('SELECT first_name, last_name, phone FROM users WHERE id = ?').get(fullBooking.employee_id)
+      : null;
+    if (user?.notify_bookings) {
+      bookingConfirmedEmail(fullBooking, service, technician, user).catch((emailErr) => {
+        console.error(`Failed to send booking confirmed email for booking ${req.params.id}:`, emailErr.message);
+      });
+    }
+  }
+
   res.json({ message: 'Updated' });
 });
 
