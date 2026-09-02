@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 
-const API_BASE = 'https://api.paymongo.com/v1';
+const API_BASE = 'https://api.paymongo.com';
 
 function authHeader() {
   const secretKey = process.env.PAYMONGO_SECRET_KEY;
@@ -25,15 +25,15 @@ async function paymongoFetch(path, options = {}) {
   return data.data;
 }
 
-// Creates a PayMongo-hosted Checkout Session — PayMongo's own page collects the actual
+// Creates a PayMongo-hosted Checkout Session (v2) — PayMongo's own page collects the actual
 // payment details (card number, GCash login, QR scan) and renders whatever UI that method
-// needs, instead of us building it. Under the hood it mints a regular payment intent, so the
-// id returned here plugs into the same pending_checkouts/pending_bookings + webhook/poll flow
-// every payment method already uses — the only difference is the customer pays on checkout_url
-// instead of inline. `paymentMethodTypes` restricts the hosted page to the one method the
-// customer picked in our own PaymentMethodPicker (e.g. ['card'], ['gcash'], or ['qrph']).
-export async function createCheckoutSession({ amount, paymentMethodTypes, lineItemName, description, successUrl, cancelUrl, billingName, billingEmail, referenceNumber, metadata, idempotencyKey }) {
-  const session = await paymongoFetch('/checkout_sessions', {
+// needs, instead of us building it. Unlike v1, v2 defers creating the underlying payment
+// intent until the customer actually picks a method and pays, so the response here only ever
+// has an id + checkout_url — no payment intent to stash yet. `paymentMethodTypes` restricts
+// the hosted page to the one method the customer picked in our own PaymentMethodPicker (e.g.
+// ['card'], ['gcash'], or ['qrph']).
+export async function createCheckoutSessionV2({ amount, paymentMethodTypes, lineItemName, description, successUrl, cancelUrl, billingName, billingEmail, referenceNumber, metadata, idempotencyKey }) {
+  const session = await paymongoFetch('/v2/checkout_sessions', {
     method: 'POST',
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
     body: JSON.stringify({
@@ -57,19 +57,20 @@ export async function createCheckoutSession({ amount, paymentMethodTypes, lineIt
   return {
     id: session.id,
     checkoutUrl: session.attributes.checkout_url,
-    paymentIntentId: session.attributes.payment_intent.id,
-    status: session.attributes.status,
   };
 }
 
-export async function retrievePaymentIntent(paymentIntentId) {
-  const intent = await paymongoFetch(`/payment_intents/${paymentIntentId}`, { method: 'GET' });
+// v2 has no GET /v2/checkout_sessions/:id — retrieval still goes through the v1 path, which
+// works fine for sessions created via v2 (same underlying resource). Once paid, `payments`
+// holds one entry per attempt and `payment_intent` is populated (both null/empty before that).
+export async function retrieveCheckoutSession(checkoutSessionId) {
+  const session = await paymongoFetch(`/v1/checkout_sessions/${checkoutSessionId}`, { method: 'GET' });
+  const payments = session.attributes.payments || [];
   return {
-    id: intent.id,
-    status: intent.attributes.status,
-    nextAction: intent.attributes.next_action || null,
-    lastPaymentError: intent.attributes.last_payment_error || null,
-    payments: intent.attributes.payments || [],
+    id: session.id,
+    paid: payments.some(p => p.attributes.status === 'paid'),
+    paymentIntentId: session.attributes.payment_intent?.id || null,
+    payments,
   };
 }
 

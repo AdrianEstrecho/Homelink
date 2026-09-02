@@ -4,7 +4,7 @@ import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
-import { createCheckoutSession, retrievePaymentIntent, verifyWebhookSignature } from '../utils/paymongo.js';
+import { createCheckoutSessionV2, retrieveCheckoutSession, verifyWebhookSignature } from '../utils/paymongo.js';
 import { logActivity } from '../utils/audit.js';
 import { finalizePendingBooking } from './bookings.js';
 
@@ -64,12 +64,12 @@ async function finalizePendingCheckout(pending, req) {
   return order;
 }
 
-// Card, GCash, and QR Ph all go through PayMongo's hosted Checkout Session — the browser is
-// sent straight to PayMongo's checkout_url, which collects the actual payment details (card
+// Card, GCash, and QR Ph all go through PayMongo's hosted Checkout Session (v2) — the browser
+// is sent straight to PayMongo's checkout_url, which collects the actual payment details (card
 // number, GCash login, QR scan) itself. We never see or store raw card/GCash credentials this
-// way, which keeps HomeLink out of PCI-DSS scope entirely. The session mints its own payment
-// intent under the hood, so once that id is stashed on the pending_checkouts row, /status and
-// the webhook confirm it the same way regardless of which method was picked.
+// way, which keeps HomeLink out of PCI-DSS scope entirely. v2 defers creating the underlying
+// payment intent until the customer actually pays, so only the checkout_session_id is known
+// up front — /status polls that until a payment shows up as paid.
 router.post('/checkout-session', authenticate, async (req, res) => {
   try {
     const { items, shippingAddress, promoCode, paymentMethod } = req.body;
@@ -88,7 +88,7 @@ router.post('/checkout-session', authenticate, async (req, res) => {
 
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const session = await createCheckoutSession({
+    const session = await createCheckoutSessionV2({
       amount: Math.round(total * 100),
       paymentMethodTypes: [paymentMethod],
       lineItemName: 'HomeLink order',
@@ -102,7 +102,7 @@ router.post('/checkout-session', authenticate, async (req, res) => {
       idempotencyKey: pendingId,
     });
 
-    await db.prepare('UPDATE pending_checkouts SET paymongo_payment_intent_id = ? WHERE id = ?').run(session.paymentIntentId, pendingId);
+    await db.prepare('UPDATE pending_checkouts SET paymongo_checkout_session_id = ? WHERE id = ?').run(session.id, pendingId);
 
     res.status(201).json({ pendingCheckoutId: pendingId, checkoutUrl: session.checkoutUrl });
   } catch (err) {
@@ -123,16 +123,18 @@ router.get('/status/:pendingCheckoutId', authenticate, async (req, res) => {
       return res.json({ status: 'failed' });
     }
 
-    const intent = await retrievePaymentIntent(pending.paymongo_payment_intent_id);
-    if (intent.status === 'succeeded') {
+    const session = await retrieveCheckoutSession(pending.paymongo_checkout_session_id);
+    if (session.paid) {
+      if (session.paymentIntentId && session.paymentIntentId !== pending.paymongo_payment_intent_id) {
+        await db.prepare('UPDATE pending_checkouts SET paymongo_payment_intent_id = ? WHERE id = ?').run(session.paymentIntentId, pending.id);
+        pending.paymongo_payment_intent_id = session.paymentIntentId;
+      }
       const order = await finalizePendingCheckout(pending, req);
       return res.json({ status: 'succeeded', order });
     }
-    if (intent.status === 'awaiting_payment_method') {
-      await db.prepare("UPDATE pending_checkouts SET status = 'failed' WHERE id = ?").run(pending.id);
-      return res.json({ status: 'failed', error: intent.lastPaymentError?.detail || 'Payment was declined' });
-    }
-    // 'processing' or 'awaiting_next_action' — still in flight, caller should keep polling
+    // Not paid yet — PayMongo's hosted page lets the customer retry a declined/expired
+    // attempt in place rather than bouncing them back to us, so there's no reliable "failed"
+    // signal to poll for here. The frontend's own poll cap handles abandonment gracefully.
     return res.json({ status: 'processing' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -140,6 +142,15 @@ router.get('/status/:pendingCheckoutId', authenticate, async (req, res) => {
 });
 
 // Not mounted on this router — needs raw-body middleware ahead of express.json(), see server.js.
+//
+// PayMongo's envelope has shifted between webhook generations, so both shapes are checked
+// defensively rather than assumed: the classic form nests the event under
+// data.attributes.{type,data}, while checkout_session.* events put it directly under
+// data.{type,data}. Either way, `reference_number`/`metadata` on the checkout session is our
+// own pendingId, so this event type doesn't need a payment_intent_id already on file the way
+// the generic payment.* events do — it's the primary confirmation path for the v2 flow, with
+// /status polling (and, redundantly, the generic events once payment_intent_id is known) as
+// backup.
 export async function paymongoWebhookHandler(req, res) {
   try {
     const signature = req.headers['paymongo-signature'];
@@ -148,20 +159,37 @@ export async function paymongoWebhookHandler(req, res) {
     if (!valid) return res.status(401).json({ error: 'Invalid webhook signature' });
 
     const event = JSON.parse(rawBody);
-    const eventType = event?.data?.attributes?.type;
-    const eventPayload = event?.data?.attributes?.data;
+    const eventType = event?.data?.type || event?.data?.attributes?.type;
+    const eventPayload = event?.data?.data || event?.data?.attributes?.data;
 
-    // Logged deliberately: PayMongo's docs didn't yield a literal full webhook example, so
-    // this confirms the payment_intent_id path is right before we stop needing it. Remove
-    // once verified against a real test-mode delivery.
     console.log(`[PayMongo webhook] ${eventType}:`, JSON.stringify(eventPayload));
 
-    if (eventType === 'payment.paid' || eventType === 'payment.failed') {
+    if (eventType === 'checkout_session.payment.paid') {
+      const pendingId = eventPayload?.attributes?.reference_number || eventPayload?.attributes?.metadata?.pending_checkout_id || eventPayload?.attributes?.metadata?.pending_booking_id;
+      const paymentIntentId = eventPayload?.attributes?.payment_intent?.id || null;
+      if (!pendingId) return res.status(200).json({ received: true });
+
+      const pendingCheckout = await db.prepare('SELECT * FROM pending_checkouts WHERE id = ?').get(pendingId);
+      const pendingBooking = pendingCheckout ? null : await db.prepare('SELECT * FROM pending_bookings WHERE id = ?').get(pendingId);
+      const pending = pendingCheckout || pendingBooking;
+      if (!pending || pending.status !== 'pending') return res.status(200).json({ received: true });
+
+      if (paymentIntentId && paymentIntentId !== pending.paymongo_payment_intent_id) {
+        const table = pendingCheckout ? 'pending_checkouts' : 'pending_bookings';
+        await db.prepare(`UPDATE ${table} SET paymongo_payment_intent_id = ? WHERE id = ?`).run(paymentIntentId, pending.id);
+        pending.paymongo_payment_intent_id = paymentIntentId;
+      }
+
+      await (pendingCheckout ? finalizePendingCheckout(pending, null) : finalizePendingBooking(pending, null));
+    } else if (eventType === 'payment.paid' || eventType === 'payment.failed') {
       const paymentIntentId = eventPayload?.attributes?.payment_intent_id || eventPayload?.attributes?.payment_intent?.id;
       if (!paymentIntentId) return res.status(200).json({ received: true });
 
       // A payment intent belongs to exactly one of the two pending tables (orders vs. service
-      // bookings) — check both since the webhook fires for either kind of checkout.
+      // bookings) — check both since the webhook fires for either kind of checkout. Only
+      // reachable once paymongo_payment_intent_id has already been backfilled (by /status or
+      // by the checkout_session.payment.paid event above), since that's the only way we learn
+      // it under the deferred-intent v2 flow.
       const pendingCheckout = await db.prepare('SELECT * FROM pending_checkouts WHERE paymongo_payment_intent_id = ?').get(paymentIntentId);
       const pendingBooking = pendingCheckout ? null : await db.prepare('SELECT * FROM pending_bookings WHERE paymongo_payment_intent_id = ?').get(paymentIntentId);
       const pending = pendingCheckout || pendingBooking;

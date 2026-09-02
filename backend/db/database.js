@@ -128,6 +128,11 @@ await db.exec(`
   ALTER TABLE pending_bookings DROP CONSTRAINT IF EXISTS pending_bookings_payment_method_check;
   ALTER TABLE pending_bookings ADD CONSTRAINT pending_bookings_payment_method_check CHECK (payment_method IN ('card','gcash','qrph'));
 
+  -- Checkout Sessions v2 migration: the session id is known immediately (used to poll status),
+  -- the payment intent id only once the customer actually pays.
+  ALTER TABLE pending_checkouts ADD COLUMN IF NOT EXISTS paymongo_checkout_session_id TEXT;
+  ALTER TABLE pending_bookings ADD COLUMN IF NOT EXISTS paymongo_checkout_session_id TEXT;
+
   -- Holds a signup email-verification code between "Confirm Email" and account creation.
   -- Keyed by email rather than user_id since no user row exists yet at this point.
   CREATE TABLE IF NOT EXISTS signup_verifications (
@@ -203,9 +208,11 @@ await db.exec(`
     price DOUBLE PRECISION NOT NULL
   );
 
-  -- Holds a validated cart snapshot between "redirect out to PayMongo" and "webhook/poll
-  -- confirms payment" for card (3DS) and GCash checkouts, since the real order can't be
-  -- created — and stock can't be deducted — until the charge is actually confirmed.
+  -- Holds a validated cart snapshot between "redirect out to PayMongo's hosted Checkout
+  -- Session" and "webhook/poll confirms payment", since the real order can't be created —
+  -- and stock can't be deducted — until the charge is actually confirmed. checkout_session_id
+  -- is known immediately (used to poll); payment_intent_id only exists once the customer
+  -- actually pays (Checkout Sessions v2 defers creating it until then).
   CREATE TABLE IF NOT EXISTS pending_checkouts (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id),
@@ -217,12 +224,13 @@ await db.exec(`
     shipping_address TEXT,
     promo_code TEXT,
     applied_promo TEXT,
+    paymongo_checkout_session_id TEXT,
     paymongo_payment_intent_id TEXT,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending','succeeded','failed')),
     order_id TEXT REFERENCES orders(id),
     created_at TIMESTAMPTZ DEFAULT now()
   );
-  CREATE INDEX IF NOT EXISTS idx_pending_checkouts_intent ON pending_checkouts(paymongo_payment_intent_id);
+  CREATE INDEX IF NOT EXISTS idx_pending_checkouts_session ON pending_checkouts(paymongo_checkout_session_id);
 
   CREATE TABLE IF NOT EXISTS bookings (
     id TEXT PRIMARY KEY,
@@ -246,8 +254,8 @@ await db.exec(`
   );
 
   -- Same purpose as pending_checkouts, but for service bookings: holds a validated booking
-  -- request between "redirect out to PayMongo" and "webhook/poll confirms payment" for card
-  -- (3DS) and GCash — the real booking row can't be created until the charge is confirmed.
+  -- request between "redirect out to PayMongo's hosted Checkout Session" and "webhook/poll
+  -- confirms payment" — the real booking row can't be created until the charge is confirmed.
   CREATE TABLE IF NOT EXISTS pending_bookings (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id),
@@ -259,12 +267,13 @@ await db.exec(`
     price DOUBLE PRECISION NOT NULL,
     discount DOUBLE PRECISION DEFAULT 0,
     payment_method TEXT NOT NULL CHECK(payment_method IN ('card','gcash','qrph')),
+    paymongo_checkout_session_id TEXT,
     paymongo_payment_intent_id TEXT,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending','succeeded','failed')),
     booking_id TEXT REFERENCES bookings(id),
     created_at TIMESTAMPTZ DEFAULT now()
   );
-  CREATE INDEX IF NOT EXISTS idx_pending_bookings_intent ON pending_bookings(paymongo_payment_intent_id);
+  CREATE INDEX IF NOT EXISTS idx_pending_bookings_session ON pending_bookings(paymongo_checkout_session_id);
 
   CREATE TABLE IF NOT EXISTS vouchers (
     id TEXT PRIMARY KEY,

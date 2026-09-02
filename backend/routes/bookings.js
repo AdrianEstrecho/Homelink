@@ -4,7 +4,7 @@ import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { getFirstTimeServiceDiscount, getHolidayDiscount, calculateDiscount } from '../utils/promos.js';
 import { fulfillBooking } from '../utils/bookingFulfillment.js';
-import { createCheckoutSession, retrievePaymentIntent } from '../utils/paymongo.js';
+import { createCheckoutSessionV2, retrieveCheckoutSession } from '../utils/paymongo.js';
 import { logActivity } from '../utils/audit.js';
 
 const router = Router();
@@ -107,12 +107,12 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-// Card, GCash, and QR Ph all go through PayMongo's hosted Checkout Session — the browser is
-// sent straight to PayMongo's checkout_url, which collects the actual payment details (card
+// Card, GCash, and QR Ph all go through PayMongo's hosted Checkout Session (v2) — the browser
+// is sent straight to PayMongo's checkout_url, which collects the actual payment details (card
 // number, GCash login, QR scan) itself. We never see or store raw card/GCash credentials this
-// way, which keeps HomeLink out of PCI-DSS scope entirely. The session mints its own payment
-// intent under the hood, so once that id is stashed on the pending_bookings row, /status
-// confirms it the same way regardless of which method was picked.
+// way, which keeps HomeLink out of PCI-DSS scope entirely. v2 defers creating the underlying
+// payment intent until the customer actually pays, so only the checkout_session_id is known
+// up front — /status polls that until a payment shows up as paid.
 router.post('/checkout-session', authenticate, async (req, res) => {
   try {
     const { serviceId, scheduledDate, scheduledTime, address, notes, paymentMethod } = req.body;
@@ -134,7 +134,7 @@ router.post('/checkout-session', authenticate, async (req, res) => {
 
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const session = await createCheckoutSession({
+    const session = await createCheckoutSessionV2({
       amount: Math.round(priced.price * 100),
       paymentMethodTypes: [paymentMethod],
       lineItemName: priced.service.name,
@@ -148,7 +148,7 @@ router.post('/checkout-session', authenticate, async (req, res) => {
       idempotencyKey: pendingId,
     });
 
-    await db.prepare('UPDATE pending_bookings SET paymongo_payment_intent_id = ? WHERE id = ?').run(session.paymentIntentId, pendingId);
+    await db.prepare('UPDATE pending_bookings SET paymongo_checkout_session_id = ? WHERE id = ?').run(session.id, pendingId);
 
     res.status(201).json({ pendingBookingId: pendingId, checkoutUrl: session.checkoutUrl });
   } catch (err) {
@@ -169,16 +169,18 @@ router.get('/status/:pendingBookingId', authenticate, async (req, res) => {
       return res.json({ status: 'failed' });
     }
 
-    const intent = await retrievePaymentIntent(pending.paymongo_payment_intent_id);
-    if (intent.status === 'succeeded') {
+    const session = await retrieveCheckoutSession(pending.paymongo_checkout_session_id);
+    if (session.paid) {
+      if (session.paymentIntentId && session.paymentIntentId !== pending.paymongo_payment_intent_id) {
+        await db.prepare('UPDATE pending_bookings SET paymongo_payment_intent_id = ? WHERE id = ?').run(session.paymentIntentId, pending.id);
+        pending.paymongo_payment_intent_id = session.paymentIntentId;
+      }
       const booking = await finalizePendingBooking(pending, req);
       return res.json({ status: 'succeeded', booking });
     }
-    if (intent.status === 'awaiting_payment_method') {
-      await db.prepare("UPDATE pending_bookings SET status = 'failed' WHERE id = ?").run(pending.id);
-      return res.json({ status: 'failed', error: intent.lastPaymentError?.detail || 'Payment was declined' });
-    }
-    // 'processing' or 'awaiting_next_action' — still in flight, caller should keep polling
+    // Not paid yet — PayMongo's hosted page lets the customer retry a declined/expired
+    // attempt in place rather than bouncing them back to us, so there's no reliable "failed"
+    // signal to poll for here. The frontend's own poll cap handles abandonment gracefully.
     return res.json({ status: 'processing' });
   } catch (err) {
     res.status(500).json({ error: err.message });
