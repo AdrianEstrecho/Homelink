@@ -1,5 +1,6 @@
 import { forwardRef, useImperativeHandle, useState } from 'react';
 import { CreditCard, Smartphone, Landmark, QrCode, ShieldCheck, Copy, Check } from 'lucide-react';
+import Select from './Select';
 
 const PAYMENT_METHODS = [
   { value: 'card', label: 'Credit / Debit Card', description: 'Visa, Mastercard & more', icon: CreditCard },
@@ -8,16 +9,28 @@ const PAYMENT_METHODS = [
   { value: 'bank', label: 'Bank Transfer', description: 'Direct bank deposit', icon: Landmark },
 ];
 
-const ONLINE_NOTE = {
-  card: 'You’ll be taken to a secure PayMongo page to enter your card details.',
-  gcash: 'You’ll be taken to a secure PayMongo page to log in and authorize this payment.',
-  qrph: 'You’ll be taken to a secure PayMongo page to scan a QR code with GCash, Maya, or your bank’s app.',
+const BANK_DETAILS = { bank: 'BDO Unibank', accountName: 'HomeLink Home Improvement Inc.', accountNumber: '0012 3456 7890' };
+
+const sanitizeGcashNumber = (raw) => {
+  let digits = raw.replace(/\D/g, '').slice(0, 11);
+  while (digits && !'09'.startsWith(digits) && !digits.startsWith('09')) {
+    digits = digits.slice(0, -1);
+  }
+  return digits;
 };
 
-const BANK_DETAILS = { bank: 'BDO Unibank', accountName: 'HomeLink Home Improvement Inc.', accountNumber: '0012 3456 7890' };
+const emptyCardForm = { cardNumber: '', expMonth: '', expYear: '', cvc: '' };
+const cardYearOptions = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() + i);
 
 const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber = 2 }, ref) {
   const [method, setMethod] = useState('card');
+
+  const [cardForm, setCardForm] = useState(emptyCardForm);
+  const [cardError, setCardError] = useState('');
+
+  const [gcashNumber, setGcashNumber] = useState('');
+  const [gcashError, setGcashError] = useState('');
+
   const [bankCopied, setBankCopied] = useState(false);
 
   const handleCopyBank = () => {
@@ -28,9 +41,33 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
     }).catch(() => {});
   };
 
+  // Card number/CVC and the GCash number are collected here for a complete-feeling checkout
+  // page, but PayMongo's hosted page is what actually collects payment credentials — these
+  // values are validated for shape only and never sent anywhere (see handleConfirmOrder /
+  // startBookingPayment, which only forward `method`).
   useImperativeHandle(ref, () => ({
-    validate: () => ({ method }),
-  }), [method]);
+    validate: () => {
+      if (method === 'card') {
+        const digits = cardForm.cardNumber.replace(/\D/g, '');
+        if (digits.length < 12 || digits.length > 19) { setCardError('Enter a valid card number'); return null; }
+        const month = Number(cardForm.expMonth), year = Number(cardForm.expYear);
+        if (!month || month < 1 || month > 12 || !year) { setCardError('Enter a valid expiry date'); return null; }
+        if (!/^\d{3,4}$/.test(cardForm.cvc)) { setCardError('Enter a valid CVC'); return null; }
+        setCardError('');
+        return { method };
+      }
+      if (method === 'gcash') {
+        const digits = gcashNumber.replace(/\s/g, '');
+        if (!/^09\d{9}$/.test(digits)) {
+          setGcashError('Enter a valid GCash number (e.g. 09171234567).');
+          return null;
+        }
+        setGcashError('');
+        return { method };
+      }
+      return { method };
+    },
+  }), [method, cardForm, gcashNumber]);
 
   return (
     <div>
@@ -49,11 +86,52 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
         ))}
       </div>
 
-      {ONLINE_NOTE[method] && (
-        <div className="mt-5 pt-5 border-t border-gray-100">
-          <p className="flex items-center gap-1.5 text-sm text-gray-500">
-            <ShieldCheck className="w-3.5 h-3.5 text-brand-teal shrink-0" /> {ONLINE_NOTE[method]}
+      {method === 'card' && (
+        <div className="mt-5 pt-5 border-t border-gray-100 space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1.5 text-gray-700">Card Number</label>
+            <input value={cardForm.cardNumber} onChange={e => setCardForm({ ...cardForm, cardNumber: e.target.value })} placeholder="1234 5678 9012 3456" className="input-field" inputMode="numeric" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-gray-700">Month</label>
+              <Select value={cardForm.expMonth} onChange={expMonth => setCardForm({ ...cardForm, expMonth })} placeholder="MM" options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: String(i + 1).padStart(2, '0') }))} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-gray-700">Year</label>
+              <Select value={cardForm.expYear} onChange={expYear => setCardForm({ ...cardForm, expYear })} placeholder="YYYY" options={cardYearOptions.map(y => ({ value: String(y), label: String(y) }))} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5 text-gray-700">CVC</label>
+              <input value={cardForm.cvc} onChange={e => setCardForm({ ...cardForm, cvc: e.target.value.replace(/\D/g, '') })} placeholder="123" maxLength={4} className="input-field" inputMode="numeric" />
+            </div>
+          </div>
+          {cardError && <p className="text-red-600 text-sm">{cardError}</p>}
+          <p className="flex items-center gap-1.5 text-xs text-gray-500">
+            <ShieldCheck className="w-3.5 h-3.5 text-brand-teal" /> You'll confirm this on a secure PayMongo page next — HomeLink never sees or stores your card number or CVC.
           </p>
+        </div>
+      )}
+
+      {method === 'gcash' && (
+        <div className="mt-5 pt-5 border-t border-gray-100">
+          <label className="block text-sm font-medium mb-1.5 text-gray-700">GCash Mobile Number</label>
+          <input
+            value={gcashNumber}
+            onChange={e => { setGcashNumber(sanitizeGcashNumber(e.target.value)); setGcashError(''); }}
+            placeholder="09171234567"
+            inputMode="numeric"
+            maxLength={11}
+            className="input-field max-w-xs"
+          />
+          {gcashError && <p className="text-red-600 text-sm mt-1.5">{gcashError}</p>}
+          <p className="text-xs text-gray-400 mt-2">You'll be taken to a secure PayMongo page to log in and authorize this payment.</p>
+        </div>
+      )}
+
+      {method === 'qrph' && (
+        <div className="mt-5 pt-5 border-t border-gray-100">
+          <p className="text-sm text-gray-500">You'll be taken to a secure PayMongo page to scan a QR code with GCash, Maya, or your bank's app.</p>
         </div>
       )}
 
