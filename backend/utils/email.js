@@ -1,21 +1,32 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-// Sends over HTTPS rather than a raw SMTP socket — several hosts (Render's free tier
-// included) block outbound SMTP ports to prevent abuse, which HTTPS-based delivery avoids.
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+// Gmail SMTP requires the authenticated account itself (App Passwords don't work with the
+// regular account password — Google requires one generated under Account > Security >
+// 2-Step Verification > App Passwords). NOTE: this is raw SMTP, which several hosts
+// (Render's free tier included) block outbound for — if this is deployed there, email
+// delivery will silently fail in production even though it works locally.
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_APP_PASSWORD;
 
-// Resend's shared sandbox address works with no setup, but — until a sending domain is
-// verified under Domains in the Resend dashboard — can only deliver to the email address
-// the Resend account itself was created with, not to arbitrary recipients.
-const FROM = process.env.EMAIL_FROM || 'HomeLink <onboarding@resend.dev>';
+const transporter = (SMTP_USER && SMTP_PASS)
+  ? nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    })
+  : null;
+
+// Gmail rejects/rewrites a From address that isn't the authenticated account (or a verified
+// alias of it), so this defaults to the SMTP account itself rather than a generic address.
+const FROM = process.env.EMAIL_FROM || `HomeLink <${SMTP_USER}>`;
 
 export async function sendEmail({ to, subject, html }) {
-  if (!resend) {
+  if (!transporter) {
     console.log(`[Email Mock] To: ${to} | Subject: ${subject}`);
     return { mock: true };
   }
-  const { error } = await resend.emails.send({ from: FROM, to, subject, html });
-  if (error) throw new Error(error.message || 'Failed to send email');
+  await transporter.sendMail({ from: FROM, to, subject, html });
   return { sent: true };
 }
 
