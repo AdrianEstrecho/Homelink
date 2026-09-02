@@ -9,14 +9,14 @@ const router = Router();
 
 // Only bank transfer goes through this endpoint — it's manual/informational, so the order
 // is created immediately with payment_status 'pending' until an admin verifies the deposit
-// (see PUT /admin/orders/:id/payment-status). Card and GCash are real, gateway-verified
-// charges and must go through /api/payments/intent, which only creates the order once
-// PayMongo confirms the payment actually succeeded.
+// (see PUT /admin/orders/:id/payment-status). Card, GCash, and QR Ph are real, gateway-
+// verified charges and must go through /api/payments/checkout-session, which only creates
+// the order once PayMongo confirms the payment actually succeeded.
 router.post('/', authenticate, async (req, res) => {
   try {
     const { items, shippingAddress, paymentMethod, promoCode } = req.body;
     if (paymentMethod !== 'bank') {
-      return res.status(400).json({ error: 'Use /api/payments/intent for card or GCash checkout' });
+      return res.status(400).json({ error: 'Use /api/payments/checkout-session for card, GCash, or QR Ph checkout' });
     }
 
     const { orderItems, subtotal, discount, total, appliedPromo } = await validateAndPriceCart(items, promoCode);

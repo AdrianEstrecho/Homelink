@@ -2,23 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { Loader2, XCircle, CheckCircle2 } from 'lucide-react';
 import { api } from '../api/client';
-import { useAuth } from '../context/AuthContext';
 import { startBookingPayment } from '../utils/bookingCheckout';
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_ATTEMPTS = 30;
 const BOOKING_QUEUE_KEY = 'homelink_booking_queue';
 
-// PayMongo lands the browser back here after a GCash (or 3D-Secure card) redirect. The
-// actual payment confirmation is driven by PayMongo's webhook on the backend — this page
-// just polls /bookings/status until that's landed. If ServiceBook queued extra services
-// (multiple services booked with GCash, which always needs its own authorization per
-// charge), this continues the queue by kicking off the next one until it's empty.
+// PayMongo lands the browser back here after paying on its hosted Checkout Session page
+// (card, GCash, or QR Ph). The actual payment confirmation is driven by PayMongo's webhook on
+// the backend — this page just polls /bookings/status until that's landed. If ServiceBook
+// queued extra services (every method always redirects out, one payment at a time), this
+// continues the queue by kicking off the next one until it's empty.
 export default function BookingReturn() {
   const [searchParams] = useSearchParams();
   const pendingBookingId = searchParams.get('pbid');
   const navigate = useNavigate();
-  const { user } = useAuth();
 
   const [state, setState] = useState('processing'); // 'processing' | 'chaining' | 'succeeded' | 'failed' | 'timeout'
   const [booking, setBooking] = useState(null);
@@ -41,8 +39,8 @@ export default function BookingReturn() {
             const [next, ...rest] = queue.remaining;
             sessionStorage.setItem(BOOKING_QUEUE_KEY, JSON.stringify({ ...queue, remaining: rest }));
             setState('chaining');
-            await startBookingPayment({ ...next, paymentMethod: 'gcash', gcashNumber: queue.gcashNumber, user });
-            return; // navigates away to the next GCash authorization
+            await startBookingPayment({ ...next, paymentMethod: queue.paymentMethod });
+            return; // navigates away to the next payment authorization
           }
           sessionStorage.removeItem(BOOKING_QUEUE_KEY);
           setBooking(result.booking);

@@ -4,7 +4,7 @@ import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
-import { createPaymentIntent, retrievePaymentIntent, verifyWebhookSignature } from '../utils/paymongo.js';
+import { createCheckoutSession, retrievePaymentIntent, verifyWebhookSignature } from '../utils/paymongo.js';
 import { logActivity } from '../utils/audit.js';
 import { finalizePendingBooking } from './bookings.js';
 
@@ -30,9 +30,9 @@ async function finalizePendingCheckout(pending, req) {
 
   const orderItems = orderItemsFromSnapshot(pending.items);
 
-  // Stock may have sold out between /intent and now (payment can take minutes via 3DS/GCash
-  // redirect) — the charge is already captured, so we still fulfill and flag it for admin
-  // follow-up rather than stranding a customer who already paid.
+  // Stock may have sold out between /checkout-session and now (payment can take minutes on
+  // PayMongo's hosted page) — the charge is already captured, so we still fulfill and flag it
+  // for admin follow-up rather than stranding a customer who already paid.
   const oversold = [];
   for (const oi of orderItems) {
     const product = await db.prepare('SELECT stock FROM products WHERE id = ?').get(oi.product.id);
@@ -64,11 +64,17 @@ async function finalizePendingCheckout(pending, req) {
   return order;
 }
 
-router.post('/intent', authenticate, async (req, res) => {
+// Card, GCash, and QR Ph all go through PayMongo's hosted Checkout Session — the browser is
+// sent straight to PayMongo's checkout_url, which collects the actual payment details (card
+// number, GCash login, QR scan) itself. We never see or store raw card/GCash credentials this
+// way, which keeps HomeLink out of PCI-DSS scope entirely. The session mints its own payment
+// intent under the hood, so once that id is stashed on the pending_checkouts row, /status and
+// the webhook confirm it the same way regardless of which method was picked.
+router.post('/checkout-session', authenticate, async (req, res) => {
   try {
-    const { items, shippingAddress, paymentMethod, promoCode } = req.body;
-    if (!['card', 'gcash'].includes(paymentMethod)) {
-      return res.status(400).json({ error: 'paymentMethod must be "card" or "gcash"' });
+    const { items, shippingAddress, promoCode, paymentMethod } = req.body;
+    if (!['card', 'gcash', 'qrph'].includes(paymentMethod)) {
+      return res.status(400).json({ error: 'paymentMethod must be "card", "gcash", or "qrph"' });
     }
 
     const { orderItems, subtotal, discount, total, appliedPromo } = await validateAndPriceCart(items, promoCode);
@@ -80,17 +86,25 @@ router.post('/intent', authenticate, async (req, res) => {
       VALUES (?,?,?,?,?,?,?,?,?,?)
     `).run(pendingId, req.user.id, JSON.stringify(pricedItems), subtotal, discount, total, paymentMethod, shippingAddress, promoCode || null, appliedPromo);
 
-    const intent = await createPaymentIntent({
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const session = await createCheckoutSession({
       amount: Math.round(total * 100),
-      paymentMethodAllowed: [paymentMethod],
+      paymentMethodTypes: [paymentMethod],
+      lineItemName: 'HomeLink order',
       description: `HomeLink order (checkout ${pendingId})`,
+      successUrl: `${frontendUrl}/checkout/return?pcid=${pendingId}`,
+      cancelUrl: `${frontendUrl}/checkout`,
+      billingName: `${user.first_name} ${user.last_name}`,
+      billingEmail: user.email,
+      referenceNumber: pendingId,
       metadata: { pending_checkout_id: pendingId, user_id: req.user.id },
       idempotencyKey: pendingId,
     });
 
-    await db.prepare('UPDATE pending_checkouts SET paymongo_payment_intent_id = ? WHERE id = ?').run(intent.id, pendingId);
+    await db.prepare('UPDATE pending_checkouts SET paymongo_payment_intent_id = ? WHERE id = ?').run(session.paymentIntentId, pendingId);
 
-    res.status(201).json({ pendingCheckoutId: pendingId, paymentIntentId: intent.id, clientKey: intent.clientKey });
+    res.status(201).json({ pendingCheckoutId: pendingId, checkoutUrl: session.checkoutUrl });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

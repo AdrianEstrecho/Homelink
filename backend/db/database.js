@@ -121,6 +121,13 @@ await db.exec(`
   ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_code TEXT;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_code_expires TEXT;
 
+  -- Widen payment_method to allow 'qrph' (QR Ph, via PayMongo's hosted Checkout Session) on
+  -- databases created before it was added to the CHECK above.
+  ALTER TABLE pending_checkouts DROP CONSTRAINT IF EXISTS pending_checkouts_payment_method_check;
+  ALTER TABLE pending_checkouts ADD CONSTRAINT pending_checkouts_payment_method_check CHECK (payment_method IN ('card','gcash','qrph'));
+  ALTER TABLE pending_bookings DROP CONSTRAINT IF EXISTS pending_bookings_payment_method_check;
+  ALTER TABLE pending_bookings ADD CONSTRAINT pending_bookings_payment_method_check CHECK (payment_method IN ('card','gcash','qrph'));
+
   -- Holds a signup email-verification code between "Confirm Email" and account creation.
   -- Keyed by email rather than user_id since no user row exists yet at this point.
   CREATE TABLE IF NOT EXISTS signup_verifications (
@@ -206,7 +213,7 @@ await db.exec(`
     subtotal DOUBLE PRECISION NOT NULL,
     discount DOUBLE PRECISION DEFAULT 0,
     total DOUBLE PRECISION NOT NULL,
-    payment_method TEXT NOT NULL CHECK(payment_method IN ('card','gcash')),
+    payment_method TEXT NOT NULL CHECK(payment_method IN ('card','gcash','qrph')),
     shipping_address TEXT,
     promo_code TEXT,
     applied_promo TEXT,
@@ -251,7 +258,7 @@ await db.exec(`
     notes TEXT,
     price DOUBLE PRECISION NOT NULL,
     discount DOUBLE PRECISION DEFAULT 0,
-    payment_method TEXT NOT NULL CHECK(payment_method IN ('card','gcash')),
+    payment_method TEXT NOT NULL CHECK(payment_method IN ('card','gcash','qrph')),
     paymongo_payment_intent_id TEXT,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending','succeeded','failed')),
     booking_id TEXT REFERENCES bookings(id),

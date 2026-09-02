@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Check, X, Lock, ShieldCheck, Truck, Sparkles, ShoppingBag } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
-import { createPaymentMethod, attachPaymentIntent } from '../api/paymongo';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import AddressPicker from '../components/AddressPicker';
@@ -29,7 +28,6 @@ export default function Checkout() {
 
   const [error, setError] = useState('');
   const [pendingOrder, setPendingOrder] = useState(null);
-  const [paymentDetails, setPaymentDetails] = useState(null);
   const [placingOrder, setPlacingOrder] = useState(false);
   const [confirmedOrder, setConfirmedOrder] = useState(null);
 
@@ -69,7 +67,6 @@ export default function Checkout() {
     if (!payment) return;
 
     setError('');
-    setPaymentDetails(payment);
     setPendingOrder({
       items: items.map(i => ({ id: i.productId, name: i.name, image: i.image, price: i.price, quantity: i.quantity })),
       shipping_address: selectedAddress.fullAddress,
@@ -82,10 +79,10 @@ export default function Checkout() {
   };
 
   // Step 2: only now does the order actually get placed. Bank transfer creates the order
-  // immediately (payment_status 'pending', verified manually later). Card/GCash instead
-  // tokenize the payment details straight to PayMongo, then attach that token to a Payment
-  // Intent — the order itself is only created once PayMongo confirms the charge actually
-  // went through (either synchronously here, or via /checkout/return after a redirect).
+  // immediately (payment_status 'pending', verified manually later). Card, GCash, and QR Ph
+  // all hand off to PayMongo's hosted Checkout Session — PayMongo's own page collects the
+  // actual payment details, so the order itself is only created once PayMongo confirms the
+  // charge went through (via /checkout/return after the redirect back).
   const handleConfirmOrder = async () => {
     setPlacingOrder(true);
     setError('');
@@ -103,46 +100,13 @@ export default function Checkout() {
         return;
       }
 
-      const { pendingCheckoutId, paymentIntentId, clientKey } = await api.post('/payments/intent', {
+      const { checkoutUrl } = await api.post('/payments/checkout-session', {
         items: pendingOrder.items.map(i => ({ productId: i.id, quantity: i.quantity })),
         shippingAddress: pendingOrder.shipping_address,
         paymentMethod: pendingOrder.payment_method,
         promoCode: pendingOrder.promo_code || undefined,
       });
-
-      const billing = {
-        name: user ? `${user.firstName} ${user.lastName}` : undefined,
-        email: user?.email,
-        phone: pendingOrder.payment_method === 'gcash' ? paymentDetails.gcashNumber : user?.phone,
-      };
-
-      const paymentMethodId = pendingOrder.payment_method === 'card'
-        ? await createPaymentMethod({
-            type: 'card',
-            details: {
-              card_number: paymentDetails.card.cardNumber,
-              exp_month: paymentDetails.card.expMonth,
-              exp_year: paymentDetails.card.expYear,
-              cvc: paymentDetails.card.cvc,
-            },
-            billing,
-          })
-        : await createPaymentMethod({ type: 'gcash', billing });
-
-      const returnUrl = `${window.location.origin}/checkout/return?pcid=${pendingCheckoutId}`;
-      const attached = await attachPaymentIntent({ paymentIntentId, paymentMethodId, clientKey, returnUrl });
-
-      if (attached.status === 'succeeded') {
-        const result = await api.get(`/payments/status/${pendingCheckoutId}`);
-        clearCart();
-        setPendingOrder(null);
-        setConfirmedOrder(result.order);
-      } else if (attached.nextAction?.redirect?.url) {
-        // Leaving the page — CheckoutReturn picks up from here once PayMongo redirects back.
-        window.location.href = attached.nextAction.redirect.url;
-      } else {
-        setError(attached.lastPaymentError?.detail || 'Payment could not be completed. Please try again.');
-      }
+      window.location.href = checkoutUrl;
     } catch (err) {
       setError(err.message);
     } finally {

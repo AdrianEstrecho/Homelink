@@ -4,7 +4,7 @@ import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { getFirstTimeServiceDiscount, getHolidayDiscount, calculateDiscount } from '../utils/promos.js';
 import { fulfillBooking } from '../utils/bookingFulfillment.js';
-import { createPaymentIntent, retrievePaymentIntent } from '../utils/paymongo.js';
+import { createCheckoutSession, retrievePaymentIntent } from '../utils/paymongo.js';
 import { logActivity } from '../utils/audit.js';
 
 const router = Router();
@@ -24,7 +24,7 @@ router.get('/discount-preview', authenticate, async (req, res) => {
   });
 });
 
-// Shared by the bank-transfer path and /intent so both price a booking the exact same way.
+// Shared by the bank-transfer path and /checkout-session so both price a booking the same way.
 async function priceService(serviceId, userId) {
   const service = await db.prepare('SELECT * FROM services WHERE id = ?').get(serviceId);
   if (!service) return null;
@@ -42,7 +42,7 @@ async function priceService(serviceId, userId) {
 
 // Reconstructs a bookings.create-shaped row from a pending_bookings row and fulfills it —
 // mirrors finalizePendingCheckout() in payments.js. Exported so the shared PayMongo webhook
-// handler can finalize card/GCash bookings the same way it finalizes product orders.
+// handler can finalize card/GCash/QR Ph bookings the same way it finalizes product orders.
 export async function finalizePendingBooking(pending, req) {
   if (pending.booking_id) {
     return await db.prepare(`
@@ -75,13 +75,14 @@ export async function finalizePendingBooking(pending, req) {
 
 // Only bank transfer goes through this endpoint — it's manual/informational, so the booking
 // is created immediately with payment_status 'pending' until an admin verifies the deposit.
-// Card and GCash are real, gateway-verified charges and must go through /api/bookings/intent,
-// which only creates the booking once PayMongo confirms the payment actually succeeded.
+// Card, GCash, and QR Ph are real, gateway-verified charges and must go through
+// /api/bookings/checkout-session, which only creates the booking once PayMongo confirms the
+// payment actually succeeded.
 router.post('/', authenticate, async (req, res) => {
   try {
     const { serviceId, scheduledDate, scheduledTime, address, notes, paymentMethod } = req.body;
     if (paymentMethod !== 'bank') {
-      return res.status(400).json({ error: 'Use /api/bookings/intent for card or GCash checkout' });
+      return res.status(400).json({ error: 'Use /api/bookings/checkout-session for card, GCash, or QR Ph checkout' });
     }
 
     const priced = await priceService(serviceId, req.user.id);
@@ -106,11 +107,17 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-router.post('/intent', authenticate, async (req, res) => {
+// Card, GCash, and QR Ph all go through PayMongo's hosted Checkout Session — the browser is
+// sent straight to PayMongo's checkout_url, which collects the actual payment details (card
+// number, GCash login, QR scan) itself. We never see or store raw card/GCash credentials this
+// way, which keeps HomeLink out of PCI-DSS scope entirely. The session mints its own payment
+// intent under the hood, so once that id is stashed on the pending_bookings row, /status
+// confirms it the same way regardless of which method was picked.
+router.post('/checkout-session', authenticate, async (req, res) => {
   try {
     const { serviceId, scheduledDate, scheduledTime, address, notes, paymentMethod } = req.body;
-    if (!['card', 'gcash'].includes(paymentMethod)) {
-      return res.status(400).json({ error: 'paymentMethod must be "card" or "gcash"' });
+    if (!['card', 'gcash', 'qrph'].includes(paymentMethod)) {
+      return res.status(400).json({ error: 'paymentMethod must be "card", "gcash", or "qrph"' });
     }
     if (!scheduledDate || !scheduledTime || !address) {
       return res.status(400).json({ error: 'scheduledDate, scheduledTime, and address are required' });
@@ -125,17 +132,25 @@ router.post('/intent', authenticate, async (req, res) => {
       VALUES (?,?,?,?,?,?,?,?,?,?)
     `).run(pendingId, req.user.id, serviceId, scheduledDate, scheduledTime, address, notes || '', priced.price, priced.discount, paymentMethod);
 
-    const intent = await createPaymentIntent({
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const session = await createCheckoutSession({
       amount: Math.round(priced.price * 100),
-      paymentMethodAllowed: [paymentMethod],
+      paymentMethodTypes: [paymentMethod],
+      lineItemName: priced.service.name,
       description: `HomeLink service booking (checkout ${pendingId})`,
+      successUrl: `${frontendUrl}/bookings/return?pbid=${pendingId}`,
+      cancelUrl: `${frontendUrl}/services/${priced.service.slug}/book`,
+      billingName: `${user.first_name} ${user.last_name}`,
+      billingEmail: user.email,
+      referenceNumber: pendingId,
       metadata: { pending_booking_id: pendingId, user_id: req.user.id },
       idempotencyKey: pendingId,
     });
 
-    await db.prepare('UPDATE pending_bookings SET paymongo_payment_intent_id = ? WHERE id = ?').run(intent.id, pendingId);
+    await db.prepare('UPDATE pending_bookings SET paymongo_payment_intent_id = ? WHERE id = ?').run(session.paymentIntentId, pendingId);
 
-    res.status(201).json({ pendingBookingId: pendingId, paymentIntentId: intent.id, clientKey: intent.clientKey });
+    res.status(201).json({ pendingBookingId: pendingId, checkoutUrl: session.checkoutUrl });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

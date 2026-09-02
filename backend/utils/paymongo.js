@@ -25,23 +25,41 @@ async function paymongoFetch(path, options = {}) {
   return data.data;
 }
 
-export async function createPaymentIntent({ amount, paymentMethodAllowed, description, metadata, idempotencyKey }) {
-  const intent = await paymongoFetch('/payment_intents', {
+// Creates a PayMongo-hosted Checkout Session — PayMongo's own page collects the actual
+// payment details (card number, GCash login, QR scan) and renders whatever UI that method
+// needs, instead of us building it. Under the hood it mints a regular payment intent, so the
+// id returned here plugs into the same pending_checkouts/pending_bookings + webhook/poll flow
+// every payment method already uses — the only difference is the customer pays on checkout_url
+// instead of inline. `paymentMethodTypes` restricts the hosted page to the one method the
+// customer picked in our own PaymentMethodPicker (e.g. ['card'], ['gcash'], or ['qrph']).
+export async function createCheckoutSession({ amount, paymentMethodTypes, lineItemName, description, successUrl, cancelUrl, billingName, billingEmail, referenceNumber, metadata, idempotencyKey }) {
+  const session = await paymongoFetch('/checkout_sessions', {
     method: 'POST',
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
     body: JSON.stringify({
       data: {
         attributes: {
-          amount,
-          currency: 'PHP',
-          payment_method_allowed: paymentMethodAllowed,
+          cancel_url: cancelUrl,
+          success_url: successUrl,
+          billing: (billingName || billingEmail) ? { name: billingName, email: billingEmail } : undefined,
+          send_email_receipt: false,
+          show_description: true,
+          show_line_items: true,
+          line_items: [{ amount, currency: 'PHP', description: lineItemName, name: lineItemName, quantity: 1 }],
+          payment_method_types: paymentMethodTypes,
           description,
+          reference_number: referenceNumber,
           metadata,
         },
       },
     }),
   });
-  return { id: intent.id, clientKey: intent.attributes.client_key, status: intent.attributes.status };
+  return {
+    id: session.id,
+    checkoutUrl: session.attributes.checkout_url,
+    paymentIntentId: session.attributes.payment_intent.id,
+    status: session.attributes.status,
+  };
 }
 
 export async function retrievePaymentIntent(paymentIntentId) {

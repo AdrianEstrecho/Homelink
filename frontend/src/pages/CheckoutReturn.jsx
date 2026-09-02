@@ -9,7 +9,7 @@ import OrderDetailsModal from '../components/OrderDetailsModal';
 const POLL_INTERVAL_MS = 2000;
 const MAX_ATTEMPTS = 30;
 
-// PayMongo lands the browser back here after a GCash or 3D-Secure card redirect. The actual
+// PayMongo lands the browser back here after a GCash, QR Ph, or 3D-Secure card redirect. The actual
 // payment confirmation is driven by PayMongo's webhook on the backend — this page just polls
 // /payments/status until that's landed (or a bounded number of attempts pass), then reuses
 // the existing order confirmation UI.
