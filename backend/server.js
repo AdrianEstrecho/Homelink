@@ -31,15 +31,17 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// The web frontend's origin, plus the Angular mobile app's dev server and its
+// The web frontend's origin, plus the Angular mobile app's dev server, its
 // packaged Capacitor WebView origins (https://localhost is the Android default;
-// http://localhost covers an androidScheme override). Additive to the existing
-// single-origin config -- doesn't change the web app's CORS behavior.
+// http://localhost covers an androidScheme override), and its deployed web build
+// on Vercel. Additive to the existing single-origin config -- doesn't change the
+// web app's CORS behavior.
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:5173',
   'http://localhost:4200',
   'https://localhost',
   'http://localhost',
+  'https://homelink-mobile-app.vercel.app',
   ...(process.env.ADDITIONAL_CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
 ];
 app.use(cors({
