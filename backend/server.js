@@ -54,7 +54,9 @@ app.use(cors({
 // bytes of the request body, which express.json() would otherwise parse away.
 app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), paymongoWebhookHandler);
 
-app.use(express.json());
+// Default limit is 100kb, which a base64-encoded product/gallery image (allowed up to 5MB
+// client-side) blows through immediately — raise it so those uploads don't 413.
+app.use(express.json({ limit: '10mb' }));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', name: 'HomeLink API' }));
 
