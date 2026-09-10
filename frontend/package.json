@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@neondatabase/neon-js": "^0.7.0-beta",
+    "@react-oauth/google": "^0.13.5",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.469.0",
     "qrcode": "^1.5.4",
