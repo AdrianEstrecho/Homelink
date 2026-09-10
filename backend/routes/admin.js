@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'uuid';
-import db, { withTransaction } from '../db/database.js';
+import db from '../db/database.js';
 import { authenticate, authorize, authorizeAdminOr } from '../middleware/auth.js';
 import { logActivity } from '../utils/audit.js';
 import { generateStaffCode } from '../utils/staffCode.js';
@@ -13,8 +13,6 @@ import { orderStatusEmail, bookingConfirmedEmail } from '../utils/email.js';
 const router = Router();
 router.use(authenticate);
 
-// Shared by the admin dashboard and the Accounting payroll dashboard so both read the
-// same figures instead of duplicating the revenue queries.
 async function getRevenueStats() {
   const orderRevenue = await db.prepare("SELECT COALESCE(SUM(total),0) as t FROM orders WHERE payment_status='paid'").get();
   const bookingRevenue = await db.prepare("SELECT COALESCE(SUM(price),0) as t FROM bookings WHERE payment_status='paid'").get();
@@ -55,7 +53,7 @@ router.get('/dashboard', authorize('admin'), async (req, res) => {
 });
 
 // Users
-const EMPLOYEE_POSITIONS = ['inventory_clerk', 'booking_coordinator', 'installer', 'accounting', 'hr', 'general_staff'];
+const EMPLOYEE_POSITIONS = ['inventory_clerk', 'booking_coordinator', 'installer', 'hr', 'general_staff'];
 
 // general_staff and inventory_clerk have no User Management page of their own — this
 // stays open to them only because Bookings' technician-assignment dropdown queries it
@@ -705,7 +703,7 @@ router.put('/support-messages/:id/reopen', authorizeAdminOr('general_staff', 'in
 // HR's employee/supplier calls, and installers' booking-completion calls above are captured
 // here instead of applied immediately. Each entity type has its own reviewer position (an
 // admin can always review anything); entity types with no listed position — employee,
-// supplier, salary, payment — are admin-only, since there's no peer role to trust with those.
+// supplier — are admin-only, since there's no peer role to trust with those.
 // Approving performs the underlying insert/update/delete and logs it under the normal
 // product.*/service.*/voucher.*/user.*/supplier.*/booking.* actions (attributed to the
 // reviewer, who is the one actually authorizing it); rejecting it just marks the request
@@ -844,26 +842,6 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
       const supplier = await deleteSupplierById(cr.entity_id);
       logAction = 'supplier.delete'; logDetails = { name: supplier?.name };
     }
-  } else if (cr.entity_type === 'salary') {
-    const changes = Array.isArray(payload.changes) ? payload.changes : [];
-    const applied = [];
-    for (const c of changes) {
-      const employee = await db.prepare("SELECT email, salary FROM users WHERE id = ? AND role='employee'").get(c.id);
-      if (!employee) continue;
-      const salary = Math.max(0, Number(c.salary) || 0);
-      await db.prepare('UPDATE users SET salary = ? WHERE id = ?').run(salary, c.id);
-      applied.push({ id: c.id, email: employee.email, from: employee.salary, to: salary });
-    }
-    if (applied.length === 0) return res.status(404).json({ error: 'None of these employees exist anymore.' });
-    // Each employee's change is its own audit-log entry, so this bypasses the single
-    // logAction/logDetails path used below and logs directly instead.
-    for (const a of applied) {
-      await logActivity(req, 'salary.update', 'user', a.id, { email: a.email, from: a.from, to: a.to, authorizedBy: reviewer.staff_code, requestedBy: cr.requested_by });
-    }
-  } else if (cr.entity_type === 'payment') {
-    // The bank account was already saved onto the recipient's record when the payment was
-    // submitted — approving just authorizes the payout itself, logged against that recipient.
-    logAction = 'payment.pay'; logDetails = payload;
   } else if (cr.entity_type === 'booking') {
     const booking = await db.prepare('SELECT * FROM bookings WHERE id = ?').get(cr.entity_id);
     if (!booking) return res.status(404).json({ error: 'The booking no longer exists.' });
@@ -985,9 +963,7 @@ async function deleteSupplierById(id) {
 // writes) HR's create/update/delete are only *proposed*: they're queued as a change request
 // until admin approves them. Toggling active/inactive stays immediate for HR, same as the
 // equivalent voucher/product toggles, since it's low-risk and reversible.
-// Accounting gets read access too (not the write routes below) so it can pay suppliers
-// from the Payroll page without touching the HR-owned vendor-management writes.
-router.get('/suppliers', authorizeAdminOr('hr', 'accounting'), async (req, res) => {
+router.get('/suppliers', authorizeAdminOr('hr'), async (req, res) => {
   res.json(await db.prepare('SELECT * FROM suppliers ORDER BY status ASC, name ASC').all());
 });
 
@@ -1052,119 +1028,6 @@ router.get('/hr/stats', authorizeAdminOr('hr'), async (req, res) => {
     FROM users WHERE role='employee' ORDER BY created_at DESC LIMIT 5
   `).all();
   res.json({ totalEmployees, totalCustomers, positionBreakdown, supplierStats, recentHires });
-});
-
-// Payroll — Accounting sets base salaries and sees revenue vs. payroll cost. Salary is a
-// simple fixed monthly figure per employee rather than computed from bookings, so the
-// numbers here stay stable regardless of job volume.
-router.get('/payroll', authorizeAdminOr('accounting'), async (req, res) => {
-  const employees = await db.prepare(`
-    SELECT id, first_name, last_name, email, position, staff_code, salary, bank_name, bank_account_number, bank_account_name
-    FROM users WHERE role='employee' ORDER BY position ASC, first_name ASC
-  `).all();
-  res.json(employees);
-});
-
-// Salaries are saved as one batch rather than row-by-row — Accounting edits several
-// employees' figures on the page and submits them together. Same admin-immediate /
-// proposed-for-approval split as HR's employee and supplier writes above: for Accounting
-// it's only *proposed* as a single change request covering every changed employee, until
-// an admin reviews and approves it.
-router.put('/payroll/salaries', authorizeAdminOr('accounting'), async (req, res) => {
-  const submitted = Array.isArray(req.body.changes) ? req.body.changes : [];
-  if (submitted.length === 0) return res.status(400).json({ error: 'No changes submitted.' });
-
-  const employees = await db.prepare("SELECT id, email, first_name, last_name, salary FROM users WHERE role='employee'").all();
-  const byId = Object.fromEntries(employees.map(e => [e.id, e]));
-
-  const resolved = submitted
-    .map(c => ({ salary: Math.max(0, Number(c.salary) || 0), employee: byId[c.id] }))
-    .filter(c => c.employee && Number(c.employee.salary || 0) !== c.salary);
-
-  if (resolved.length === 0) return res.status(400).json({ error: 'No changes to submit.' });
-
-  if (req.user.role !== 'admin') {
-    const requestId = await createChangeRequest('salary', 'update', null, {
-      changes: resolved.map(c => ({ id: c.employee.id, salary: c.salary, fromSalary: c.employee.salary, employeeName: `${c.employee.first_name} ${c.employee.last_name}` })),
-    }, req.user.id);
-    return res.status(202).json({ pending: true, requestId, message: 'Submitted for admin approval.' });
-  }
-
-  await withTransaction(async (tx) => {
-    const update = tx.prepare('UPDATE users SET salary = ? WHERE id = ?');
-    for (const c of resolved) await update.run(c.salary, c.employee.id);
-  });
-  for (const c of resolved) {
-    await logActivity(req, 'salary.update', 'user', c.employee.id, { email: c.employee.email, from: c.employee.salary, to: c.salary });
-  }
-  res.json({ message: 'Updated', count: resolved.length });
-});
-
-// Paying an employee or supplier — captures/updates their bank account on file (saved
-// immediately, it's just contact-style data) and, for Accounting, proposes the actual
-// payout as a change request an admin must approve before it's considered sent. Admin's
-// own payouts go through immediately, same admin-immediate / proposed split as everywhere
-// else in this file.
-router.post('/payroll/pay', authorizeAdminOr('accounting'), async (req, res) => {
-  const { recipientType, recipientId, amount, bankName, accountNumber, accountName } = req.body;
-  if (!['employee', 'supplier'].includes(recipientType)) return res.status(400).json({ error: 'Invalid recipient type' });
-  const payAmount = Math.max(0, Number(amount) || 0);
-  if (payAmount <= 0) return res.status(400).json({ error: 'Enter an amount to pay.' });
-  if (!bankName || !accountNumber || !accountName) return res.status(400).json({ error: 'Bank account details are required.' });
-
-  const table = recipientType === 'employee' ? 'users' : 'suppliers';
-  const where = recipientType === 'employee' ? "id = ? AND role='employee'" : 'id = ?';
-  const recipient = await db.prepare(`SELECT * FROM ${table} WHERE ${where}`).get(recipientId);
-  if (!recipient) return res.status(404).json({ error: 'Recipient not found' });
-  const recipientName = recipientType === 'employee' ? `${recipient.first_name} ${recipient.last_name}` : recipient.name;
-
-  await db.prepare(`UPDATE ${table} SET bank_name = ?, bank_account_number = ?, bank_account_name = ? WHERE id = ?`)
-    .run(bankName, accountNumber, accountName, recipientId);
-
-  const payload = { recipientType, recipientName, amount: payAmount, bankName, accountNumber, accountName };
-
-  if (req.user.role !== 'admin') {
-    const requestId = await createChangeRequest('payment', 'create', recipientId, payload, req.user.id);
-    return res.status(202).json({ pending: true, requestId, message: 'Submitted for admin approval.' });
-  }
-
-  await logActivity(req, 'payment.pay', recipientType, recipientId, payload);
-  res.json({ message: 'Payment recorded' });
-});
-
-router.get('/payroll/stats', authorizeAdminOr('accounting'), async (req, res) => {
-  const { revenue, salesByMonth } = await getRevenueStats();
-  const employeeCount = (await db.prepare("SELECT COUNT(*) as c FROM users WHERE role='employee'").get()).c;
-  const totalPayroll = (await db.prepare("SELECT COALESCE(SUM(salary),0) as t FROM users WHERE role='employee'").get()).t;
-  res.json({ revenue, salesByMonth, totalPayroll, employeeCount, netRevenue: revenue - totalPayroll });
-});
-
-// Where the revenue Payroll is funded by actually comes from — Accounting's own
-// breakdown of paid orders/bookings by individual product and service, since the
-// dashboard total alone doesn't say which items are actually driving it.
-router.get('/payroll/revenue-sources', authorizeAdminOr('accounting'), async (req, res) => {
-  const productRevenue = (await db.prepare("SELECT COALESCE(SUM(total),0) as t FROM orders WHERE payment_status='paid'").get()).t;
-  const serviceRevenue = (await db.prepare("SELECT COALESCE(SUM(price),0) as t FROM bookings WHERE payment_status='paid'").get()).t;
-
-  const topProducts = await db.prepare(`
-    SELECT p.id, p.name, c.name as category_name, SUM(oi.quantity * oi.price) as revenue, SUM(oi.quantity) as units
-    FROM order_items oi
-    JOIN orders o ON oi.order_id = o.id
-    JOIN products p ON oi.product_id = p.id
-    LEFT JOIN categories c ON p.category_id = c.id
-    WHERE o.payment_status = 'paid'
-    GROUP BY p.id ORDER BY revenue DESC LIMIT 10
-  `).all();
-
-  const topServices = await db.prepare(`
-    SELECT s.id, s.name, s.category, SUM(b.price) as revenue, COUNT(*) as bookings
-    FROM bookings b
-    JOIN services s ON b.service_id = s.id
-    WHERE b.payment_status = 'paid'
-    GROUP BY s.id ORDER BY revenue DESC LIMIT 10
-  `).all();
-
-  res.json({ productRevenue, serviceRevenue, topProducts, topServices });
 });
 
 // Reports

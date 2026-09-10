@@ -11,7 +11,6 @@ const POSITION_LABELS = {
   inventory_clerk: 'Inventory Clerk',
   booking_coordinator: 'Booking Coordinator',
   installer: 'Installer / Technician',
-  accounting: 'Accounting',
   hr: 'Human Resources',
   general_staff: 'General Staff',
 };

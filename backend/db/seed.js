@@ -15,7 +15,6 @@ await db.exec('DELETE FROM reviews; DELETE FROM order_items; DELETE FROM pending
 const adminId = uuid();
 const emp1 = uuid();
 const emp2 = uuid();
-const accountingEmp = uuid();
 const hrEmp = uuid();
 const custId = uuid();
 const hash = await bcrypt.hash('password123', 10);
@@ -27,8 +26,6 @@ await db.prepare('INSERT INTO users (id, email, password, first_name, last_name,
   .run(emp1, 'juan.delacruz@homelink.com', hash, 'Juan', 'Delacruz', '09181111111', 'Manila', 'employee', 'EMP001');
 await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, staff_code, verified) VALUES (?,?,?,?,?,?,?,?,?,1)')
   .run(emp2, 'maria.santos@homelink.com', hash, 'Maria', 'Santos', '09182222222', 'Quezon City', 'employee', 'EMP002');
-await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, position, staff_code, salary, verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)')
-  .run(accountingEmp, 'accounting@homelink.com', hash, 'Ramon', 'Cruz', '09184444444', 'Pasig City', 'employee', 'accounting', 'AC001', 35000);
 await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, position, staff_code, salary, verified) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)')
   .run(hrEmp, 'hr@homelink.com', hash, 'Liza', 'Fernandez', '09185555555', 'Mandaluyong City', 'employee', 'hr', 'HR001', 32000);
 await db.prepare('INSERT INTO users (id, email, password, first_name, last_name, phone, address, role, verified) VALUES (?,?,?,?,?,?,?,?,1)')
@@ -164,6 +161,5 @@ for (const r of reviews) await insertReview.run(uuid(), r.user, productBySlug[r.
 console.log('Seed complete!');
 console.log('Admin: admin@homelink.com / admin123');
 console.log('Employee: juan.delacruz@homelink.com / password123');
-console.log('Accounting: accounting@homelink.com / password123');
 console.log('HR: hr@homelink.com / password123');
 console.log('Customer: customer@demo.com / password123');

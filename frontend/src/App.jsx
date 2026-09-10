@@ -47,9 +47,6 @@ import AdminVouchers from './pages/admin/Vouchers';
 import AdminSupportMessages from './pages/admin/SupportMessages';
 import AdminAuditLog from './pages/admin/AuditLog';
 import AdminProfile from './pages/admin/Profile';
-import PayrollDashboard from './pages/admin/PayrollDashboard';
-import Payroll from './pages/admin/Payroll';
-import RevenueSources from './pages/admin/RevenueSources';
 import HRDashboard from './pages/admin/HRDashboard';
 import EmployeeManagement from './pages/admin/EmployeeManagement';
 import HRArchivedEmployees from './pages/admin/HRArchivedEmployees';
@@ -180,9 +177,6 @@ export default function App() {
           <Route path="/admin/support" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff', 'inventory_clerk']} redirectTo="/admin/login"><AdminSupportMessages /></ProtectedRoute>} />
           <Route path="/admin/audit-log" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminAuditLog /></ProtectedRoute>} />
           <Route path="/admin/profile" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminProfile /></ProtectedRoute>} />
-          <Route path="/admin/payroll/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['accounting']} redirectTo="/admin/login"><PayrollDashboard /></ProtectedRoute>} />
-          <Route path="/admin/payroll" element={<ProtectedRoute roles={['admin', 'employee']} positions={['accounting']} redirectTo="/admin/login"><Payroll /></ProtectedRoute>} />
-          <Route path="/admin/payroll/revenue" element={<ProtectedRoute roles={['admin', 'employee']} positions={['accounting']} redirectTo="/admin/login"><RevenueSources /></ProtectedRoute>} />
           <Route path="/admin/hr/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><HRDashboard /></ProtectedRoute>} />
           <Route path="/admin/hr/employees" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><EmployeeManagement /></ProtectedRoute>} />
           <Route path="/admin/hr/employees/archived" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><HRArchivedEmployees /></ProtectedRoute>} />

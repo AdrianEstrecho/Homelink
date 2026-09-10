@@ -4,7 +4,6 @@ export const POSITION_LABELS = {
   inventory_clerk: 'Inventory Clerk',
   booking_coordinator: 'Booking Coordinator',
   installer: 'Installer / Technician',
-  accounting: 'Accounting',
   hr: 'Human Resources',
   general_staff: 'General Staff',
 };
@@ -52,13 +51,11 @@ export const ACTION_META = {
   'voucher.delete': { category: 'delete', entity: 'Voucher', describe: d => `Deleted voucher ${d.code}` },
   'announcement.create': { category: 'create', entity: 'Announcement', describe: d => `Created announcement "${d.title}"` },
   'announcement.delete': { category: 'delete', entity: 'Announcement', describe: d => `Deleted announcement "${d.title}"` },
-  'salary.update': { category: 'update', entity: 'User', describe: d => `Updated salary for ${d.email}: ${d.from ?? 0} → ${d.to}` },
   'supplier.create': { category: 'create', entity: 'Supplier', describe: d => `Added supplier "${d.name}"` },
   'supplier.update': { category: 'update', entity: 'Supplier', describe: d => `Updated supplier "${d.name}"` },
   'supplier.activate': { category: 'update', entity: 'Supplier', describe: d => `Activated supplier "${d.name}"` },
   'supplier.deactivate': { category: 'update', entity: 'Supplier', describe: d => `Deactivated supplier "${d.name}"` },
   'supplier.delete': { category: 'delete', entity: 'Supplier', describe: d => `Deleted supplier "${d.name}"` },
-  'payment.pay': { category: 'create', entity: 'Payment', describe: d => `Paid ${d.recipientName} ₱${Number(d.amount || 0).toLocaleString('en-PH')} via bank transfer (${d.bankName} ••••${(d.accountNumber || '').slice(-4)})` },
 };
 
 export const CATEGORY_STYLE = {
@@ -69,15 +66,26 @@ export const CATEGORY_STYLE = {
   archive: 'bg-purple-100 text-purple-800',
 };
 
+// The backend used to return SQLite's naive "YYYY-MM-DD HH:MM:SS" (no timezone), so this
+// forced UTC by hand. Postgres (via `pg`) now hands back TIMESTAMPTZ columns as real Date
+// objects, which serialize over JSON as full ISO strings already carrying a "Z" — blindly
+// appending another one turned those into an invalid date that threw on `.toISOString()`.
+// Only add the "Z" when the string doesn't already carry timezone info.
+export function parseUtc(sqliteUtc) {
+  if (!sqliteUtc) return null;
+  const isTagged = /[zZ]|[+-]\d{2}:?\d{2}$/.test(sqliteUtc);
+  return new Date(isTagged ? sqliteUtc : `${sqliteUtc.replace(' ', 'T')}Z`);
+}
+
 export function formatDateTime(sqliteUtc) {
   if (!sqliteUtc) return '—';
-  const date = new Date(`${sqliteUtc.replace(' ', 'T')}Z`);
+  const date = parseUtc(sqliteUtc);
   return date.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 export function timeAgo(sqliteUtc) {
   if (!sqliteUtc) return '—';
-  const date = new Date(`${sqliteUtc.replace(' ', 'T')}Z`);
+  const date = parseUtc(sqliteUtc);
   const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
   if (seconds < 60) return 'Just now';
   const minutes = Math.floor(seconds / 60);

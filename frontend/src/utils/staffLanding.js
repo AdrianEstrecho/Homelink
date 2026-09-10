@@ -6,7 +6,6 @@ export const POSITION_LANDING = {
   inventory_clerk: '/admin/products/dashboard',
   general_staff: '/admin/orders/dashboard',
   booking_coordinator: '/admin/bookings/dashboard',
-  accounting: '/admin/payroll/dashboard',
   hr: '/admin/hr/dashboard',
 };
 

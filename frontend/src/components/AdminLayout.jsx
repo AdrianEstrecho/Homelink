@@ -2,13 +2,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Wrench, ShoppingCart, Calendar, Users, Ticket, ShieldCheck, Settings,
-  Search, Bell, Home, LogOut, History, LifeBuoy, X, User, ClipboardCheck, Wallet, Truck, UserCog, PieChart,
+  Search, Bell, Home, LogOut, History, LifeBuoy, X, User, ClipboardCheck, Truck, UserCog,
   HardHat, MessageSquare, CheckCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import ConfirmDialog from './ConfirmDialog';
-import { ACTION_META, timeAgo } from '../data/auditActions';
+import { ACTION_META, timeAgo, parseUtc } from '../data/auditActions';
 
 const NAV_SECTIONS = [
   {
@@ -28,8 +28,6 @@ const NAV_SECTIONS = [
     label: 'Management',
     items: [
       { to: '/admin/approvals', icon: ClipboardCheck, label: 'Approvals' },
-      { to: '/admin/payroll', icon: Wallet, label: 'Payroll' },
-      { to: '/admin/payroll/revenue', icon: PieChart, label: 'Revenue Sources' },
       { to: '/admin/technicians', icon: HardHat, label: 'Technicians' },
       { to: '/admin/messages', icon: MessageSquare, label: 'Messages' },
       { to: '/admin/hr/employees', icon: UserCog, label: 'Employees' },
@@ -66,7 +64,6 @@ const POSITION_NAV_PATHS = {
   inventory_clerk: ['/admin/products', '/admin/services', '/admin/orders', '/admin/bookings', '/admin/vouchers', '/admin/support', '/admin/approvals'],
   general_staff: ['/admin/products', '/admin/services', '/admin/orders', '/admin/bookings', '/admin/vouchers', '/admin/support'],
   booking_coordinator: ['/admin/bookings', '/admin/technicians', '/admin/messages', '/admin/approvals'],
-  accounting: ['/admin/payroll', '/admin/payroll/revenue'],
   hr: ['/admin/hr/employees', '/admin/suppliers', '/admin/approvals'],
   installer: ['/admin/messages'],
 };
@@ -86,7 +83,6 @@ const POSITION_DASHBOARD_ITEM = {
   inventory_clerk: { to: '/admin/products/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
   general_staff: { to: '/admin/orders/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
   booking_coordinator: { to: '/admin/bookings/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
-  accounting: { to: '/admin/payroll/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
   hr: { to: '/admin/hr/dashboard', icon: LayoutDashboard, label: 'Dashboard', end: true },
   // Installer has a scoped nav (just Messages, via POSITION_NAV_PATHS) but the job-assignment
   // page is still its actual landing page, so it reuses EMPLOYEE_DASHBOARD_ITEM below rather
@@ -276,7 +272,7 @@ export default function AdminLayout({ children, title, subtitle }) {
       description: meta && log.details ? meta.describe(log.details) : log.action,
       time: timeAgo(log.created_at),
       link,
-      unread: !seenAt || new Date(`${log.created_at.replace(' ', 'T')}Z`).toISOString() > seenAt,
+      unread: !seenAt || parseUtc(log.created_at).toISOString() > seenAt,
     };
   }), [activity, seenAt]);
 

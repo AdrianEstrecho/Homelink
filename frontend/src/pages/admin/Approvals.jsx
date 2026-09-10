@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Package, Wrench, Ticket, Check, X, Clock, Users, Truck, Wallet, Send, Calendar, LifeBuoy } from 'lucide-react';
+import { Package, Wrench, Ticket, Check, X, Clock, Users, Truck, Calendar, LifeBuoy } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useAuth } from '../../context/AuthContext';
-import { POSITION_LABELS } from '../../data/auditActions';
+import { POSITION_LABELS, parseUtc } from '../../data/auditActions';
 import { formatTicketNo } from '../../utils/ticketNumber';
 
 const ENTITY_META = {
@@ -13,20 +13,16 @@ const ENTITY_META = {
   voucher: { label: 'Voucher', Icon: Ticket },
   employee: { label: 'Employee', Icon: Users },
   supplier: { label: 'Supplier', Icon: Truck },
-  salary: { label: 'Salary', Icon: Wallet },
-  payment: { label: 'Payment', Icon: Send },
   booking: { label: 'Job Completion', Icon: Calendar },
   support: { label: 'Support Ticket', Icon: LifeBuoy },
 };
 
 // Which positions this page's requests can come from — mirrors the entity types above
 // (general_staff/inventory_clerk propose products/services/vouchers, HR proposes
-// employee/supplier changes, Accounting proposes salary/payment changes, installers
-// propose job completions).
+// employee/supplier changes, installers propose job completions).
 const REQUESTER_FILTERS = [
   { key: '', label: 'All' },
   { key: 'inventory_clerk', label: 'Inventory Clerk' },
-  { key: 'accounting', label: 'Accounting' },
   { key: 'hr', label: 'HR' },
   { key: 'general_staff', label: 'General Staff' },
   { key: 'installer', label: 'Installer' },
@@ -48,7 +44,7 @@ const TABS = [
 
 function timeAgo(sqliteUtc) {
   if (!sqliteUtc) return '—';
-  const date = new Date(`${sqliteUtc.replace(' ', 'T')}Z`);
+  const date = parseUtc(sqliteUtc);
   const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
   if (seconds < 60) return 'Just now';
   const minutes = Math.floor(seconds / 60);
@@ -74,16 +70,6 @@ function describePayload(cr, current) {
     if (cr.action === 'restore') return who ? `Restore ${who}` : 'User no longer exists';
     if (cr.action === 'delete') return who ? `Permanently delete ${who}` : 'User no longer exists';
     return '';
-  }
-
-  if (cr.entity_type === 'salary') {
-    const changes = Array.isArray(p.changes) ? p.changes : [];
-    return changes.map(c => `${c.employeeName || 'Employee'}: ${formatPrice(c.fromSalary ?? 0)} → ${formatPrice(c.salary ?? 0)}`).join(', ');
-  }
-
-  if (cr.entity_type === 'payment') {
-    const last4 = p.accountNumber ? `••••${String(p.accountNumber).slice(-4)}` : '';
-    return `Pay ${p.recipientName || 'recipient'} (${p.recipientType}) ${formatPrice(p.amount ?? 0)} — ${p.bankName || 'bank'} ${last4}`;
   }
 
   if (cr.entity_type === 'booking') {

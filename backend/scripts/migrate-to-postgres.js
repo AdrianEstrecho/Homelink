@@ -40,7 +40,7 @@ function toUtcTimestamp(value) {
 // customer_support position was folded into general_staff, and staff codes are assigned
 // sequentially per role/position prefix for any admin/employee row that predates the
 // staff_code column.
-const STAFF_CODE_PREFIX = { inventory_clerk: 'IC', booking_coordinator: 'BC', installer: 'IN', accounting: 'AC', hr: 'HR', general_staff: 'GS' };
+const STAFF_CODE_PREFIX = { inventory_clerk: 'IC', booking_coordinator: 'BC', installer: 'IN', hr: 'HR', general_staff: 'GS' };
 
 const TABLE_ORDER = [
   'users', 'categories', 'products', 'services', 'orders', 'order_items',

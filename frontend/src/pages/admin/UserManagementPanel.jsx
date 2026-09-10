@@ -10,7 +10,6 @@ const POSITION_LABELS = {
   inventory_clerk: 'Inventory Clerk',
   booking_coordinator: 'Booking Coordinator',
   installer: 'Installer / Technician',
-  accounting: 'Accounting',
   hr: 'Human Resources',
   general_staff: 'General Staff',
 };
@@ -19,7 +18,6 @@ const POSITION_COLORS = {
   inventory_clerk: 'bg-teal-100 text-teal-800',
   booking_coordinator: 'bg-blue-100 text-blue-800',
   installer: 'bg-orange-100 text-orange-800',
-  accounting: 'bg-emerald-100 text-emerald-800',
   hr: 'bg-pink-100 text-pink-800',
   general_staff: 'bg-gray-100 text-gray-700',
 };
