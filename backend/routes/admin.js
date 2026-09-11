@@ -259,6 +259,16 @@ async function applyProductUpdate(id, payload) {
 
 async function deleteProductById(id) {
   const product = await db.prepare('SELECT name FROM products WHERE id = ?').get(id);
+  if (!product) return null;
+  // order_items.product_id has no ON DELETE clause (RESTRICT), so a product that's
+  // ever been ordered can't be hard-deleted without corrupting order history — surface
+  // that as a clear conflict instead of letting the raw FK violation reach the client.
+  const ordered = await db.prepare('SELECT 1 FROM order_items WHERE product_id = ? LIMIT 1').get(id);
+  if (ordered) {
+    const err = new Error('This product has order history and cannot be deleted. Archive it instead.');
+    err.status = 409;
+    throw err;
+  }
   await db.prepare('DELETE FROM products WHERE id = ?').run(id);
   return product;
 }
@@ -308,16 +318,22 @@ router.put('/products/:id/restore', authorizeAdminOr('inventory_clerk', 'general
   res.json({ message: 'Product restored' });
 });
 
-router.delete('/products/:id', authorizeAdminOr('general_staff'), async (req, res) => {
+router.delete('/products/:id', authorizeAdminOr('inventory_clerk', 'general_staff'), async (req, res) => {
   if (req.user.position === 'general_staff') {
     const exists = await db.prepare('SELECT id FROM products WHERE id = ?').get(req.params.id);
     if (!exists) return res.status(404).json({ error: 'Product not found' });
     const requestId = await createChangeRequest('product', 'delete', req.params.id, null, req.user.id);
     return res.status(202).json({ pending: true, requestId, message: 'Deletion request submitted for clerk approval.' });
   }
-  const product = await deleteProductById(req.params.id);
-  if (product) await logActivity(req, 'product.delete', 'product', req.params.id, { name: product.name });
-  res.json({ message: 'Deleted' });
+  try {
+    const product = await deleteProductById(req.params.id);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    await logActivity(req, 'product.delete', 'product', req.params.id, { name: product.name });
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    if (err.status === 409) return res.status(409).json({ error: err.message });
+    throw err;
+  }
 });
 
 // Categories — read is open to anyone who can view products (needed to render the product
@@ -780,8 +796,13 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
         });
       }
     } else if (cr.action === 'delete') {
-      const product = await deleteProductById(cr.entity_id);
-      logAction = 'product.delete'; logDetails = { name: product?.name };
+      try {
+        const product = await deleteProductById(cr.entity_id);
+        logAction = 'product.delete'; logDetails = { name: product?.name };
+      } catch (err) {
+        if (err.status === 409) return res.status(409).json({ error: err.message });
+        throw err;
+      }
     }
   } else if (cr.entity_type === 'service') {
     if (cr.action === 'create') {
