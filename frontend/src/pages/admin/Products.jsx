@@ -143,6 +143,14 @@ export default function AdminProducts() {
   };
 
   const confirmNewSubcategory = async (label) => {
+    const existing = subcategoriesOf(form.mainCategoryId)
+      .find(c => c.name.trim().toLowerCase() === label.trim().toLowerCase());
+    if (existing) {
+      // Same name already exists under this category — reuse it instead of creating a duplicate.
+      setForm(f => ({ ...f, subcategoryId: existing.id }));
+      setSubcategoryPromptOpen(false);
+      return;
+    }
     const slug = `${slugify(label)}-${Date.now().toString(36)}`;
     try {
       const { id } = await api.post('/admin/categories', { name: label, slug, parentId: form.mainCategoryId });

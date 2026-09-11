@@ -344,10 +344,23 @@ router.get('/categories', authorizeAdminOr('inventory_clerk', 'general_staff'), 
 });
 
 router.post('/categories', authorizeAdminOr('inventory_clerk'), async (req, res) => {
-  const { name, slug, description, image, parentId } = req.body;
+  const { slug, description, image } = req.body;
+  const name = (req.body.name || '').trim();
+  const parentId = req.body.parentId || null;
+  if (!name) return res.status(400).json({ error: 'Category name is required.' });
+
+  // Case-insensitive dedupe scoped to the same parent, so "Filters" can exist once under
+  // "Plumbing" and once under "Electrical" but never twice under the same one.
+  const duplicate = await db.prepare(
+    'SELECT id FROM categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND (parent_id = ? OR (parent_id IS NULL AND ? IS NULL))'
+  ).get(name, parentId, parentId);
+  if (duplicate) {
+    return res.status(400).json({ error: parentId ? 'A subcategory with that name already exists in this category.' : 'A category with that name already exists.' });
+  }
+
   const id = uuid();
   try {
-    await db.prepare('INSERT INTO categories (id, name, slug, description, image, parent_id) VALUES (?,?,?,?,?,?)').run(id, name, slug, description || null, image || null, parentId || null);
+    await db.prepare('INSERT INTO categories (id, name, slug, description, image, parent_id) VALUES (?,?,?,?,?,?)').run(id, name, slug, description || null, image || null, parentId);
   } catch (err) {
     if (err.code === '23505') return res.status(400).json({ error: 'A category with that name already exists.' });
     throw err;
