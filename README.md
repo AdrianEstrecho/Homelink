@@ -25,7 +25,7 @@
 - Record completion notes
 
 ### Integrations
-- **Email API** — Order/booking confirmations (mock mode without SMTP config)
+- **Email API** — Order/booking confirmations via Resend (mock mode without Resend config)
 - **Location API** — Google Maps integration for business location
 - **Payment Gateway** — Simulated secure payment processing
 - **Promos** — Holiday discounts, first-time service discount, voucher codes
@@ -106,8 +106,8 @@ Copy `backend/.env.example` to `backend/.env` and configure:
 PORT=5000
 JWT_SECRET=your-secret-key
 FRONTEND_URL=http://localhost:5173
-SMTP_USER=your-email@gmail.com   # Optional for real emails
-SMTP_PASS=your-app-password
+RESEND_API_KEY=your-resend-api-key   # Optional for real emails
+EMAIL_FROM=HomeLink <onboarding@resend.dev>   # sandboxed until a domain is verified
 ```
 
 ## License

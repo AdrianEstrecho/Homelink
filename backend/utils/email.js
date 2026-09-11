@@ -1,32 +1,33 @@
-import nodemailer from 'nodemailer';
+// Raw SMTP (the original approach) is blocked outbound on Render regardless of plan, which
+// silently broke delivery in production while working fine locally. SendGrid's HTTP API was
+// tried next, but its free tier is a 60-day trial rather than a permanent plan. Brevo was
+// tried after that, but its signup asked for card/phone verification in practice. Resend's
+// signup needs neither — no domain, no card, no phone — but until a domain is verified in
+// the Resend dashboard, it only sends from onboarding@resend.dev and only to the address the
+// account was signed up with (an anti-abuse sandbox limit, not a config bug). Runs over
+// normal HTTPS, so unlike SMTP it isn't blocked on hosts (Render included) that block
+// outbound SMTP ports.
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
-// Gmail SMTP requires the authenticated account itself (App Passwords don't work with the
-// regular account password — Google requires one generated under Account > Security >
-// 2-Step Verification > App Passwords). NOTE: this is raw SMTP, which several hosts
-// (Render's free tier included) block outbound for — if this is deployed there, email
-// delivery will silently fail in production even though it works locally.
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_APP_PASSWORD;
-
-const transporter = (SMTP_USER && SMTP_PASS)
-  ? nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    })
-  : null;
-
-// Gmail rejects/rewrites a From address that isn't the authenticated account (or a verified
-// alias of it), so this defaults to the SMTP account itself rather than a generic address.
-const FROM = process.env.EMAIL_FROM || `HomeLink <${SMTP_USER}>`;
+// Until a domain is verified (see comment above), this must be "<Name> <onboarding@resend.dev>".
+const FROM = process.env.EMAIL_FROM;
 
 export async function sendEmail({ to, subject, html }) {
-  if (!transporter) {
+  if (!RESEND_API_KEY) {
     console.log(`[Email Mock] To: ${to} | Subject: ${subject}`);
     return { mock: true };
   }
-  await transporter.sendMail({ from: FROM, to, subject, html });
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: FROM, to, subject, html }),
+  });
+  if (!res.ok) {
+    throw new Error(`Resend send failed (${res.status}): ${await res.text()}`);
+  }
   return { sent: true };
 }
 

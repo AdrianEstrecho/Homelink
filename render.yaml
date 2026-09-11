@@ -21,9 +21,7 @@ services:
         value: "120.9842"
       - key: COMPANY_ADDRESS
         value: "123 HomeLink Avenue, Metro Manila, Philippines"
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_APP_PASSWORD
+      - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
         sync: false
