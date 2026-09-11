@@ -69,6 +69,7 @@ export default function CheckoutReturn() {
         // replace, not push: this /checkout/return entry re-polls and re-shows this same
         // "confirmed" screen if you ever land back on it, which browser back otherwise would.
         onClose={() => navigate('/orders', { replace: true })}
+        onDismiss={() => navigate('/', { replace: true })}
       />
     );
   }

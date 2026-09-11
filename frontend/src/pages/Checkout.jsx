@@ -128,6 +128,7 @@ export default function Checkout() {
         person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
         personLabel="Billed To"
         onClose={() => navigate('/orders', { replace: true })}
+        onDismiss={() => navigate('/', { replace: true })}
       />
     );
   }

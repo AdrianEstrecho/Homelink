@@ -30,7 +30,7 @@ export default function Orders() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-navy transition mb-4">
+      <button onClick={() => navigate('/account')} className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-navy transition mb-4">
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
       <p className="eyebrow mb-3">Order History</p>

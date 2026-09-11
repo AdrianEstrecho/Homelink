@@ -6,9 +6,13 @@ import { downloadReceiptPdf } from '../utils/receiptPdf';
 import SafeImage from './SafeImage';
 
 export default function OrderDetailsModal({
-  order, onClose, person, personLabel = 'Customer', onCancelOrder, onTrackOrder, justConfirmed = false,
+  order, onClose, onDismiss, person, personLabel = 'Customer', onCancelOrder, onTrackOrder, justConfirmed = false,
   previewing = false, onConfirm, confirmLoading = false, error,
 }) {
+  // On the just-confirmed screen, X/backdrop ("I'm done here") and "Continue to My Orders"
+  // ("take me to my orders") are deliberately different exits — onDismiss vs onClose. Every
+  // other view (preview, plain order lookup) only has one exit, so they collapse to onClose.
+  const handleDismiss = justConfirmed && onDismiss ? onDismiss : onClose;
   useEffect(() => {
     const cleanup = () => document.body.classList.remove('printing-active');
     window.addEventListener('afterprint', cleanup);
@@ -29,7 +33,7 @@ export default function OrderDetailsModal({
   // the footer, painting over the lower half of the panel) instead of sitting above everything.
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm no-print" onClick={onClose} />
+      <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm no-print" onClick={handleDismiss} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto fade-up print-area print:border print:border-dashed print:border-gray-300">
         {!previewing && (
           <div className="hidden print:block text-center px-6 pt-6 font-mono">
@@ -65,7 +69,7 @@ export default function OrderDetailsModal({
                 </button>
               </>
             )}
-            <button onClick={onClose} title={previewing ? 'Back to edit' : 'Close'} className="p-1.5 rounded-lg hover:bg-gray-100 transition">
+            <button onClick={handleDismiss} title={previewing ? 'Back to edit' : 'Close'} className="p-1.5 rounded-lg hover:bg-gray-100 transition">
               <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
