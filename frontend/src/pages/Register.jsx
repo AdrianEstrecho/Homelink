@@ -34,6 +34,21 @@ export default function Register() {
   const passwordsMatch = form.confirmPassword.length === 0 || form.password === form.confirmPassword;
   const emailValid = EMAIL_PATTERN.test(form.email);
 
+  // Checking the box doesn't accept on its own — it opens the terms for the user to actually
+  // read; only the modal's Accept button (after they've scrolled through it) sets acceptedTerms.
+  const handleTermsCheckboxChange = (e) => {
+    if (e.target.checked) setShowTerms(true);
+    else setAcceptedTerms(false);
+  };
+  const handleAcceptTerms = () => {
+    setAcceptedTerms(true);
+    setShowTerms(false);
+  };
+  const handleDeclineTerms = () => {
+    setAcceptedTerms(false);
+    setShowTerms(false);
+  };
+
   const handleConfirmEmail = async () => {
     setVerifyError('');
     if (!emailValid) {
@@ -214,7 +229,7 @@ export default function Register() {
             type="checkbox"
             required
             checked={acceptedTerms}
-            onChange={e => setAcceptedTerms(e.target.checked)}
+            onChange={handleTermsCheckboxChange}
             className="mt-0.5"
           />
           <span>
@@ -244,7 +259,12 @@ export default function Register() {
           </>
         )}
       </form>
-      <TermsModal open={showTerms} onClose={() => setShowTerms(false)} />
+      <TermsModal
+        open={showTerms}
+        onClose={() => setShowTerms(false)}
+        onAccept={handleAcceptTerms}
+        onDecline={handleDeclineTerms}
+      />
     </AuthLayout>
   );
 }
