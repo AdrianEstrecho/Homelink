@@ -489,8 +489,19 @@
    the one element to print with .print-area (see OrderDetailsModal and any admin
    report's handlePrint). Everything else on the page is hidden for that print pass. */
 @media print {
+  /* visibility:hidden (needed so .print-area below can override it — display:none can't be
+     undone by a descendant) doesn't remove elements from layout, so the rest of the page
+     (e.g. a long Orders list) still occupies its full height and pushes print pagination
+     past one page. Since .print-area is position:fixed, a fixed element reprints on *every*
+     page — so a 2-page pagination meant the receipt printed twice. Collapsing height to 0
+     here removes that extra page without affecting .print-area, which is positioned relative
+     to the viewport and doesn't depend on its (collapsed) ancestor's box. */
   body.printing-active > * {
     visibility: hidden;
+    /* !important: some page content (e.g. the Leaflet map) sets its own inline height, which
+       otherwise beats this rule regardless of selector specificity. */
+    height: 0 !important;
+    overflow: hidden !important;
   }
   body.printing-active .print-area,
   body.printing-active .print-area * {
@@ -499,15 +510,33 @@
   body.printing-active .print-area {
     position: fixed;
     inset: 0;
-    width: 100%;
+    width: 380px;
+    max-width: calc(100% - 64px);
+    height: fit-content;
     max-height: none;
     overflow: visible;
     padding: 32px;
-    margin: 0;
+    /* Centers the strip: left/right are both pinned to 0 above, so with an explicit width
+       under the full inset span, auto margins split the remaining space evenly. margin:0
+       here previously beat the equivalent Tailwind print:mx-auto utility on specificity,
+       which silently left the receipt flush against the left edge instead of centered. */
+    margin: 32px auto;
     box-shadow: none;
     border-radius: 0;
   }
   body.printing-active .no-print {
     display: none !important;
+  }
+  /* .fade-up (and the same-family entrance animations) use animation-fill-mode:both, which
+     holds the 0%-keyframe (opacity:0) until the animation actually runs. In real interactive
+     use that's invisible — the 0.7s finishes long before anyone clicks print — but a print
+     pass renders a fresh paint where the animation never starts, so .print-area would print
+     fully transparent without this override. */
+  .fade-up,
+  .toast-in,
+  .route-fade,
+  .overlay-cover-in,
+  .overlay-cover-out {
+    animation: none;
   }
 }

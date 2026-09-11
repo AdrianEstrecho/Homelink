@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, MapPin, CreditCard, Printer, Download, CheckCircle2 } from 'lucide-react';
+import { X, MapPin, CreditCard, Printer, Download, CheckCircle2, Truck } from 'lucide-react';
 import { formatPrice, statusColor } from '../api/client';
 import { downloadReceiptPdf } from '../utils/receiptPdf';
 import SafeImage from './SafeImage';
 
 export default function OrderDetailsModal({
-  order, onClose, person, personLabel = 'Customer', onCancelOrder, justConfirmed = false,
+  order, onClose, person, personLabel = 'Customer', onCancelOrder, onTrackOrder, justConfirmed = false,
   previewing = false, onConfirm, confirmLoading = false, error,
 }) {
   useEffect(() => {
@@ -30,13 +30,20 @@ export default function OrderDetailsModal({
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm no-print" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto fade-up print-area">
-        <div className="hidden print:block text-center px-6 pt-6">
-          <p className="font-display text-xl font-bold text-brand-navy">Home<span className="text-brand-orange">Link</span></p>
-          <p className="text-xs text-gray-500 tracking-wide uppercase">Official Receipt</p>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto fade-up print-area print:border print:border-dashed print:border-gray-300">
+        <div className="hidden print:block text-center px-6 pt-6 font-mono">
+          <p className="text-xl font-bold text-brand-navy">Home<span className="text-brand-orange">Link</span></p>
+          <p className="text-[10px] text-gray-400 tracking-widest uppercase mt-1">Home Improvement &amp; Services</p>
+          <div className="border-t border-dashed border-gray-300 mt-3 pt-3">
+            <p className="text-xs font-bold text-gray-700 tracking-widest uppercase">Official Receipt</p>
+            <p className="text-sm font-bold text-brand-navy mt-2">Order #{order.id.slice(0, 8).toUpperCase()}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{new Date(order.created_at).toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-0.5 capitalize">{order.status} &middot; {order.payment_status}</p>
+          </div>
+          <div className="border-t border-dashed border-gray-300 mt-3" />
         </div>
 
-        <div className="flex items-start justify-between p-6 pb-4 sticky top-0 bg-white border-b border-gray-100">
+        <div className="flex items-start justify-between p-6 pb-4 sticky top-0 bg-white border-b border-gray-100 print:hidden">
           <div>
             <h2 className="font-display text-lg font-bold text-brand-navy">
               {previewing ? 'Review Your Order' : `Order #${order.id.slice(0, 8).toUpperCase()}`}
@@ -78,9 +85,16 @@ export default function OrderDetailsModal({
           )}
 
           {!previewing && (
-            <div className="flex gap-2">
-              <span className={`badge capitalize ${statusColor(order.status)}`}>{order.status}</span>
-              <span className={`badge ${statusColor(order.payment_status)}`}>{order.payment_status}</span>
+            <div className="flex items-center justify-between gap-2 print:hidden">
+              <div className="flex gap-2">
+                <span className={`badge capitalize ${statusColor(order.status)}`}>{order.status}</span>
+                <span className={`badge ${statusColor(order.payment_status)}`}>{order.payment_status}</span>
+              </div>
+              {onTrackOrder && (
+                <button onClick={() => onTrackOrder(order)} className="no-print flex items-center gap-1.5 text-xs font-semibold text-brand-teal hover:underline shrink-0">
+                  <Truck className="w-3.5 h-3.5" /> Track Order
+                </button>
+              )}
             </div>
           )}
 
@@ -92,26 +106,26 @@ export default function OrderDetailsModal({
           )}
 
           {person && (
-            <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{personLabel}</h3>
-              <p className="text-sm font-medium text-gray-800">{person.name}</p>
-              {person.email && <p className="text-sm text-gray-500">{person.email}</p>}
+            <div className="print:border-b print:border-dashed print:border-gray-300 print:pb-3">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 print:font-mono">{personLabel}</h3>
+              <p className="text-sm font-medium text-gray-800 print:font-mono">{person.name}</p>
+              {person.email && <p className="text-sm text-gray-500 print:font-mono">{person.email}</p>}
             </div>
           )}
 
           <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Items</h3>
-            <div className="space-y-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 print:font-mono print:text-center print:tracking-widest">Items</h3>
+            <div className="space-y-3 print:space-y-0">
               {order.items?.map(i => (
-                <div key={i.id} className="flex items-center gap-3">
+                <div key={i.id} className="flex items-center gap-3 print:border-b print:border-dashed print:border-gray-300 print:py-2">
                   {showImages && (
                     <SafeImage src={i.image} alt={i.name} className="w-14 h-14 object-cover rounded-lg flex-shrink-0 print:hidden" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{i.name}</p>
-                    <p className="text-xs text-gray-500">Qty {i.quantity} × {formatPrice(i.price)}</p>
+                    <p className="font-medium text-sm truncate print:whitespace-normal print:overflow-visible print:font-mono print:font-bold">{i.name}</p>
+                    <p className="text-xs text-gray-500 print:font-mono">Qty {i.quantity} × {formatPrice(i.price)}</p>
                   </div>
-                  <p className="font-semibold text-sm">{formatPrice(i.price * i.quantity)}</p>
+                  <p className="font-semibold text-sm print:font-mono">{formatPrice(i.price * i.quantity)}</p>
                 </div>
               ))}
             </div>
@@ -119,23 +133,23 @@ export default function OrderDetailsModal({
 
           {order.shipping_address && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5" /> Shipping Address
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5 print:font-mono">
+                <MapPin className="w-3.5 h-3.5 print:hidden" /> Shipping Address
               </h3>
-              <p className="text-sm text-gray-700">{order.shipping_address}</p>
+              <p className="text-sm text-gray-700 print:font-mono">{order.shipping_address}</p>
             </div>
           )}
 
           {order.payment_method && (
             <div>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5" /> Payment Method
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5 print:font-mono">
+                <CreditCard className="w-3.5 h-3.5 print:hidden" /> Payment Method
               </h3>
-              <p className="text-sm text-gray-700 capitalize">{order.payment_method}</p>
+              <p className="text-sm text-gray-700 capitalize print:font-mono">{order.payment_method}</p>
             </div>
           )}
 
-          <div className="pt-3 border-t border-gray-100 space-y-1.5 text-sm">
+          <div className="pt-3 border-t border-gray-100 space-y-1.5 text-sm print:border-dashed print:font-mono">
             <div className="flex justify-between text-gray-600">
               <span>Subtotal</span>
               <span>{formatPrice(order.subtotal)}</span>
@@ -146,13 +160,16 @@ export default function OrderDetailsModal({
                 <span>-{formatPrice(order.discount)}</span>
               </div>
             )}
-            <div className="flex justify-between font-bold text-base pt-1.5 border-t border-gray-100">
+            <div className="flex justify-between font-bold text-base pt-2 border-t border-gray-100 print:border-double print:border-t-4 print:border-brand-navy print:text-brand-navy print:pt-3">
               <span>Total</span>
               <span className="text-brand-navy">{formatPrice(order.total)}</span>
             </div>
           </div>
 
-          <p className="hidden print:block text-center text-xs text-gray-400 pt-4">Thank you for shopping with HomeLink!</p>
+          <div className="hidden print:block text-center pt-4 border-t border-dashed border-gray-300 mt-4 font-mono">
+            <p className="text-xs text-gray-500">Thank you for shopping with HomeLink!</p>
+            <p className="text-xs text-gray-300 tracking-widest mt-2">* * * * * * * * * * * * *</p>
+          </div>
 
           {justConfirmed && (
             <button onClick={onClose} className="btn-primary w-full py-3 no-print">

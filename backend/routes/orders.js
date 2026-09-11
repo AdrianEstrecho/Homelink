@@ -4,6 +4,8 @@ import { authenticate } from '../middleware/auth.js';
 import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
 import { logActivity } from '../utils/audit.js';
+import { orderStatusEmail } from '../utils/email.js';
+import { ORDER_STEPS, ORIGIN, getOrderTimeline, getOrderDestination, haversineKm, estimateShippingDays } from '../utils/tracking.js';
 
 const router = Router();
 
@@ -63,6 +65,32 @@ router.get('/:id', authenticate, async (req, res) => {
   res.json({ ...order, items });
 });
 
+router.get('/:id/tracking', authenticate, async (req, res) => {
+  const order = await db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  const destination = await getOrderDestination(order);
+  let etaDays = null;
+  let estimatedDeliveryDate = null;
+  if (destination) {
+    etaDays = estimateShippingDays(haversineKm(ORIGIN, destination));
+    const estimate = new Date(order.created_at);
+    estimate.setDate(estimate.getDate() + 1 + etaDays); // +1 day processing lead time
+    estimatedDeliveryDate = estimate.toISOString();
+  }
+
+  res.json({
+    status: order.status,
+    cancelReason: order.cancel_reason,
+    steps: ORDER_STEPS,
+    timeline: await getOrderTimeline(order),
+    origin: ORIGIN,
+    destination,
+    etaDays,
+    estimatedDeliveryDate,
+  });
+});
+
 // Only cancellable while still 'pending' — once it moves into processing/shipped/delivered
 // it's already been confirmed and fulfillment may be underway, so self-service cancellation
 // stops there (same rule as bookings, whose 'confirmed' status this maps onto).
@@ -82,6 +110,11 @@ router.put('/:id/cancel', authenticate, async (req, res) => {
     customerName: `${user.first_name} ${user.last_name}`,
     reason,
   });
+  if (user?.notify_orders) {
+    orderStatusEmail(order, user, 'cancelled').catch((emailErr) => {
+      console.error(`Failed to send order cancelled email for order ${order.id}:`, emailErr.message);
+    });
+  }
 
   res.json({ message: 'Order cancelled' });
 });

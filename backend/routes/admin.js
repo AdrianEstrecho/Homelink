@@ -8,7 +8,7 @@ import { generateStaffCode } from '../utils/staffCode.js';
 import { notifyUser } from '../utils/notify.js';
 import { createChangeRequest } from '../utils/changeRequests.js';
 import { formatTicketNo } from '../utils/ticketNumber.js';
-import { orderStatusEmail, bookingConfirmedEmail } from '../utils/email.js';
+import { orderStatusEmail, bookingConfirmedEmail, bookingStatusEmail } from '../utils/email.js';
 
 const router = Router();
 router.use(authenticate);
@@ -559,19 +559,27 @@ router.put('/bookings/:id', authorizeAdminOr('booking_coordinator', 'general_sta
     }
   }
 
-  // Only email the customer once, on the transition into 'confirmed' — not on every
-  // later edit to an already-confirmed booking (e.g. an unrelated status re-save).
-  if (finalStatus === 'confirmed' && booking?.status !== 'confirmed') {
+  // Email the customer on any real status transition — not on an unrelated re-save that
+  // leaves the status unchanged. 'confirmed' gets the richer bookingConfirmedEmail (it
+  // includes the assigned technician); every other tracked transition gets the generic
+  // bookingStatusEmail, mirroring how orderStatusEmail covers every order status.
+  if (finalStatus && finalStatus !== booking?.status) {
     const fullBooking = await db.prepare('SELECT * FROM bookings WHERE id = ?').get(req.params.id);
     const service = await db.prepare('SELECT * FROM services WHERE id = ?').get(fullBooking.service_id);
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(fullBooking.user_id);
-    const technician = fullBooking.employee_id
-      ? await db.prepare('SELECT first_name, last_name, phone FROM users WHERE id = ?').get(fullBooking.employee_id)
-      : null;
     if (user?.notify_bookings) {
-      bookingConfirmedEmail(fullBooking, service, technician, user).catch((emailErr) => {
-        console.error(`Failed to send booking confirmed email for booking ${req.params.id}:`, emailErr.message);
-      });
+      if (finalStatus === 'confirmed') {
+        const technician = fullBooking.employee_id
+          ? await db.prepare('SELECT first_name, last_name, phone FROM users WHERE id = ?').get(fullBooking.employee_id)
+          : null;
+        bookingConfirmedEmail(fullBooking, service, technician, user).catch((emailErr) => {
+          console.error(`Failed to send booking confirmed email for booking ${req.params.id}:`, emailErr.message);
+        });
+      } else {
+        bookingStatusEmail(fullBooking, service, user, finalStatus).catch((emailErr) => {
+          console.error(`Failed to send booking status email for booking ${req.params.id}:`, emailErr.message);
+        });
+      }
     }
   }
 
@@ -880,6 +888,14 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
     logDetails = { serviceName, customerName, installerName, completionNotes: payload.completionNotes || undefined };
     if (installer) {
       await notifyUser(installer.id, 'booking.completed', 'Completion Verified', `${reviewer.first_name} ${reviewer.last_name} verified your completion of ${serviceName} for ${customerName}.`, '/employee');
+    }
+    const service = await db.prepare('SELECT * FROM services WHERE id = ?').get(booking.service_id);
+    const customer = await db.prepare('SELECT * FROM users WHERE id = ?').get(booking.user_id);
+    const completedBooking = await db.prepare('SELECT * FROM bookings WHERE id = ?').get(cr.entity_id);
+    if (customer?.notify_bookings) {
+      bookingStatusEmail(completedBooking, service, customer, 'completed').catch((emailErr) => {
+        console.error(`Failed to send booking completed email for booking ${cr.entity_id}:`, emailErr.message);
+      });
     }
   } else if (cr.entity_type === 'support') {
     const ticket = await db.prepare('SELECT * FROM support_messages WHERE id = ?').get(cr.entity_id);

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Calendar, CheckCircle, Clock, MapPin, PlayCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Calendar, CheckCircle, Clock, MapPin, Navigation, PlayCircle } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 
@@ -162,6 +162,58 @@ function StatusStepper({ status, pending }) {
   );
 }
 
+// Shares the installer's real GPS position (browser Geolocation API, no external service)
+// while a job is active, so the customer's tracking map can show where the technician is.
+// Sends are throttled client-side to once per 15s regardless of how often watchPosition fires.
+function LocationShareToggle({ bookingId }) {
+  const [sharing, setSharing] = useState(false);
+  const [locError, setLocError] = useState('');
+  const watchIdRef = useRef(null);
+  const lastSentRef = useRef(0);
+
+  useEffect(() => () => {
+    if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
+  }, []);
+
+  const toggle = () => {
+    if (sharing) {
+      if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+      setSharing(false);
+      return;
+    }
+    if (!navigator.geolocation) {
+      setLocError('Location not supported on this device.');
+      return;
+    }
+    setLocError('');
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (now - lastSentRef.current < 15000) return;
+        lastSentRef.current = now;
+        api.put(`/employee/bookings/${bookingId}/location`, { lat: pos.coords.latitude, lng: pos.coords.longitude }).catch(() => {});
+      },
+      () => setLocError('Location permission denied.'),
+      { enableHighAccuracy: true, maximumAge: 10000 }
+    );
+    setSharing(true);
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={toggle}
+        className={`text-sm px-3 py-1 rounded-lg flex items-center gap-1 ${sharing ? 'bg-teal-100 text-teal-800' : 'bg-gray-100 text-gray-600'}`}
+      >
+        <Navigation className="w-3.5 h-3.5" /> {sharing ? 'Sharing Location' : 'Share Location'}
+      </button>
+      {locError && <span className="text-xs text-red-500">{locError}</span>}
+    </div>
+  );
+}
+
 function JobCard({ booking: b, pending, onStart, onRequestComplete }) {
   return (
     <div className="card p-5">
@@ -180,6 +232,7 @@ function JobCard({ booking: b, pending, onStart, onRequestComplete }) {
       <div className="mb-3"><StatusStepper status={b.status} pending={pending} /></div>
       <div className="flex flex-wrap gap-2 items-center">
         <span className="font-bold text-brand-orange">{formatPrice(b.price)}</span>
+        {(b.status === 'confirmed' || b.status === 'in_progress') && <LocationShareToggle bookingId={b.id} />}
         {b.status === 'confirmed' && (
           <button onClick={() => onStart(b.id)} className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-lg flex items-center gap-1">
             <PlayCircle className="w-3.5 h-3.5" /> Confirm & Start Installation

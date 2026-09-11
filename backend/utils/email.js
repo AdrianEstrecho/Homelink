@@ -37,35 +37,66 @@ function capitalize(s) {
 
 const money = (n) => `₱${Number(n).toLocaleString('en-PH')}`;
 const frontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:5173';
+const MONO = "'Courier New',Courier,monospace";
 
-// Shared header/footer every transactional email renders inside — keeps the two-tone
-// "HomeLink" wordmark, company address, and layout consistent across every template
-// instead of each one repeating (and slowly drifting from) its own copy of the shell.
+// Shared header/footer every transactional email renders inside — a dashed-bordered "slip" on
+// a tinted page, echoing a printed receipt, with the same two-tone HomeLink wordmark and
+// company address every template used to repeat (and slowly drift from) on its own.
 function emailShell(bodyHtml) {
   return `
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;color:#14181f">
-      <div style="background:#0f2b5b;padding:28px 24px;text-align:center">
-        <div style="font-size:24px;font-weight:800;letter-spacing:-0.02em">
-          <span style="color:#ffffff">Home</span><span style="color:#ff6b35">Link</span>
-        </div>
-        <p style="margin:6px 0 0;color:#c7d2e8;font-size:11px;letter-spacing:.08em;text-transform:uppercase">Home Improvement &amp; Services</p>
-      </div>
-      <div style="padding:28px 24px">
-        ${bodyHtml}
-      </div>
-      <div style="padding:16px 24px;border-top:1px solid #eef0f3;text-align:center">
-        <p style="margin:0;font-size:11px;color:#9ca3af">${process.env.COMPANY_ADDRESS || 'HomeLink'}</p>
-        <p style="margin:6px 0 0;font-size:11px;color:#c1c5cc">You're receiving this email because of activity on your HomeLink account.</p>
-      </div>
-    </div>`;
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f5;padding:32px 12px">
+      <tr><td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:480px;max-width:100%;background:#ffffff;border:1px dashed #b8bfc9;font-family:Arial,Helvetica,sans-serif;color:#14181f">
+          <tr><td style="padding:26px 28px 18px;text-align:center;border-bottom:1px dashed #c7cad1">
+            <div style="font-size:22px;font-weight:800;letter-spacing:-0.02em">
+              <span style="color:#0f2b5b">Home</span><span style="color:#ff6b35">Link</span>
+            </div>
+            <p style="margin:6px 0 0;font-family:${MONO};color:#9ca3af;font-size:10px;letter-spacing:.14em;text-transform:uppercase">Home Improvement &amp; Services</p>
+          </td></tr>
+          <tr><td style="padding:26px 28px">
+            ${bodyHtml}
+          </td></tr>
+          <tr><td style="padding:16px 28px;border-top:1px dashed #c7cad1;text-align:center">
+            <p style="margin:0;font-family:${MONO};font-size:10px;letter-spacing:.04em;color:#9ca3af">${process.env.COMPANY_ADDRESS || 'HomeLink'}</p>
+            <p style="margin:8px 0 0;font-size:10px;color:#c1c5cc">You're receiving this email because of activity on your HomeLink account.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>`;
 }
 
 function codeBlock(code) {
-  return `<p style="font-size:28px;font-weight:bold;letter-spacing:6px;background:#f3f4f6;padding:16px;text-align:center;border-radius:8px">${code}</p>`;
+  return `<p style="font-family:${MONO};font-size:30px;font-weight:bold;letter-spacing:8px;background:#fafbfc;border:1px dashed #c7cad1;padding:18px;text-align:center;color:#0f2b5b">${code}</p>`;
 }
 
 function ctaButton(label, href) {
-  return `<p style="margin-top:20px"><a href="${href}" style="display:inline-block;background:#ff6b35;color:#ffffff;font-weight:700;padding:11px 22px;border-radius:8px;text-decoration:none">${label}</a></p>`;
+  return `<p style="margin:22px 0 0;text-align:center"><a href="${href}" style="display:inline-block;background:#ff6b35;color:#ffffff;font-weight:700;padding:11px 26px;border-radius:4px;text-decoration:none;font-family:${MONO};letter-spacing:.04em;text-transform:uppercase;font-size:12px">${label}</a></p>`;
+}
+
+// Centered "ORDER #.../BOOKING #..." block framed in dashed rules, standing in for the
+// header a printed receipt stamps right under the store name.
+function receiptMeta(line1, line2) {
+  return `
+    <div style="border-top:1px dashed #c7cad1;border-bottom:1px dashed #c7cad1;padding:12px 0;margin:14px 0 4px;text-align:center;font-family:${MONO}">
+      <div style="font-size:14px;font-weight:700;color:#0f2b5b;letter-spacing:.02em">${line1}</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:3px">${line2}</div>
+    </div>`;
+}
+
+function sectionLabel(text) {
+  return `<p style="margin:18px 0 8px;text-align:center;font-family:${MONO};font-size:10px;font-weight:700;letter-spacing:.16em;color:#9ca3af">${text}</p>`;
+}
+
+// One label/value row in a receipt-style details table — dashed rule between rows, a bold
+// double rule instead when it's the closing total line.
+function detailRow(label, value, isTotal = false) {
+  const border = isTotal ? 'border-top:4px double #0f2b5b' : 'border-bottom:1px dashed #dfe3e8';
+  const valueStyle = isTotal ? 'font-weight:bold;font-size:14px;color:#0f2b5b' : 'font-size:12px;color:#14181f';
+  return `
+    <tr>
+      <td style="padding:7px 0;${border};font-family:${MONO};font-size:11px;color:#9ca3af;width:120px;vertical-align:top">${label}</td>
+      <td style="padding:7px 0;${border};font-family:${MONO};${valueStyle};text-align:right">${value}</td>
+    </tr>`;
 }
 
 const ORDER_STATUS_META = {
@@ -77,53 +108,55 @@ const ORDER_STATUS_META = {
 };
 
 const BOOKING_STATUS_META = {
-  pending: { bg: '#fef3c7', fg: '#92400e', label: 'Pending' },
-  confirmed: { bg: '#dbeafe', fg: '#1e40af', label: 'Confirmed' },
-  in_progress: { bg: '#ede9fe', fg: '#5b21b6', label: 'In Progress' },
-  completed: { bg: '#dcfce7', fg: '#166534', label: 'Completed' },
-  cancelled: { bg: '#fee2e2', fg: '#991b1b', label: 'Cancelled' },
+  pending: { bg: '#fef3c7', fg: '#92400e', label: 'Pending', message: 'Your service request is pending confirmation.' },
+  confirmed: { bg: '#dbeafe', fg: '#1e40af', label: 'Confirmed', message: 'Your service appointment is confirmed.' },
+  in_progress: { bg: '#ede9fe', fg: '#5b21b6', label: 'In Progress', message: 'Your technician has started work on your service.' },
+  completed: { bg: '#dcfce7', fg: '#166534', label: 'Completed', message: 'Your service has been completed. Thank you for choosing HomeLink!' },
+  cancelled: { bg: '#fee2e2', fg: '#991b1b', label: 'Cancelled', message: 'Your service booking has been cancelled.' },
 };
 
 function statusBadge(meta) {
-  return `<span style="display:inline-block;background:${meta.bg};color:${meta.fg};font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em">${meta.label}</span>`;
+  return `<span style="display:inline-block;background:${meta.bg};color:${meta.fg};font-family:${MONO};font-size:12px;font-weight:700;padding:4px 14px;border-radius:999px;text-transform:uppercase;letter-spacing:.06em">${meta.label}</span>`;
 }
 
 export function orderConfirmationEmail(order, items, user) {
   const itemRows = items.map(i => `
     <tr>
-      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${i.name} <span style="color:#9ca3af">× ${i.quantity}</span></td>
-      <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right">${money(i.price)}</td>
+      <td style="padding:7px 0;border-bottom:1px dashed #dfe3e8;font-family:${MONO};font-size:12px;color:#14181f;vertical-align:top">
+        ${i.name}<br><span style="color:#9ca3af;font-size:11px">Qty ${i.quantity}</span>
+      </td>
+      <td style="padding:7px 0;border-bottom:1px dashed #dfe3e8;text-align:right;vertical-align:top;font-family:${MONO};font-size:12px;font-weight:600">${money(i.price)}</td>
     </tr>`).join('');
   const discountRow = order.discount > 0 ? `
     <tr>
-      <td style="padding:8px;color:#16a34a">Discount${order.promo_code ? ` (${order.promo_code})` : ''}</td>
-      <td style="padding:8px;text-align:right;color:#16a34a">-${money(order.discount)}</td>
+      <td style="padding:6px 0;font-family:${MONO};font-size:12px;color:#16a34a">Discount${order.promo_code ? ` (${order.promo_code})` : ''}</td>
+      <td style="padding:6px 0;text-align:right;font-family:${MONO};font-size:12px;color:#16a34a">-${money(order.discount)}</td>
     </tr>` : '';
 
   return sendEmail({
     to: user.email,
     subject: `HomeLink Order Confirmation #${order.id.slice(0, 8).toUpperCase()}`,
     html: emailShell(`
-      <h2 style="margin-top:0">Order Confirmed!</h2>
-      <p>Hi ${user.first_name}, thank you for your order. This email is your official receipt — keep it for your records.</p>
-      <p style="color:#4b5563">
-        <strong>Order ID:</strong> ${order.id.slice(0, 8).toUpperCase()}<br>
-        <strong>Placed:</strong> ${new Date(order.created_at || Date.now()).toLocaleString('en-PH')}
-      </p>
-      <table style="width:100%;border-collapse:collapse;margin:16px 0">
-        <tr style="background:#f3f4f6"><th style="padding:8px;text-align:left">Item</th><th style="padding:8px;text-align:right">Amount</th></tr>
-        ${itemRows}
-        <tr><td style="padding:8px">Subtotal</td><td style="padding:8px;text-align:right">${money(order.subtotal)}</td></tr>
+      <h2 style="margin:0 0 6px;text-align:center">Order Confirmed!</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, thank you for your order.<br>This email is your official receipt — keep it for your records.</p>
+      ${receiptMeta(`ORDER #${order.id.slice(0, 8).toUpperCase()}`, new Date(order.created_at || Date.now()).toLocaleString('en-PH'))}
+      ${sectionLabel('ITEMS')}
+      <table style="width:100%;border-collapse:collapse">${itemRows}</table>
+      <table style="width:100%;border-collapse:collapse;margin-top:8px">
+        <tr>
+          <td style="padding:6px 0;font-family:${MONO};font-size:12px;color:#4b5563">Subtotal</td>
+          <td style="padding:6px 0;text-align:right;font-family:${MONO};font-size:12px;color:#4b5563">${money(order.subtotal)}</td>
+        </tr>
         ${discountRow}
         <tr>
-          <td style="padding:8px;font-weight:bold;border-top:2px solid #0f2b5b">Total</td>
-          <td style="padding:8px;text-align:right;font-weight:bold;border-top:2px solid #0f2b5b">${money(order.total)}</td>
+          <td style="padding:10px 0 0;border-top:4px double #0f2b5b;font-weight:bold;font-family:${MONO};font-size:15px;color:#0f2b5b">TOTAL</td>
+          <td style="padding:10px 0 0;border-top:4px double #0f2b5b;text-align:right;font-weight:bold;font-family:${MONO};font-size:15px;color:#ff6b35">${money(order.total)}</td>
         </tr>
       </table>
-      ${order.shipping_address ? `<p><strong>Shipping to:</strong> ${order.shipping_address}</p>` : ''}
-      ${order.payment_method ? `<p><strong>Payment method:</strong> ${capitalize(order.payment_method)}</p>` : ''}
+      ${order.shipping_address ? `<p style="margin:16px 0 0;font-family:${MONO};font-size:12px"><strong>Shipping to:</strong> ${order.shipping_address}</p>` : ''}
+      ${order.payment_method ? `<p style="margin:6px 0 0;font-family:${MONO};font-size:12px"><strong>Payment method:</strong> ${capitalize(order.payment_method)}</p>` : ''}
       ${ctaButton('View your order', `${frontendUrl()}/orders`)}
-      <p style="color:#9ca3af;font-size:12px;margin-top:24px">Questions about this order? Reply to this email or reach us from your HomeLink account.</p>
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this order? Reply to this email or reach us from your HomeLink account.</p>
     `),
   });
 }
@@ -136,15 +169,12 @@ export function orderStatusEmail(order, user, status) {
     to: user.email,
     subject: `Order #${order.id.slice(0, 8).toUpperCase()} is now ${meta.label}`,
     html: emailShell(`
-      <h2 style="margin-top:0">Order update</h2>
-      <p>Hi ${user.first_name}, ${meta.message}</p>
-      <div style="margin:16px 0">${statusBadge(meta)}</div>
-      <p style="color:#4b5563">
-        <strong>Order ID:</strong> ${order.id.slice(0, 8).toUpperCase()}<br>
-        <strong>Total:</strong> ${money(order.total)}
-      </p>
+      <h2 style="margin:0 0 6px;text-align:center">Order Update</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, ${meta.message}</p>
+      <div style="text-align:center;margin:14px 0">${statusBadge(meta)}</div>
+      ${receiptMeta(`ORDER #${order.id.slice(0, 8).toUpperCase()}`, `Total: ${money(order.total)}`)}
       ${ctaButton('View your order', `${frontendUrl()}/orders`)}
-      <p style="color:#9ca3af;font-size:12px;margin-top:24px">Questions about this order? Reply to this email or reach us from your HomeLink account.</p>
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this order? Reply to this email or reach us from your HomeLink account.</p>
     `),
   });
 }
@@ -154,10 +184,10 @@ export function passwordResetEmail(user, code) {
     to: user.email,
     subject: 'Your HomeLink password reset code',
     html: emailShell(`
-      <h2 style="margin-top:0">Reset your password</h2>
-      <p>Hi ${user.first_name}, we received a request to reset your password. Enter this code to continue. It expires in 15 minutes.</p>
+      <h2 style="margin:0 0 6px;text-align:center">Reset Your Password</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, we received a request to reset your password. Enter this code to continue. It expires in 15 minutes.</p>
       ${codeBlock(code)}
-      <p>If you didn't request this, you can safely ignore this email.</p>
+      <p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:16px">If you didn't request this, you can safely ignore this email.</p>
     `),
   });
 }
@@ -167,10 +197,10 @@ export function signupVerificationEmail(email, code) {
     to: email,
     subject: 'Verify your email for HomeLink',
     html: emailShell(`
-      <h2 style="margin-top:0">Confirm your email</h2>
-      <p>Enter this code to verify your email and finish creating your HomeLink account. It expires in 15 minutes.</p>
+      <h2 style="margin:0 0 6px;text-align:center">Confirm Your Email</h2>
+      <p style="text-align:center;color:#4b5563">Enter this code to verify your email and finish creating your HomeLink account. It expires in 15 minutes.</p>
       ${codeBlock(code)}
-      <p>If you didn't request this, you can safely ignore this email.</p>
+      <p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:16px">If you didn't request this, you can safely ignore this email.</p>
     `),
   });
 }
@@ -180,10 +210,10 @@ export function twoFactorCodeEmail(user, code) {
     to: user.email,
     subject: 'Your HomeLink sign-in code',
     html: emailShell(`
-      <h2 style="margin-top:0">Confirm it's you</h2>
-      <p>Hi ${user.first_name}, enter this code to finish signing in to HomeLink. It expires in 10 minutes.</p>
+      <h2 style="margin:0 0 6px;text-align:center">Confirm It's You</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, enter this code to finish signing in to HomeLink. It expires in 10 minutes.</p>
       ${codeBlock(code)}
-      <p>If you didn't try to sign in, you should change your password right away.</p>
+      <p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:16px">If you didn't try to sign in, you should change your password right away.</p>
     `),
   });
 }
@@ -195,10 +225,10 @@ export function twoFactorSetupEmail(user, code) {
     to: user.email,
     subject: 'Confirm two-factor authentication for HomeLink',
     html: emailShell(`
-      <h2 style="margin-top:0">Turn on two-factor authentication</h2>
-      <p>Hi ${user.first_name}, enter this code to confirm turning on two-factor authentication for your HomeLink account. It expires in 10 minutes.</p>
+      <h2 style="margin:0 0 6px;text-align:center">Turn On Two-Factor Authentication</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, enter this code to confirm turning on two-factor authentication for your HomeLink account. It expires in 10 minutes.</p>
       ${codeBlock(code)}
-      <p>If you didn't request this, you can safely ignore this email — your account stays as it is.</p>
+      <p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:16px">If you didn't request this, you can safely ignore this email — your account stays as it is.</p>
     `),
   });
 }
@@ -208,13 +238,14 @@ export function bookingConfirmationEmail(booking, service, user) {
     to: user.email,
     subject: 'HomeLink Service Booking Received',
     html: emailShell(`
-      <h2 style="margin-top:0">Service Booked!</h2>
-      <p>Hi ${user.first_name}, your service request has been received. We'll email you again as soon as it's confirmed with an assigned technician.</p>
-      <table style="width:100%;border-collapse:collapse;margin:16px 0">
-        <tr><td style="padding:6px 0;color:#6b7280;width:140px">Service</td><td style="padding:6px 0;font-weight:600">${service.name}</td></tr>
-        <tr><td style="padding:6px 0;color:#6b7280">Date &amp; Time</td><td style="padding:6px 0;font-weight:600">${booking.scheduled_date} at ${booking.scheduled_time}</td></tr>
-        <tr><td style="padding:6px 0;color:#6b7280">Address</td><td style="padding:6px 0;font-weight:600">${booking.address}</td></tr>
-        <tr><td style="padding:6px 0;color:#6b7280">Total</td><td style="padding:6px 0;font-weight:600">${money(booking.price)}</td></tr>
+      <h2 style="margin:0 0 6px;text-align:center">Service Booked!</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, your service request has been received.<br>We'll email you again as soon as it's confirmed with an assigned technician.</p>
+      ${sectionLabel('BOOKING DETAILS')}
+      <table style="width:100%;border-collapse:collapse">
+        ${detailRow('Service', service.name)}
+        ${detailRow('Date &amp; Time', `${booking.scheduled_date} at ${booking.scheduled_time}`)}
+        ${detailRow('Address', booking.address)}
+        ${detailRow('Total', money(booking.price), true)}
       </table>
       ${ctaButton('View your booking', `${frontendUrl()}/bookings`)}
     `),
@@ -226,24 +257,47 @@ export function bookingConfirmationEmail(booking, service, user) {
 export function bookingConfirmedEmail(booking, service, technician, user) {
   const meta = BOOKING_STATUS_META.confirmed;
   const technicianRow = technician
-    ? `<tr><td style="padding:6px 0;color:#6b7280">Technician</td><td style="padding:6px 0;font-weight:600">${technician.first_name} ${technician.last_name}${technician.phone ? ` · ${technician.phone}` : ''}</td></tr>`
+    ? detailRow('Technician', `${technician.first_name} ${technician.last_name}${technician.phone ? ` · ${technician.phone}` : ''}`)
     : '';
   return sendEmail({
     to: user.email,
     subject: `Your ${service.name} booking is confirmed`,
     html: emailShell(`
-      <h2 style="margin-top:0">Booking confirmed!</h2>
-      <p>Hi ${user.first_name}, your service appointment is confirmed. Here are the complete details:</p>
-      <div style="margin:16px 0">${statusBadge(meta)}</div>
-      <table style="width:100%;border-collapse:collapse;margin:16px 0">
-        <tr><td style="padding:6px 0;color:#6b7280;width:140px">Service</td><td style="padding:6px 0;font-weight:600">${service.name}</td></tr>
-        <tr><td style="padding:6px 0;color:#6b7280">Date &amp; Time</td><td style="padding:6px 0;font-weight:600">${booking.scheduled_date} at ${booking.scheduled_time}</td></tr>
-        <tr><td style="padding:6px 0;color:#6b7280">Address</td><td style="padding:6px 0;font-weight:600">${booking.address}</td></tr>
+      <h2 style="margin:0 0 6px;text-align:center">Booking Confirmed!</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, your service appointment is confirmed. Here are the complete details:</p>
+      <div style="text-align:center;margin:14px 0">${statusBadge(meta)}</div>
+      <table style="width:100%;border-collapse:collapse">
+        ${detailRow('Service', service.name)}
+        ${detailRow('Date &amp; Time', `${booking.scheduled_date} at ${booking.scheduled_time}`)}
+        ${detailRow('Address', booking.address)}
         ${technicianRow}
-        <tr><td style="padding:6px 0;color:#6b7280">Total</td><td style="padding:6px 0;font-weight:600">${money(booking.price)}</td></tr>
+        ${detailRow('Total', money(booking.price), true)}
       </table>
       ${ctaButton('View your booking', `${frontendUrl()}/bookings`)}
-      <p style="color:#9ca3af;font-size:12px;margin-top:24px">Questions about this booking? Reply to this email or reach us from your HomeLink account.</p>
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this booking? Reply to this email or reach us from your HomeLink account.</p>
+    `),
+  });
+}
+
+// Sent whenever a booking moves to a status other than 'confirmed' (in_progress/completed/
+// cancelled) — the booking counterpart to orderStatusEmail. 'confirmed' keeps its own richer
+// bookingConfirmedEmail above, since that one also includes the assigned technician.
+export function bookingStatusEmail(booking, service, user, status) {
+  const meta = BOOKING_STATUS_META[status] || { bg: '#f3f4f6', fg: '#374151', label: capitalize(status), message: `Your booking status was updated to ${capitalize(status)}.` };
+  return sendEmail({
+    to: user.email,
+    subject: `Your ${service.name} booking is now ${meta.label}`,
+    html: emailShell(`
+      <h2 style="margin:0 0 6px;text-align:center">Booking Update</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, ${meta.message}</p>
+      <div style="text-align:center;margin:14px 0">${statusBadge(meta)}</div>
+      <table style="width:100%;border-collapse:collapse">
+        ${detailRow('Service', service.name)}
+        ${detailRow('Date &amp; Time', `${booking.scheduled_date} at ${booking.scheduled_time}`)}
+        ${detailRow('Total', money(booking.price), true)}
+      </table>
+      ${ctaButton('View your booking', `${frontendUrl()}/bookings`)}
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this booking? Reply to this email or reach us from your HomeLink account.</p>
     `),
   });
 }

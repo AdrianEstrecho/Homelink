@@ -76,4 +76,23 @@ router.put('/bookings/:id/status', async (req, res) => {
   res.json({ message: 'Status updated' });
 });
 
+// Installer's browser posts its GPS position here (via navigator.geolocation.watchPosition)
+// while a job is active, so the customer's tracking map can show a live technician marker. No
+// history is kept — just the latest fix — and it's rejected once a job is no longer 'confirmed'
+// or 'in_progress' so a stale tab can't keep "moving" a technician on a finished/unstarted job.
+router.put('/bookings/:id/location', async (req, res) => {
+  const { lat, lng } = req.body;
+  if (typeof lat !== 'number' || typeof lng !== 'number') {
+    return res.status(400).json({ error: 'lat and lng are required numbers.' });
+  }
+  const booking = await db.prepare('SELECT status FROM bookings WHERE id = ? AND employee_id = ?').get(req.params.id, req.user.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found or not assigned to you' });
+  if (!['confirmed', 'in_progress'].includes(booking.status)) {
+    return res.status(400).json({ error: 'Location sharing is only available while a job is active.' });
+  }
+
+  await db.prepare('UPDATE bookings SET technician_lat = ?, technician_lng = ?, technician_location_at = now() WHERE id = ?').run(lat, lng, req.params.id);
+  res.json({ message: 'Location updated' });
+});
+
 export default router;

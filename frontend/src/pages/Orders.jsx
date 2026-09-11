@@ -6,10 +6,12 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import OrderDetailsModal from '../components/OrderDetailsModal';
 import CancelReasonModal from '../components/CancelReasonModal';
+import TrackingModal from '../components/TrackingModal';
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [trackingOrder, setTrackingOrder] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -69,6 +71,16 @@ export default function Orders() {
           person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
           personLabel="Billed To"
           onCancelOrder={setCancelTarget}
+          onTrackOrder={setTrackingOrder}
+        />
+      )}
+
+      {trackingOrder && (
+        <TrackingModal
+          kind="order"
+          id={trackingOrder.id}
+          title={`Order #${trackingOrder.id.slice(0, 8).toUpperCase()}`}
+          onClose={() => setTrackingOrder(null)}
         />
       )}
 

@@ -200,6 +200,11 @@ await db.exec(`
     created_at TIMESTAMPTZ DEFAULT now()
   );
 
+  -- Geocoded once (lazily, on first tracking request) from shipping_address and cached here
+  -- so the tracking map/ETA don't re-hit the geocoder on every fetch.
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_lat DOUBLE PRECISION;
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_lng DOUBLE PRECISION;
+
   CREATE TABLE IF NOT EXISTS order_items (
     id TEXT PRIMARY KEY,
     order_id TEXT REFERENCES orders(id) ON DELETE CASCADE,
@@ -252,6 +257,16 @@ await db.exec(`
     paymongo_payment_id TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
   );
+
+  -- Same as orders.dest_lat/lng — geocoded lazily from the address column and cached for the
+  -- tracking map/ETA. technician_lat/lng/location_at hold the installer's last-reported position
+  -- while a job is 'confirmed' or 'in_progress' (see PUT /employee/bookings/:id/location);
+  -- there's no history here, just the latest fix.
+  ALTER TABLE bookings ADD COLUMN IF NOT EXISTS dest_lat DOUBLE PRECISION;
+  ALTER TABLE bookings ADD COLUMN IF NOT EXISTS dest_lng DOUBLE PRECISION;
+  ALTER TABLE bookings ADD COLUMN IF NOT EXISTS technician_lat DOUBLE PRECISION;
+  ALTER TABLE bookings ADD COLUMN IF NOT EXISTS technician_lng DOUBLE PRECISION;
+  ALTER TABLE bookings ADD COLUMN IF NOT EXISTS technician_location_at TIMESTAMPTZ;
 
   -- Same purpose as pending_checkouts, but for service bookings: holds a validated booking
   -- request between "redirect out to PayMongo's hosted Checkout Session" and "webhook/poll

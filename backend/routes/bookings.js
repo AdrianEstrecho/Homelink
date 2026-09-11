@@ -6,6 +6,8 @@ import { getFirstTimeServiceDiscount, getHolidayDiscount, calculateDiscount } fr
 import { fulfillBooking } from '../utils/bookingFulfillment.js';
 import { createCheckoutSessionV2, retrieveCheckoutSession } from '../utils/paymongo.js';
 import { logActivity } from '../utils/audit.js';
+import { BOOKING_STEPS, ORIGIN, getBookingTimeline, getBookingDestination } from '../utils/tracking.js';
+import { bookingStatusEmail } from '../utils/email.js';
 
 const router = Router();
 
@@ -198,6 +200,42 @@ router.get('/my', authenticate, async (req, res) => {
   res.json(bookings);
 });
 
+router.get('/:id', authenticate, async (req, res) => {
+  const booking = await db.prepare(`
+    SELECT b.*, s.name as service_name, s.category as service_category, s.image as service_image,
+    e.first_name as employee_first_name, e.last_name as employee_last_name
+    FROM bookings b JOIN services s ON b.service_id = s.id
+    LEFT JOIN users e ON b.employee_id = e.id
+    WHERE b.id = ? AND b.user_id = ?
+  `).get(req.params.id, req.user.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+  res.json(booking);
+});
+
+router.get('/:id/tracking', authenticate, async (req, res) => {
+  const booking = await db.prepare(`
+    SELECT b.*, e.first_name as employee_first_name, e.last_name as employee_last_name, e.phone as employee_phone
+    FROM bookings b LEFT JOIN users e ON b.employee_id = e.id
+    WHERE b.id = ? AND b.user_id = ?
+  `).get(req.params.id, req.user.id);
+  if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+  res.json({
+    status: booking.status,
+    cancelReason: booking.cancel_reason,
+    steps: BOOKING_STEPS,
+    timeline: await getBookingTimeline(booking),
+    origin: ORIGIN,
+    destination: await getBookingDestination(booking),
+    technician: booking.employee_first_name
+      ? { name: `${booking.employee_first_name} ${booking.employee_last_name}`, phone: booking.employee_phone }
+      : null,
+    technicianLocation: booking.technician_lat != null
+      ? { lat: booking.technician_lat, lng: booking.technician_lng, updatedAt: booking.technician_location_at }
+      : null,
+  });
+});
+
 // Only cancellable while still 'pending' — once a technician has been assigned and the
 // booking is 'confirmed' (or further along), self-service cancellation stops.
 router.put('/:id/cancel', authenticate, async (req, res) => {
@@ -216,6 +254,12 @@ router.put('/:id/cancel', authenticate, async (req, res) => {
     customerName: `${user.first_name} ${user.last_name}`,
     reason,
   });
+  if (user?.notify_bookings) {
+    const service = await db.prepare('SELECT * FROM services WHERE id = ?').get(booking.service_id);
+    bookingStatusEmail(booking, service, user, 'cancelled').catch((emailErr) => {
+      console.error(`Failed to send booking cancelled email for booking ${booking.id}:`, emailErr.message);
+    });
+  }
 
   res.json({ message: 'Booking cancelled' });
 });
