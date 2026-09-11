@@ -66,7 +66,9 @@ export default function CheckoutReturn() {
         justConfirmed
         person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
         personLabel="Billed To"
-        onClose={() => navigate('/orders')}
+        // replace, not push: this /checkout/return entry re-polls and re-shows this same
+        // "confirmed" screen if you ever land back on it, which browser back otherwise would.
+        onClose={() => navigate('/orders', { replace: true })}
       />
     );
   }

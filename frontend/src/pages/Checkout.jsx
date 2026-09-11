@@ -117,6 +117,9 @@ export default function Checkout() {
   // Show the receipt — with its own confirmation banner — before sending the customer
   // anywhere else. Checked ahead of the empty-cart guard below, since clearCart() just ran
   // and would otherwise make that guard hijack this render with "your cart is empty".
+  // Leaving replaces this /checkout entry rather than pushing /orders on top of it — the
+  // checkout session is over, so there's nothing left here to come back to; without
+  // replace, browser back lands right back on this same confirmed-order view.
   if (confirmedOrder) {
     return (
       <OrderDetailsModal
@@ -124,7 +127,7 @@ export default function Checkout() {
         justConfirmed
         person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
         personLabel="Billed To"
-        onClose={() => navigate('/orders')}
+        onClose={() => navigate('/orders', { replace: true })}
       />
     );
   }

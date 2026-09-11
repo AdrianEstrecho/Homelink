@@ -86,7 +86,7 @@ export default function BookingReturn() {
           <p className="text-gray-500 mb-6">
             {booking?.service_name ? `${booking.service_name} is booked for ${booking.scheduled_date}.` : 'Your service has been booked.'}
           </p>
-          <button onClick={() => navigate('/bookings')} className="btn-primary">View My Bookings</button>
+          <button onClick={() => navigate('/bookings', { replace: true })} className="btn-primary">View My Bookings</button>
         </>
       )}
 
