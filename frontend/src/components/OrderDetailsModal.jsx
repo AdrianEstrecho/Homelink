@@ -31,17 +31,19 @@ export default function OrderDetailsModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm no-print" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto fade-up print-area print:border print:border-dashed print:border-gray-300">
-        <div className="hidden print:block text-center px-6 pt-6 font-mono">
-          <p className="text-xl font-bold text-brand-navy">Home<span className="text-brand-orange">Link</span></p>
-          <p className="text-[10px] text-gray-400 tracking-widest uppercase mt-1">Home Improvement &amp; Services</p>
-          <div className="border-t border-dashed border-gray-300 mt-3 pt-3">
-            <p className="text-xs font-bold text-gray-700 tracking-widest uppercase">Official Receipt</p>
-            <p className="text-sm font-bold text-brand-navy mt-2">Order #{order.id.slice(0, 8).toUpperCase()}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{new Date(order.created_at).toLocaleString()}</p>
-            <p className="text-xs text-gray-500 mt-0.5 capitalize">{order.status} &middot; {order.payment_status}</p>
+        {!previewing && (
+          <div className="hidden print:block text-center px-6 pt-6 font-mono">
+            <p className="text-xl font-bold text-brand-navy">Home<span className="text-brand-orange">Link</span></p>
+            <p className="text-[10px] text-gray-400 tracking-widest uppercase mt-1">Home Improvement &amp; Services</p>
+            <div className="border-t border-dashed border-gray-300 mt-3 pt-3">
+              <p className="text-xs font-bold text-gray-700 tracking-widest uppercase">Official Receipt</p>
+              <p className="text-sm font-bold text-brand-navy mt-2">Order #{order.id.slice(0, 8).toUpperCase()}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{new Date(order.created_at).toLocaleString()}</p>
+              <p className="text-xs text-gray-500 mt-0.5 capitalize">{order.status} &middot; {order.payment_status}</p>
+            </div>
+            <div className="border-t border-dashed border-gray-300 mt-3" />
           </div>
-          <div className="border-t border-dashed border-gray-300 mt-3" />
-        </div>
+        )}
 
         <div className="flex items-start justify-between p-6 pb-4 sticky top-0 bg-white border-b border-gray-100 print:hidden">
           <div>

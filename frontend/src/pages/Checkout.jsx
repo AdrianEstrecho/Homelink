@@ -141,7 +141,7 @@ export default function Checkout() {
         error={error}
         person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
         personLabel="Billed To"
-        onClose={() => { setPendingOrder(null); setPaymentDetails(null); setError(''); }}
+        onClose={() => { setPendingOrder(null); setError(''); }}
       />
     );
   }
