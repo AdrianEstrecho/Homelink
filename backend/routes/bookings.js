@@ -8,6 +8,7 @@ import { createCheckoutSessionV2, retrieveCheckoutSession } from '../utils/paymo
 import { logActivity } from '../utils/audit.js';
 import { BOOKING_STEPS, ORIGIN, getBookingTimeline, getBookingDestination } from '../utils/tracking.js';
 import { bookingStatusEmail } from '../utils/email.js';
+import { resolveFrontendUrl } from '../utils/frontendUrl.js';
 
 const router = Router();
 
@@ -135,7 +136,7 @@ router.post('/checkout-session', authenticate, async (req, res) => {
     `).run(pendingId, req.user.id, serviceId, scheduledDate, scheduledTime, address, notes || '', priced.price, priced.discount, paymentMethod);
 
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = resolveFrontendUrl(req);
     const session = await createCheckoutSessionV2({
       amount: Math.round(priced.price * 100),
       paymentMethodTypes: [paymentMethod],

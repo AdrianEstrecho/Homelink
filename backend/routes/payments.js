@@ -6,6 +6,7 @@ import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
 import { createCheckoutSessionV2, retrieveCheckoutSession, verifyWebhookSignature } from '../utils/paymongo.js';
 import { logActivity } from '../utils/audit.js';
+import { resolveFrontendUrl } from '../utils/frontendUrl.js';
 import { finalizePendingBooking } from './bookings.js';
 
 const router = Router();
@@ -87,7 +88,7 @@ router.post('/checkout-session', authenticate, async (req, res) => {
     `).run(pendingId, req.user.id, JSON.stringify(pricedItems), subtotal, discount, total, paymentMethod, shippingAddress, promoCode || null, appliedPromo);
 
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = resolveFrontendUrl(req);
     const session = await createCheckoutSessionV2({
       amount: Math.round(total * 100),
       paymentMethodTypes: [paymentMethod],

@@ -25,6 +25,7 @@ import wishlistRoutes from './routes/wishlist.js';
 import cartRoutes from './routes/cart.js';
 import paymentRoutes, { paymongoWebhookHandler } from './routes/payments.js';
 import db from './db/database.js';
+import { MOBILE_ORIGINS } from './utils/frontendUrl.js';
 
 dotenv.config();
 
@@ -38,10 +39,7 @@ const PORT = process.env.PORT || 5000;
 // web app's CORS behavior.
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:5173',
-  'http://localhost:4200',
-  'https://localhost',
-  'http://localhost',
-  'https://homelink-mobile-app.vercel.app',
+  ...MOBILE_ORIGINS,
   ...(process.env.ADDITIONAL_CORS_ORIGINS?.split(',').map((s) => s.trim()).filter(Boolean) ?? []),
 ];
 app.use(cors({
