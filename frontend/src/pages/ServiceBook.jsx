@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Calendar, Clock, ChevronRight, ShieldCheck, Award, Timer, Plus, X } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { startBookingPayment } from '../utils/bookingCheckout';
 import AddressPicker from '../components/AddressPicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
+import BookingDetailsModal from '../components/BookingDetailsModal';
 import ErrorState from '../components/ErrorState';
 import { Skeleton } from '../components/Skeleton';
 import SafeImage from '../components/SafeImage';
@@ -20,12 +22,14 @@ function calcDiscount(amount, promo) {
 export default function ServiceBook() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const addressRef = useRef(null);
   const paymentRef = useRef(null);
 
   const [service, setService] = useState(null);
   const [loadError, setLoadError] = useState(false);
   const [discounts, setDiscounts] = useState(null);
+  const [confirmedBooking, setConfirmedBooking] = useState(null);
 
   const [extraServices, setExtraServices] = useState([]);
   const [catalog, setCatalog] = useState([]);
@@ -58,6 +62,22 @@ export default function ServiceBook() {
   useEffect(() => {
     if (date) api.get(`/bookings/availability?date=${date}`).then(setSlots).catch(() => setSlots([]));
   }, [date]);
+
+  // Show the receipt — same pattern as Checkout.jsx's confirmedOrder — before sending the
+  // customer anywhere else. Checked ahead of loadError/!service below since neither matters
+  // once a bank-transfer booking has actually been created.
+  if (confirmedBooking) {
+    return (
+      <BookingDetailsModal
+        booking={confirmedBooking}
+        justConfirmed
+        person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
+        personLabel="Billed To"
+        onClose={() => navigate('/bookings', { replace: true })}
+        onDismiss={() => navigate('/', { replace: true })}
+      />
+    );
+  }
 
   if (loadError) {
     return (
@@ -127,10 +147,12 @@ export default function ServiceBook() {
       // gateway-verified charges and have to go through PayMongo's hosted Checkout Session
       // (see startBookingPayment), same as Checkout.jsx uses for orders.
       if (payment.method === 'bank') {
+        let primary = null;
         for (const bp of bookingParams) {
-          await api.post('/bookings', { ...bp, paymentMethod: 'bank' });
+          const created = await api.post('/bookings', { ...bp, paymentMethod: 'bank' });
+          if (!primary) primary = created;
         }
-        navigate('/bookings');
+        setConfirmedBooking(primary);
         return;
       }
 

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
-import { Loader2, XCircle, CheckCircle2 } from 'lucide-react';
+import { Loader2, XCircle } from 'lucide-react';
 import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { startBookingPayment } from '../utils/bookingCheckout';
+import BookingDetailsModal from '../components/BookingDetailsModal';
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_ATTEMPTS = 30;
@@ -17,6 +19,7 @@ export default function BookingReturn() {
   const [searchParams] = useSearchParams();
   const pendingBookingId = searchParams.get('pbid');
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [state, setState] = useState('processing'); // 'processing' | 'chaining' | 'succeeded' | 'failed' | 'timeout'
   const [booking, setBooking] = useState(null);
@@ -67,6 +70,22 @@ export default function BookingReturn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingBookingId]);
 
+  // replace, not push: this /bookings/return entry re-polls and re-shows this same
+  // "confirmed" screen if you ever land back on it, which browser back otherwise would —
+  // same reasoning as CheckoutReturn.jsx.
+  if (state === 'succeeded' && booking) {
+    return (
+      <BookingDetailsModal
+        booking={booking}
+        justConfirmed
+        person={user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : null}
+        personLabel="Billed To"
+        onClose={() => navigate('/bookings', { replace: true })}
+        onDismiss={() => navigate('/', { replace: true })}
+      />
+    );
+  }
+
   return (
     <div className="max-w-md mx-auto px-4 py-24 text-center">
       {(state === 'processing' || state === 'chaining') && (
@@ -76,17 +95,6 @@ export default function BookingReturn() {
             {state === 'chaining' ? 'Continuing to your next service…' : 'Confirming your payment…'}
           </h2>
           <p className="text-gray-500">This usually only takes a few seconds. Please don't close this page.</p>
-        </>
-      )}
-
-      {state === 'succeeded' && (
-        <>
-          <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-4" />
-          <h2 className="font-display text-xl font-bold text-brand-ink mb-2">Booking confirmed!</h2>
-          <p className="text-gray-500 mb-6">
-            {booking?.service_name ? `${booking.service_name} is booked for ${booking.scheduled_date}.` : 'Your service has been booked.'}
-          </p>
-          <button onClick={() => navigate('/bookings', { replace: true })} className="btn-primary">View My Bookings</button>
         </>
       )}
 
