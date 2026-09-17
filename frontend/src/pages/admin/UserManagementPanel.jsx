@@ -5,26 +5,22 @@ import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useAuth } from '../../context/AuthContext';
+import { DEPARTMENT_LABELS } from '../../data/auditActions';
 
-const POSITION_LABELS = {
-  inventory_clerk: 'Inventory Clerk',
-  booking_coordinator: 'Booking Coordinator',
-  installer: 'Installer / Technician',
-  hr: 'Human Resources',
-  general_staff: 'General Staff',
-};
-
-const POSITION_COLORS = {
-  inventory_clerk: 'bg-teal-100 text-teal-800',
+const DEPARTMENT_COLORS = {
+  accounting: 'bg-violet-100 text-violet-800',
   booking_coordinator: 'bg-blue-100 text-blue-800',
-  installer: 'bg-orange-100 text-orange-800',
   hr: 'bg-pink-100 text-pink-800',
+  installer: 'bg-orange-100 text-orange-800',
+  inventory_clerk: 'bg-teal-100 text-teal-800',
   general_staff: 'bg-gray-100 text-gray-700',
 };
 
-const POSITION_OPTIONS = Object.entries(POSITION_LABELS).map(([value, label]) => ({ value, label }));
+const DEPARTMENT_OPTIONS = Object.entries(DEPARTMENT_LABELS).map(([value, label]) => ({ value, label }));
 
-const REQUEST_ACTION_LABELS = { create: 'Onboard', update: 'Promote', archive: 'Archive', restore: 'Restore', delete: 'Delete' };
+const UNSET_BADGE = 'bg-white text-gray-400 border border-dashed border-gray-300';
+
+const REQUEST_ACTION_LABELS = { create: 'Onboard', update: 'Change Department', archive: 'Archive', restore: 'Restore', delete: 'Delete' };
 
 function maskPhone(phone) {
   if (!phone || phone.length < 4) return phone || '—';
@@ -38,15 +34,17 @@ function maskAddress(address) {
   return `${words[0]} ${'•'.repeat(6)}`;
 }
 
-// Shared by Users.jsx (customers), AdminManagement.jsx (employees/admins),
-// ArchivedUsers.jsx (any archived account), EmployeeManagement.jsx and
-// HRArchivedEmployees.jsx (HR's employee-only slice) — the role tabs and archivedView
-// flag decide which slice of the same /admin/users list each page shows.
+// Shared by Users.jsx (customers), AdminManagement.jsx (admins), and EmployeeManagement.jsx
+// (HR's employee-only slice) — the role tabs decide which slice of the same /admin/users
+// list each page shows, and the Active/Archived toggle below lives inside this same panel
+// (rather than a separate nav page) so admins don't need to leave the page to find
+// archived accounts. Admins are never archivable (see the archive button's `role !== 'admin'`
+// guard further down), so the toggle only shows for non-admin role tabs.
 // HR sees the same write actions as admin (add, promote, archive, restore, delete), but
 // every one of HR's writes is only *proposed*: the backend queues it as a change request
 // for admin to approve rather than applying it immediately (see api responses' `pending`
 // flag below). General staff can reach this panel too (view-only, canManage is false).
-export default function UserManagementPanel({ roleTabs, title, subtitle, archivedView = false }) {
+export default function UserManagementPanel({ roleTabs, title, subtitle }) {
   const { user: currentUser } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
   const isHR = currentUser?.position === 'hr';
@@ -55,6 +53,9 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
   const canManage = isAdmin || isHR;
   const [users, setUsers] = useState([]);
   const [tab, setTab] = useState(roleTabs[0].key);
+  const [view, setView] = useState('active');
+  const archivedView = view === 'archived';
+  const canToggleArchive = tab !== 'admin';
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '', phone: '', position: 'general_staff' });
   const [revealed, setRevealed] = useState(new Set());
@@ -62,6 +63,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
   const [confirmArchiveId, setConfirmArchiveId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [notice, setNotice] = useState('');
+  const [formError, setFormError] = useState('');
   const [myRequests, setMyRequests] = useState([]);
 
   const load = () => api.get('/admin/users').then(setUsers).catch(() => {});
@@ -80,6 +82,8 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
   }, [users, roleTabs, archivedView]);
 
   const filtered = users.filter(u => u.role === tab && !!u.archived === archivedView);
+  const activeCountForTab = users.filter(u => u.role === tab && !u.archived).length;
+  const archivedCountForTab = users.filter(u => u.role === tab && !!u.archived).length;
 
   const toggleReveal = (id) => {
     setRevealed(prev => {
@@ -89,12 +93,21 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
     });
   };
 
+  const closeForm = () => { setShowForm(false); setFormError(''); };
+
   const handleAdd = async (e) => {
     e.preventDefault();
     setNotice('');
+    setFormError('');
     const role = tab === 'admin' ? 'admin' : 'employee';
-    const result = await api.post('/admin/users', { ...form, role });
-    setShowForm(false);
+    let result;
+    try {
+      result = await api.post('/admin/users', { ...form, role });
+    } catch (err) {
+      setFormError(err.message || 'Could not add user.');
+      return;
+    }
+    closeForm();
     setForm({ email: '', password: '', firstName: '', lastName: '', phone: '', position: 'general_staff' });
     if (result?.pending) setNotice(result.message || 'Submitted for admin approval.');
     load();
@@ -177,13 +190,17 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        {roleTabs.length > 1 ? (
-          <div className="flex items-center gap-2">
-            {roleTabs.map(t => (
-              <TabButton key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>{t.label} ({counts[t.key] || 0})</TabButton>
-            ))}
-          </div>
-        ) : <div />}
+        <div className="flex items-center gap-2">
+          {roleTabs.length > 1 && roleTabs.map(t => (
+            <TabButton key={t.key} active={tab === t.key} onClick={() => { setTab(t.key); setView('active'); }}>{t.label} ({counts[t.key] || 0})</TabButton>
+          ))}
+          {canToggleArchive && (
+            <>
+              <TabButton active={!archivedView} onClick={() => setView('active')}>All Active ({activeCountForTab})</TabButton>
+              <TabButton active={archivedView} onClick={() => setView('archived')}>Archived ({archivedCountForTab})</TabButton>
+            </>
+          )}
+        </div>
         {!archivedView && ((canManage && tab === 'employee') || (isAdmin && tab === 'admin')) && (
           <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 text-sm py-2"><Plus className="w-4 h-4" /> {tab === 'admin' ? 'Add Admin' : 'Add User'}</button>
         )}
@@ -191,21 +208,22 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
 
       {showForm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={() => setShowForm(false)} />
+          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={closeForm} />
           <form onSubmit={handleAdd} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 grid grid-cols-1 md:grid-cols-2 gap-4 fade-up">
             <div className="md:col-span-2 flex items-center justify-between">
               <h3 className="font-semibold text-gray-800">{tab === 'admin' ? 'New Admin' : 'New Employee'}</h3>
-              <button type="button" onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+              <button type="button" onClick={closeForm} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
             </div>
             <input placeholder="Email" type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" />
             <input placeholder="Password" type="password" required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="input-field" />
             <input placeholder="First Name" required value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className="input-field" />
             <input placeholder="Last Name" required value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className="input-field" />
             <input placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field" />
-            {tab !== 'admin' && <Select value={form.position} onChange={position => setForm({ ...form, position })} options={POSITION_OPTIONS} />}
+            {tab !== 'admin' && <Select value={form.position} onChange={position => setForm({ ...form, position })} placeholder="Department" options={DEPARTMENT_OPTIONS} />}
             {isHR && tab === 'employee' && (
               <p className="md:col-span-2 text-xs text-gray-400">This account won't be created until an admin reviews and approves it.</p>
             )}
+            {formError && <p className="md:col-span-2 text-sm text-red-600">{formError}</p>}
             <button type="submit" className="btn-primary md:col-span-2">{tab === 'admin' ? 'Save Admin' : isHR ? 'Submit for Approval' : 'Save User'}</button>
           </form>
         </div>
@@ -220,7 +238,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
               <th className="p-3 font-medium">Email</th>
               <th className="p-3 font-medium">Phone</th>
               <th className="p-3 font-medium">Address</th>
-              {!archivedView && tab === 'employee' && <th className="p-3 font-medium">Position</th>}
+              {!archivedView && tab === 'employee' && <th className="p-3 font-medium">Department</th>}
               <th className="p-3 font-medium text-right">Actions</th>
             </tr>
           </thead>
@@ -244,20 +262,20 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
                           value={u.position || ''}
                           onChange={position => promote(u.id, position)}
                           onClose={() => setPromotingId(null)}
-                          placeholder="Choose position"
-                          options={POSITION_OPTIONS}
+                          placeholder="Choose department"
+                          options={DEPARTMENT_OPTIONS}
                           className="w-48"
                         />
                       ) : canManage ? (
                         <button
                           onClick={() => setPromotingId(u.id)}
-                          className={`badge transition hover:opacity-80 ${u.position ? POSITION_COLORS[u.position] : 'bg-white text-gray-400 border border-dashed border-gray-300'}`}
+                          className={`badge transition hover:opacity-80 ${u.position ? DEPARTMENT_COLORS[u.position] || DEPARTMENT_COLORS.general_staff : UNSET_BADGE}`}
                         >
-                          {u.position ? POSITION_LABELS[u.position] || u.position : 'Set position...'}
+                          {u.position ? DEPARTMENT_LABELS[u.position] || u.position : 'Set department...'}
                         </button>
                       ) : (
-                        <span className={`badge ${u.position ? POSITION_COLORS[u.position] : 'bg-white text-gray-400 border border-dashed border-gray-300'}`}>
-                          {u.position ? POSITION_LABELS[u.position] || u.position : 'No position'}
+                        <span className={`badge ${u.position ? DEPARTMENT_COLORS[u.position] || DEPARTMENT_COLORS.general_staff : UNSET_BADGE}`}>
+                          {u.position ? DEPARTMENT_LABELS[u.position] || u.position : 'No department'}
                         </span>
                       )}
                     </td>
@@ -275,7 +293,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle, archive
                             onChange={position => position && promote(u.id, position)}
                             onClose={() => setPromotingId(null)}
                             placeholder="Promote to..."
-                            options={POSITION_OPTIONS}
+                            options={DEPARTMENT_OPTIONS}
                             className="w-48"
                           />
                         ) : (

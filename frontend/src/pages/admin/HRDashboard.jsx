@@ -4,7 +4,7 @@ import { Users, UserPlus, Truck, Wrench, ArrowRight, UserCog } from 'lucide-reac
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import { useAuth } from '../../context/AuthContext';
-import { POSITION_LABELS } from '../../data/auditActions';
+import { DEPARTMENT_LABELS } from '../../data/auditActions';
 
 export default function HRDashboard() {
   const { user } = useAuth();
@@ -88,7 +88,7 @@ export default function HRDashboard() {
                   <p className="text-sm font-medium text-gray-800 truncate">{h.first_name} {h.last_name}</p>
                   <p className="text-xs text-gray-400 truncate">{h.email} · {h.staff_code || '—'}</p>
                 </div>
-                <span className="badge bg-gray-100 text-gray-700 shrink-0">{h.position ? POSITION_LABELS[h.position] || h.position : 'No position'}</span>
+                <span className="badge bg-gray-100 text-gray-700 shrink-0">{h.position ? DEPARTMENT_LABELS[h.position] || h.position : 'No department'}</span>
               </div>
             ))}
           </div>

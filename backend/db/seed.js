@@ -10,7 +10,7 @@ console.log('Seeding HomeLink database...');
 // change_requests.requested_by/reviewed_by, notifications.user_id, and
 // staff_messages.sender_id/recipient_id all reference users with no cascade too, so they must
 // go before users.
-await db.exec('DELETE FROM reviews; DELETE FROM order_items; DELETE FROM pending_checkouts; DELETE FROM orders; DELETE FROM pending_bookings; DELETE FROM bookings; DELETE FROM vouchers; DELETE FROM products; DELETE FROM services; DELETE FROM categories WHERE parent_id IS NOT NULL; DELETE FROM categories; DELETE FROM announcements; DELETE FROM gallery; DELETE FROM audit_logs; DELETE FROM support_replies; DELETE FROM change_requests; DELETE FROM notifications; DELETE FROM staff_messages; DELETE FROM users;');
+await db.exec('DELETE FROM reviews; DELETE FROM order_items; DELETE FROM pending_checkouts; DELETE FROM orders; DELETE FROM pending_bookings; DELETE FROM bookings; DELETE FROM vouchers; DELETE FROM products; DELETE FROM services; DELETE FROM categories WHERE parent_id IS NOT NULL; DELETE FROM categories; DELETE FROM announcements; DELETE FROM gallery; DELETE FROM audit_logs; DELETE FROM support_replies; DELETE FROM change_requests; DELETE FROM notifications; DELETE FROM staff_messages; DELETE FROM general_chat_messages; DELETE FROM general_chat_reads; DELETE FROM users;');
 
 const adminId = uuid();
 const emp1 = uuid();

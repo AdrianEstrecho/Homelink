@@ -9,21 +9,12 @@ import { authenticate } from '../middleware/auth.js';
 import { sendEmail, passwordResetEmail, signupVerificationEmail, twoFactorCodeEmail, twoFactorSetupEmail } from '../utils/email.js';
 import { validatePasswordStrength } from '../utils/password.js';
 import { logActivity } from '../utils/audit.js';
+import { createChangeRequest } from '../utils/changeRequests.js';
+import { generateVerificationCode, hashVerificationCode } from '../utils/verificationCode.js';
 
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const JWT_SECRET = process.env.JWT_SECRET || 'homelink-super-secret-key-change-in-production';
-
-// Shared by password-reset codes, signup email verification, and 2FA login codes.
-const VERIFICATION_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // excludes ambiguous 0/O/1/I
-function generateVerificationCode() {
-  let code = '';
-  for (let i = 0; i < 8; i++) code += VERIFICATION_CODE_CHARS[crypto.randomInt(VERIFICATION_CODE_CHARS.length)];
-  return code;
-}
-function hashVerificationCode(code) {
-  return crypto.createHash('sha256').update(String(code).toUpperCase().trim()).digest('hex');
-}
 
 function signAuthToken(user) {
   return jwt.sign({ id: user.id, email: user.email, role: user.role, position: user.position }, JWT_SECRET, { expiresIn: '7d' });
@@ -210,14 +201,31 @@ router.post('/google', async (req, res) => {
   }
 });
 
+// Employees can't reset their own password by email: the request is queued on the admin-only
+// Approvals page instead, and approving it generates the reset code the admin hands to them.
+// Only one request stays open per employee however many times they ask, so repeat clicks (or
+// someone else typing their email) can't flood the approvals queue or the admin's bell.
+async function queueStaffPasswordReset(user, req) {
+  const pending = await db.prepare("SELECT id FROM change_requests WHERE entity_type = 'password_reset' AND entity_id = ? AND status = 'pending'").get(user.id);
+  if (pending) return;
+  await createChangeRequest('password_reset', 'update', user.id, null, user.id);
+  await logActivity({ user: { id: user.id }, ip: req.ip }, 'auth.password_reset_request', 'user', user.id, {
+    email: user.email, name: `${user.first_name} ${user.last_name}`, staffCode: user.staff_code,
+  });
+}
+
+// Used by both the customer and staff-portal reset pages. Customers and admins get an emailed
+// code; employees go through admin approval (see queueStaffPasswordReset above).
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
-    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
-    // Always respond the same way whether or not the account exists, so this endpoint can't be used to enumerate registered emails.
-    if (user) {
+    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
+    // Always respond the same way whether or not the account exists (or which kind it is), so this endpoint can't be used to enumerate registered emails.
+    if (user?.role === 'employee') {
+      if (!user.archived) await queueStaffPasswordReset(user, req);
+    } else if (user) {
       const code = generateVerificationCode();
       const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       await db.prepare('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?').run(hashVerificationCode(code), expires, user.id);
@@ -259,6 +267,12 @@ router.post('/reset-password', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     await db.prepare('UPDATE users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?').run(hash, user.id);
+    if (user.role !== 'customer') {
+      // The code has done its job — take it off the approval card where the admin could still read it.
+      await db.prepare("UPDATE change_requests SET payload = ? WHERE entity_type = 'password_reset' AND entity_id = ? AND status = 'approved' AND payload LIKE '%\"code\"%'")
+        .run(JSON.stringify({ usedAt: new Date().toISOString() }), user.id);
+      await logActivity({ user: { id: user.id }, ip: req.ip }, 'auth.password_reset', 'user', user.id, { email: user.email, role: user.role });
+    }
     res.json({ message: 'Password has been reset. You can now sign in.' });
   } catch (err) {
     res.status(500).json({ error: err.message });

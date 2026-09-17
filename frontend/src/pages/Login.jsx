@@ -1,83 +1,136 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
-import { LogIn, Lock, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { usePageTransition } from '../context/PageTransitionContext';
 import AuthLayout from '../components/AuthLayout';
-import AuthIllustration from '../components/AuthIllustration';
+import { AuthField, PasswordField } from '../components/auth/AuthField';
+import CodeInput from '../components/auth/CodeInput';
+import FormAlert from '../components/auth/FormAlert';
+import ResendCode from '../components/auth/ResendCode';
+import SubmitButton from '../components/auth/SubmitButton';
+import useAuthSuccess from '../hooks/useAuthSuccess';
+import { isEmailValid } from '../utils/validation';
 
 const googleConfigured = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
+const CODE_LENGTH = 8;
+
+const CAPTION = {
+  title: 'Lights on. Welcome home.',
+  body: 'Your orders, installation bookings and saved addresses are right where you left them.',
+};
 
 export default function Login() {
   const { login, verifyTwoFactor, logout, loginWithGoogle } = useAuth();
-  // Same full-screen blue cover used when entering login from the homepage —
-  // reused here so a successful sign-in gets the same ceremony, not just the
-  // pre-auth navigation. It owns its own navigate() call, so this replaces
-  // the old local fade-and-navigate.
-  const coverTransitionTo = usePageTransition();
+  // Lights the scene fully, then hands off to the same full-screen blue cover
+  // used when entering login from the homepage.
+  const { succeeded, finish } = useAuthSuccess();
   const [form, setForm] = useState({ email: '', password: '' });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [stage, setStage] = useState('credentials'); // 'credentials' | '2fa'
   const [code, setCode] = useState('');
-  const [resent, setResent] = useState(false);
+  const [codeSentAt, setCodeSentAt] = useState(0);
   const [error, setError] = useState('');
+  // Bumped on every failed attempt: replays the alert shake and flickers the scene.
+  const [errorKey, setErrorKey] = useState(0);
   const [notRegistered, setNotRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
   // Set only when the pending 2FA challenge came from Google sign-in (no password on hand
   // to resend with in that case) — Google's ID token stays valid for reuse within its window.
   const [googleCredential, setGoogleCredential] = useState(null);
 
+  const emailValid = isEmailValid(form.email);
+
+  // Credentials can light up to four windows (two for the email, two for the
+  // password), the 2FA code a fifth, and signing in lights the last.
+  const emailScore = emailValid ? 1 : form.email.includes('@') ? 0.5 : 0;
+  const passwordScore = Math.min(form.password.length / 8, 1);
+  const level = stage === '2fa'
+    ? (4 + code.length / CODE_LENGTH) / 6
+    : (emailScore * 2 + passwordScore * 2) / 6;
+
+  const fail = (message) => {
+    setError(message);
+    setErrorKey(k => k + 1);
+  };
+
+  const updateField = (field) => (e) => {
+    setForm(f => ({ ...f, [field]: e.target.value }));
+    setFieldErrors(fe => ({ ...fe, [field]: undefined }));
+  };
+
   const finishLogin = (user) => {
     if (user.role !== 'customer') {
       logout();
       throw new Error('Staff accounts sign in at the staff portal — press Ctrl+Alt+. to continue there.');
     }
-    coverTransitionTo('/');
+    finish('/');
+  };
+
+  const startTwoFactor = () => {
+    setStage('2fa');
+    setCode('');
+    setCodeSentAt(Date.now());
+    setLoading(false);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const errs = {};
+    if (!form.email.trim()) errs.email = 'Enter your email.';
+    else if (!emailValid) errs.email = 'Enter a valid email, like name@example.com.';
+    if (!form.password) errs.password = 'Enter your password.';
+    setFieldErrors(errs);
+    if (Object.keys(errs).length) {
+      setErrorKey(k => k + 1);
+      return;
+    }
+
     setLoading(true);
     setError('');
+    setNotRegistered(false);
     try {
       const result = await login(form.email, form.password);
       if (result.requires2FA) {
-        setStage('2fa');
-        setLoading(false);
+        startTwoFactor();
         return;
       }
       finishLogin(result.user);
     } catch (err) {
-      setError(err.message);
+      fail(err.message);
       setLoading(false);
     }
   };
 
-  const handleVerify2FA = async (e) => {
-    e.preventDefault();
+  const verifyCode = async (value) => {
+    if (loading || succeeded) return;
+    if (value.length < CODE_LENGTH) {
+      fail(`Enter all ${CODE_LENGTH} characters of the code.`);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      const user = await verifyTwoFactor(form.email, code);
+      const user = await verifyTwoFactor(form.email, value);
       finishLogin(user);
     } catch (err) {
-      setError(err.message);
+      fail(err.message);
       setLoading(false);
     }
   };
 
   const handleResendCode = async () => {
     setError('');
-    setResent(false);
     try {
       if (googleCredential) {
         await loginWithGoogle(googleCredential, { mode: 'login' });
       } else {
         await login(form.email, form.password);
       }
-      setResent(true);
+      setCodeSentAt(Date.now());
     } catch (err) {
-      setError(err.message);
+      fail(err.message);
+      throw err;
     }
   };
 
@@ -85,7 +138,6 @@ export default function Login() {
     setStage('credentials');
     setCode('');
     setError('');
-    setResent(false);
     setGoogleCredential(null);
   };
 
@@ -98,53 +150,56 @@ export default function Login() {
       if (result.requires2FA) {
         setForm(f => ({ ...f, email: result.email }));
         setGoogleCredential(credentialResponse.credential);
-        setStage('2fa');
-        setLoading(false);
+        startTwoFactor();
         return;
       }
-      coverTransitionTo('/');
+      finish('/');
     } catch (err) {
       if (err.code === 'not_registered') {
         setNotRegistered(true);
+        setErrorKey(k => k + 1);
       } else {
-        setError(err.message || 'Google sign-in failed');
+        fail(err.message || 'Google sign-in failed. Try again, or sign in with your email.');
       }
       setLoading(false);
     }
   };
 
+  const scene = { level, success: succeeded, flickerKey: errorKey };
+
   if (stage === '2fa') {
     return (
       <AuthLayout
-        title="Verify it's you"
-        subtitle={`An authentication code has been sent to ${form.email}.`}
-        illustration={<AuthIllustration icon={Lock} badgeIcon={ShieldCheck} />}
+        title="Check your email"
+        subtitle={<>Enter the {CODE_LENGTH}-character code we sent to <span className="font-semibold text-brand-ink">{form.email}</span>.</>}
+        scene={scene}
+        caption={CAPTION}
       >
-        <form onSubmit={handleVerify2FA} className="space-y-5">
+        <form onSubmit={(e) => { e.preventDefault(); verifyCode(code); }} noValidate className="space-y-5">
           <div>
-            <label className="block text-sm font-medium mb-1.5">Enter Code</label>
-            <input
-              required
-              autoFocus
+            <p id="login-code-label" className="text-sm font-medium text-brand-ink mb-2">Verification code</p>
+            <CodeInput
+              id="login-code"
+              labelledBy="login-code-label"
               value={code}
-              onChange={e => setCode(e.target.value.toUpperCase())}
-              maxLength={8}
-              className="input-field tracking-widest font-mono uppercase"
-              placeholder="XXXXXXXX"
+              onChange={(next) => { setCode(next); if (error) setError(''); }}
+              onComplete={verifyCode}
+              invalid={Boolean(error)}
+              disabled={loading || succeeded}
+              autoFocus
             />
           </div>
-          <p className="text-sm text-gray-600">
-            Didn't receive a code?{' '}
-            <button type="button" onClick={handleResendCode} className="text-brand-orange font-semibold hover:underline">Resend</button>
-            {resent && <span className="text-green-600 ml-2">Sent!</span>}
-          </p>
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-          <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 py-3 disabled:opacity-70 transition-opacity">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-            {loading ? 'Verifying...' : 'Verify'}
-          </button>
-          <button type="button" onClick={backToCredentials} className="w-full text-center text-sm text-gray-500 hover:text-brand-navy">
-            Back to login
+          <ResendCode sentAt={codeSentAt} onResend={handleResendCode} />
+          <FormAlert key={errorKey}>{error}</FormAlert>
+          <SubmitButton loading={loading} success={succeeded} icon={ShieldCheck} loadingLabel="Verifying…" successLabel="You're in">
+            Verify and sign in
+          </SubmitButton>
+          <button
+            type="button"
+            onClick={backToCredentials}
+            className="w-full inline-flex items-center justify-center gap-1 text-sm text-gray-500 hover:text-brand-navy"
+          >
+            <ChevronLeft className="w-4 h-4" /> Sign in with a different account
           </button>
         </form>
       </AuthLayout>
@@ -153,57 +208,70 @@ export default function Login() {
 
   return (
     <AuthLayout
-      title="Login"
-      subtitle="Login to access your HomeLink account"
-      illustration={<AuthIllustration icon={Lock} badgeIcon={ShieldCheck} />}
+      title="Welcome back"
+      subtitle="Sign in to track your orders, manage bookings, and check out faster."
+      scene={scene}
+      caption={CAPTION}
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div>
-          <label className="block text-sm font-medium mb-1.5">Email</label>
-          <input type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1.5">Password</label>
-          <input type="password" required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="input-field" />
-          <div className="flex justify-end mt-1.5">
-            <Link to="/forgot-password" className="text-xs text-brand-orange font-medium hover:underline">Forgot Password?</Link>
-          </div>
-        </div>
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 py-3 disabled:opacity-70 transition-opacity">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-          {loading ? 'Signing in...' : 'Login'}
-        </button>
-        <p className="text-center text-sm text-gray-600">
-          Don't have an account? <Link to="/register" className="text-brand-orange font-semibold hover:underline">Sign up</Link>
-        </p>
-
-        {googleConfigured && (
-          <>
-            <div className="relative text-center pt-2">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-              <span className="relative bg-white px-3 text-xs text-gray-400 uppercase">Or login with</span>
-            </div>
-            <div className="space-y-3 flex flex-col items-center">
-              <div className="w-[320px] space-y-2">
-                <div className="rounded-lg overflow-hidden">
-                  <GoogleLogin onSuccess={handleGoogleSuccess} onError={() => setError('Google sign-in failed')} width="320" />
-                </div>
-                {notRegistered && (
-                  <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">
-                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <p>
-                      We couldn't find a HomeLink account for this Google account.{' '}
-                      <Link to="/register" className="font-semibold underline hover:text-amber-900">Register first</Link> to continue.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <AuthField
+          id="login-email"
+          label="Email"
+          type="email"
+          autoComplete="email"
+          inputMode="email"
+          value={form.email}
+          onChange={updateField('email')}
+          valid={emailValid}
+          error={fieldErrors.email}
+        />
+        <PasswordField
+          id="login-password"
+          label="Password"
+          autoComplete="current-password"
+          value={form.password}
+          onChange={updateField('password')}
+          error={fieldErrors.password}
+          labelAside={
+            <Link to="/forgot-password" className="text-xs font-semibold text-brand-orange hover:underline">
+              Forgot password?
+            </Link>
+          }
+        />
+        <FormAlert key={errorKey}>{error}</FormAlert>
+        <SubmitButton loading={loading} success={succeeded} icon={ArrowRight} loadingLabel="Signing in…" successLabel="You're in">
+          Sign in
+        </SubmitButton>
       </form>
+
+      {googleConfigured && (
+        <>
+          <div className="flex items-center gap-3 my-6 text-xs font-medium uppercase tracking-wider text-gray-400">
+            <span className="h-px flex-1 bg-gray-200" /> or <span className="h-px flex-1 bg-gray-200" />
+          </div>
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-[320px] max-w-full rounded-lg overflow-hidden">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => fail('Google sign-in failed. Try again, or sign in with your email.')}
+                width="320"
+              />
+            </div>
+            {notRegistered && (
+              <div className="w-full" key={errorKey}>
+                <FormAlert tone="warning">
+                  There's no HomeLink account for this Google account yet.{' '}
+                  <Link to="/register" className="font-semibold underline hover:text-amber-900">Create one</Link> to continue.
+                </FormAlert>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      <p className="text-center text-sm text-gray-600 mt-7">
+        New to HomeLink? <Link to="/register" className="text-brand-orange font-semibold hover:underline">Create an account</Link>
+      </p>
     </AuthLayout>
   );
 }

@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Shield, Truck, Wrench, Zap, Star, Quote, Home as HomeIcon } from 'lucide-react';
+import { ArrowRight, Zap, CreditCard, Lock, RotateCcw, CalendarX, ShieldCheck, Smartphone, QrCode, Landmark, Phone, Mail, Clock, ChevronDown } from 'lucide-react';
 import { api } from '../api/client';
 import Hero from '../components/Hero';
 import ProductCard from '../components/ProductCard';
-import ServiceCard from '../components/ServiceCard';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
 import CountUp from '../components/CountUp';
-import StarRating from '../components/account/StarRating';
+import HowItWorks from '../components/home/HowItWorks';
+import ServicesShowcase from '../components/home/ServicesShowcase';
+import Testimonials from '../components/home/Testimonials';
+import SpotlightCard from '../components/home/SpotlightCard';
+import CategoryTile, { countLabel } from '../components/CategoryTile';
 import { getCategoryIcon } from '../constants/categoryIcons';
-import { ProductCardSkeleton, ServiceCardSkeleton, CategorySkeleton, ReviewCardSkeleton } from '../components/Skeleton';
+import { ProductCardSkeleton, CategorySkeleton } from '../components/Skeleton';
 
 const STATS = [
   { value: '10,000+', label: 'Homeowners Served' },
@@ -19,12 +22,23 @@ const STATS = [
   { value: '4.8/5', label: 'Average Rating' },
 ];
 
-const FEATURES = [
-  { icon: Shield, title: 'Verified Technicians', desc: 'All service providers are verified and trained professionals, background-checked before they ever step into your home.' },
-  { icon: Truck, title: 'Reliable Delivery', desc: 'Track your orders from purchase to doorstep delivery, with real-time updates every step of the way.' },
-  { icon: Wrench, title: 'Expert Services', desc: 'Book installation, cleaning, and repair services easily, with pros matched to the job you need done.' },
-  { icon: Star, title: 'Quality Products', desc: 'Curated home improvement products from trusted brands, vetted for durability and performance.' },
+// Condensed from the Refund / Cancellation / Data Privacy policies (see /policies).
+const GUARANTEES = [
+  { icon: Lock, title: 'Secure checkout', desc: 'Online payments are processed through PayMongo’s secure checkout, and every order is confirmed by email.' },
+  { icon: RotateCcw, title: 'Refund protection', desc: 'Order or service not fulfilled? Request a refund within 7 days. Refunds are processed in 5–10 business days.' },
+  { icon: CalendarX, title: 'Flexible cancellations', desc: 'Cancel product orders before they ship, and service bookings up to 24 hours before your appointment.' },
+  { icon: ShieldCheck, title: 'Your data, protected', desc: 'Personal and payment details are kept confidential and handled in line with the Data Privacy Act.' },
 ];
+
+const PAYMENT_METHODS = [
+  { icon: CreditCard, label: 'Credit / Debit Card' },
+  { icon: Smartphone, label: 'GCash' },
+  { icon: QrCode, label: 'QR Ph' },
+  { icon: Landmark, label: 'Bank Transfer' },
+];
+
+// Fallbacks match the defaults served by GET /promos/location.
+const DEFAULT_CONTACT = { phone: '(02) 8123-4567', email: 'support@homelink.com' };
 
 export default function Home() {
   const [featured, setFeatured] = useState({ data: [], loading: true, error: false });
@@ -32,19 +46,26 @@ export default function Home() {
   const [categories, setCategories] = useState({ data: [], loading: true, error: false });
   const [reviews, setReviews] = useState({ data: [], loading: true, error: false });
   const [announcements, setAnnouncements] = useState([]);
-  const [activeFeature, setActiveFeature] = useState(0);
+  const [faqs, setFaqs] = useState([]);
+  const [openFaq, setOpenFaq] = useState(0);
+  const [contact, setContact] = useState(DEFAULT_CONTACT);
 
+  // One request feeds both the hero's 8 floating cards and the Featured
+  // section: the API's default sort is featured-first, so the featured rows
+  // among these 8 are exactly what ?featured=true&limit=4 would return —
+  // without downloading the same (base64-image-heavy) rows twice.
   const loadFeatured = useCallback(() => {
     setFeatured(s => ({ ...s, loading: true, error: false }));
-    api.get('/products?featured=true&limit=4')
+    api.get('/products?limit=8')
       .then(data => setFeatured({ data, loading: false, error: false }))
       .catch(() => setFeatured({ data: [], loading: false, error: true }));
   }, []);
 
+  // Most-booked first; only the top 4 are shown, so only 4 rows are fetched.
   const loadServices = useCallback(() => {
     setServices(s => ({ ...s, loading: true, error: false }));
-    api.get('/services?limit=4')
-      .then(data => setServices({ data: data.slice(0, 4), loading: false, error: false }))
+    api.get('/services?sort=popular&limit=4')
+      .then(data => setServices({ data, loading: false, error: false }))
       .catch(() => setServices({ data: [], loading: false, error: true }));
   }, []);
 
@@ -68,11 +89,21 @@ export default function Home() {
     loadCategories();
     loadReviews();
     api.get('/announcements').then(setAnnouncements).catch(() => {});
+    api.get('/faqs').then(data => setFaqs(data.slice(0, 5))).catch(() => {});
+    api.get('/promos/location')
+      .then(data => setContact({ phone: data.phone || DEFAULT_CONTACT.phone, email: data.email || DEFAULT_CONTACT.email }))
+      .catch(() => {});
   }, [loadFeatured, loadServices, loadCategories, loadReviews]);
 
+  const featuredProducts = featured.data.filter(p => p.featured).slice(0, 4);
+
+  // Section backgrounds alternate light / white down the page, with navy
+  // bands (Shop with confidence, CTA) as the dark breaks:
+  // stats white → categories light → featured white → how it works light →
+  // services white → confidence navy → testimonials white → FAQ light → CTA navy.
   return (
     <div>
-      <Hero />
+      <Hero products={featured.data} />
 
       {/* Stats bar — white, not navy, so the cloud band at the bottom of the
           hero fades into it rather than cutting hard from cloud-white into a
@@ -88,10 +119,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Announcements — auto-looping marquee (reuses the same track/keyframes
-          as the "Built To Last" showcase band below) wrapped in a manually
-          scrollable strip, so it drifts on its own but a user can still drag
-          it to read ahead or go back. */}
+      {/* Announcements — auto-looping marquee (.marquee-track in index.css)
+          wrapped in a manually scrollable strip, so it drifts on its own but
+          a user can still drag it to read ahead or go back. */}
       {announcements.length > 0 && (
         <div className="bg-brand-orange/10 border-b border-brand-orange/20 overflow-x-auto no-scrollbar">
           <div className="py-3">
@@ -109,84 +139,32 @@ export default function Home() {
         </div>
       )}
 
-      {/* Features */}
-      <section className="py-20 md:py-24 bg-gradient-to-br from-brand-navy to-brand-blue">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <Reveal className="text-center max-w-xl mx-auto mb-10">
-            <p className="eyebrow justify-center mb-3">Why HomeLink</p>
-            <h2 className="section-title text-white">The HomeLink promise</h2>
-          </Reveal>
-          <Reveal className="max-w-6xl mx-auto">
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:h-[240px]">
-              {FEATURES.map((f, i) => {
-                const isOpen = activeFeature === i;
-                return (
-                  <button
-                    key={f.title}
-                    type="button"
-                    onClick={() => setActiveFeature(i)}
-                    onMouseEnter={() => setActiveFeature(i)}
-                    onFocus={() => setActiveFeature(i)}
-                    aria-expanded={isOpen}
-                    className={`group relative text-left rounded-2xl border p-5 flex flex-col justify-between overflow-hidden transition-all duration-500 ease-in-out ${
-                      isOpen
-                        ? 'sm:flex-[2.6] bg-gradient-to-br from-white/[0.14] to-white/[0.04] border-white/20'
-                        : 'sm:flex-1 bg-white/[0.03] border-white/10 hover:bg-white/[0.07]'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-500 ${isOpen ? 'bg-brand-orange/25' : 'bg-white/10 group-hover:bg-white/15'}`}>
-                        <f.icon className={`w-4 h-4 transition-colors duration-500 ${isOpen ? 'text-brand-orange' : 'text-white/70'}`} />
-                      </div>
-                      <span className={`font-display font-black tabular-nums transition-all duration-500 ${isOpen ? 'text-2xl md:text-3xl text-white/30' : 'text-base text-white/20'}`}>
-                        .{String(i + 1).padStart(2, '0')}
-                      </span>
-                    </div>
-
-                    <div className="mt-4">
-                      <h3 className={`font-display font-bold text-white transition-all duration-500 ${isOpen ? 'text-lg mb-1.5' : 'text-sm'}`}>
-                        {f.title}
-                      </h3>
-                      <div className="grid transition-[grid-template-rows] duration-500 ease-in-out" style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}>
-                        <div className="overflow-hidden">
-                          <p className="text-white/70 text-sm leading-relaxed max-w-xs">{f.desc}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* Categories */}
+      {/* Categories — hover animation lives in CategoryTile, shared with the
+          Products and Services filter rows. */}
       <section className="py-20 md:py-24 bg-brand-light">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <Reveal className="text-center max-w-xl mx-auto mb-12">
             <p className="eyebrow justify-center mb-3">What We Offer</p>
             <h2 className="section-title">Shop by category</h2>
           </Reveal>
-          <div className="flex gap-2 sm:gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-3 sm:gap-4">
             {categories.loading ? (
-              Array.from({ length: 9 }).map((_, i) => <div key={i} className="flex-1 min-w-0"><CategorySkeleton /></div>)
+              Array.from({ length: 9 }).map((_, i) => <CategorySkeleton key={i} />)
             ) : categories.error ? (
-              <ErrorState message="Couldn't load categories right now." onRetry={loadCategories} />
+              <div className="col-span-full"><ErrorState message="Couldn't load categories right now." onRetry={loadCategories} /></div>
             ) : (
-              categories.data.slice(0, 10).map((c, i) => {
-                const Icon = getCategoryIcon(c.slug);
-                return (
-                  <Reveal key={c.id} delay={i * 50} className="flex-1 min-w-0">
-                    <Link to={`/products?category=${c.slug}`} className="card hover:border-brand-orange/40 group h-full flex flex-col items-center text-center p-3 sm:p-5 gap-2 sm:gap-3">
-                      <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-brand-navy/5 flex items-center justify-center transition-all duration-300 group-hover:bg-brand-orange/10 group-hover:scale-105">
-                        <Icon className="w-5 h-5 sm:w-7 sm:h-7 text-brand-navy transition-colors group-hover:text-brand-orange" />
-                      </div>
-                      <h3 className="font-medium text-xs sm:text-sm text-gray-800 leading-tight">{c.name}</h3>
-                    </Link>
-                  </Reveal>
-                );
-              })
+              categories.data.slice(0, 9).map((c, i) => (
+                <Reveal key={c.id} delay={i * 50} className="h-full">
+                  <CategoryTile
+                    as={Link}
+                    to={`/products?category=${c.slug}`}
+                    icon={getCategoryIcon(c.slug)}
+                    label={c.name}
+                    meta={countLabel(c.product_count, 'item')}
+                    action="Shop"
+                  />
+                </Reveal>
+              ))
             )}
           </div>
         </div>
@@ -209,12 +187,14 @@ export default function Home() {
               Array.from({ length: 4 }).map((_, i) => <ProductCardSkeleton key={i} />)
             ) : featured.error ? (
               <ErrorState message="Couldn't load featured products right now." onRetry={loadFeatured} />
-            ) : featured.data.length === 0 ? (
+            ) : featuredProducts.length === 0 ? (
               <p className="col-span-full text-center text-gray-500 py-8">No featured products yet — check back soon.</p>
             ) : (
-              featured.data.map((p, i) => (
+              featuredProducts.map((p, i) => (
                 <Reveal key={p.id} delay={i * 70} className="h-full">
-                  <ProductCard product={p} />
+                  <div className="h-full transition-transform duration-300 hover:-translate-y-1.5">
+                    <ProductCard product={p} />
+                  </div>
                 </Reveal>
               ))
             )}
@@ -222,96 +202,116 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Signature showcase band */}
-      <section className="relative overflow-hidden bg-brand-navy py-24 md:py-32">
-        <video
-          className="absolute inset-0 w-full h-full object-cover"
-          src="/Homepage.mp4"
-          autoPlay
-          muted
-          loop
-          playsInline
-        />
-        <div className="absolute inset-0 bg-brand-navy/75" />
-        <Reveal className="relative z-10 flex flex-col items-center text-center px-4">
-          <div className="showcase-float w-56 h-56 md:w-72 md:h-72 rounded-[2rem] bg-gradient-to-br from-white to-gray-100 shadow-2xl flex items-center justify-center">
-            <div className="relative">
-              <HomeIcon className="w-20 h-20 md:w-24 md:h-24 text-brand-navy" strokeWidth={1.5} />
-              <div className="absolute -bottom-2 -right-3 w-12 h-12 rounded-2xl bg-brand-orange flex items-center justify-center shadow-lg">
-                <Wrench className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </div>
-          <p className="mt-8 text-gray-300 text-sm max-w-sm">
-            Every product installed, every job completed, by technicians who stand behind their work.
-          </p>
-        </Reveal>
-      </section>
+      <HowItWorks />
 
-      {/* Services */}
-      <section className="py-20 md:py-24 bg-brand-light">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <Reveal className="flex justify-between items-end mb-10 gap-4">
-            <div>
-              <p className="eyebrow mb-3">Book a Pro</p>
-              <h2 className="section-title">Popular services</h2>
+      <ServicesShowcase services={services} onRetry={loadServices} />
+
+      {/* Shop with confidence — payments and policy guarantees, on a navy
+          band. Each guarantee card carries a pointer-following glow. */}
+      <section className="py-20 md:py-24 bg-gradient-to-br from-brand-navy to-brand-blue">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-5 gap-10 lg:gap-14 items-center">
+          <Reveal className="lg:col-span-2">
+            <p className="eyebrow mb-3">Shop With Confidence</p>
+            <h2 className="section-title text-white mb-4">Protected from checkout to completion</h2>
+            <p className="text-white/70 leading-relaxed mb-8">
+              Clear policies, secure payments, and a support team that answers. Here’s what comes with every HomeLink order and booking.
+            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50 mb-3">Accepted payments</p>
+            <div className="flex flex-wrap gap-2 mb-8">
+              {PAYMENT_METHODS.map(m => (
+                <span key={m.label} className="inline-flex items-center gap-2 bg-white/[0.06] border border-white/15 rounded-full px-3.5 py-1.5 text-sm font-medium text-white transition-all duration-300 hover:bg-white/[0.12] hover:border-white/30 hover:-translate-y-0.5">
+                  <m.icon className="w-4 h-4 text-brand-orange" /> {m.label}
+                </span>
+              ))}
             </div>
-            <Link to="/services" className="shrink-0 text-brand-navy font-semibold hover:text-brand-orange transition flex items-center gap-1.5 group">
-              View All <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+            <Link to="/policies" className="text-white font-semibold hover:text-brand-orange transition inline-flex items-center gap-1.5 group">
+              Read our policies <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
           </Reveal>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {services.loading ? (
-              Array.from({ length: 4 }).map((_, i) => <ServiceCardSkeleton key={i} />)
-            ) : services.error ? (
-              <ErrorState message="Couldn't load services right now." onRetry={loadServices} />
-            ) : services.data.length === 0 ? (
-              <p className="col-span-full text-center text-gray-500 py-8">No services listed yet — check back soon.</p>
-            ) : (
-              services.data.map((s, i) => (
-                <Reveal key={s.id} delay={i * 70} className="h-full">
-                  <ServiceCard service={s} />
-                </Reveal>
-              ))
-            )}
+          <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {GUARANTEES.map((g, i) => (
+              <Reveal key={g.title} delay={i * 70} className="h-full">
+                <SpotlightCard className="h-full">
+                  <div className="p-6">
+                    <div className="w-11 h-11 rounded-xl bg-brand-orange/20 flex items-center justify-center mb-4 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6">
+                      <g.icon className="w-5 h-5 text-brand-orange" />
+                    </div>
+                    <h3 className="font-display font-bold text-white mb-2">{g.title}</h3>
+                    <p className="text-white/70 text-sm leading-relaxed">{g.desc}</p>
+                  </div>
+                </SpotlightCard>
+              </Reveal>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Reviews */}
-      {(reviews.loading || reviews.error || reviews.data.length > 0) && (
-        <section className="py-20 md:py-24 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <Reveal className="text-center max-w-xl mx-auto mb-12">
-              <p className="eyebrow justify-center mb-3">Testimonials</p>
-              <h2 className="section-title">What our customers say</h2>
+      <Testimonials reviews={reviews} onRetry={loadReviews} />
+
+      {/* FAQ preview + support contacts. The open question gets an orange
+          accent bar and a filled chevron; its answer fades in as it expands. */}
+      {faqs.length > 0 && (
+        <section className="py-20 md:py-24 bg-brand-light">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-5 gap-10 lg:gap-14 items-start">
+            <Reveal className="lg:col-span-2">
+              <p className="eyebrow mb-3">Need Help?</p>
+              <h2 className="section-title mb-4">Questions, answered</h2>
+              <p className="text-gray-500 leading-relaxed mb-8">
+                Quick answers to what homeowners ask us most. Can’t find yours? Our support team is a call or an email away.
+              </p>
+              <div className="card p-6 space-y-3">
+                <a href={`tel:${contact.phone}`} className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-brand-navy transition group">
+                  <span className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 transition group-hover:border-brand-teal/40 group-hover:scale-110"><Phone className="w-4 h-4 text-brand-teal" /></span>
+                  {contact.phone}
+                </a>
+                <a href={`mailto:${contact.email}`} className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-brand-navy transition group">
+                  <span className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 transition group-hover:border-brand-teal/40 group-hover:scale-110"><Mail className="w-4 h-4 text-brand-teal" /></span>
+                  {contact.email}
+                </a>
+                <div className="flex items-center gap-2.5 text-sm text-gray-600">
+                  <span className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0"><Clock className="w-4 h-4 text-brand-teal" /></span>
+                  Mon – Sat, 8:00 AM – 6:00 PM
+                </div>
+                <p className="text-xs text-gray-400 pt-4 mt-1 border-t border-gray-100">We respond within 24 hours on business days.</p>
+              </div>
             </Reveal>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {reviews.loading ? (
-                Array.from({ length: 3 }).map((_, i) => <ReviewCardSkeleton key={i} />)
-              ) : reviews.error ? (
-                <ErrorState message="Couldn't load reviews right now." onRetry={loadReviews} />
-              ) : (
-                reviews.data.map((r, i) => (
-                  <Reveal key={r.id} delay={i * 70} className="h-full">
-                    <div className="card h-full p-6 flex flex-col gap-3">
-                      <Quote className="w-6 h-6 text-brand-orange/40" />
-                      <StarRating value={r.rating} readOnly size="w-4 h-4" />
-                      <p className="text-gray-600 text-sm leading-relaxed flex-1">{r.comment}</p>
-                      <div className="flex items-center gap-3 pt-4 mt-1 border-t border-gray-100">
-                        <div className="w-9 h-9 rounded-full bg-brand-navy/10 flex items-center justify-center text-brand-navy font-semibold text-sm shrink-0">
-                          {r.first_name[0]}{r.last_name[0]}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate">{r.first_name} {r.last_name}</p>
-                          <p className="text-xs text-gray-400 truncate">{r.product_name}</p>
+
+            <Reveal className="lg:col-span-3">
+              <div className="card divide-y divide-gray-100">
+                {faqs.map((item, i) => {
+                  const isOpen = openFaq === i;
+                  return (
+                    <div key={item.id} className={`relative transition-colors duration-300 ${isOpen ? 'bg-brand-orange/[0.04]' : 'hover:bg-brand-light/60'}`}>
+                      <span
+                        className={`absolute left-0 inset-y-0 w-1 bg-brand-orange origin-top transition-transform duration-300 ${isOpen ? 'scale-y-100' : 'scale-y-0'}`}
+                        aria-hidden="true"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setOpenFaq(isOpen ? null : i)}
+                        aria-expanded={isOpen}
+                        className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left"
+                      >
+                        <span className="font-display font-bold text-brand-ink">{item.question}</span>
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${isOpen ? 'bg-brand-orange text-white rotate-180' : 'bg-brand-light text-gray-400'}`}>
+                          <ChevronDown className="w-4 h-4" />
+                        </span>
+                      </button>
+                      <div className="grid transition-[grid-template-rows] duration-300 ease-in-out" style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}>
+                        <div className="overflow-hidden">
+                          <p className={`text-gray-500 text-sm leading-relaxed px-6 pb-5 pr-16 transition-all duration-300 ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1'}`}>
+                            {item.answer}
+                          </p>
                         </div>
                       </div>
                     </div>
-                  </Reveal>
-                ))
-              )}
-            </div>
+                  );
+                })}
+              </div>
+              <Link to="/faq" className="mt-6 text-brand-navy font-semibold hover:text-brand-orange transition inline-flex items-center gap-1.5 group">
+                View all FAQs <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </Reveal>
           </div>
         </section>
       )}

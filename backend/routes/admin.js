@@ -8,6 +8,7 @@ import { generateStaffCode } from '../utils/staffCode.js';
 import { notifyUser } from '../utils/notify.js';
 import { createChangeRequest } from '../utils/changeRequests.js';
 import { formatTicketNo } from '../utils/ticketNumber.js';
+import { generateVerificationCode, hashVerificationCode, STAFF_RESET_CODE_TTL_MS } from '../utils/verificationCode.js';
 import { orderStatusEmail, bookingConfirmedEmail, bookingStatusEmail } from '../utils/email.js';
 
 const router = Router();
@@ -53,7 +54,7 @@ router.get('/dashboard', authorize('admin'), async (req, res) => {
 });
 
 // Users
-const EMPLOYEE_POSITIONS = ['inventory_clerk', 'booking_coordinator', 'installer', 'hr', 'general_staff'];
+const EMPLOYEE_POSITIONS = ['inventory_clerk', 'booking_coordinator', 'installer', 'hr', 'accounting', 'general_staff'];
 
 // general_staff and inventory_clerk have no User Management page of their own — this
 // stays open to them only because Bookings' technician-assignment dropdown queries it
@@ -82,25 +83,52 @@ async function insertEmployeeAccount({ email, passwordHash, firstName, lastName,
 // admin account this way — their requested role is always forced to 'employee'. Unlike
 // admin, HR's onboarding is only *proposed*: it's queued as a change request until an
 // admin reviews and approves it (see the "Change requests" section further down).
-router.post('/users', authorizeAdminOr('hr'), async (req, res) => {
-  const { email, password, firstName, lastName, phone, role, position } = req.body;
+// Booking coordinators get the same proposed-onboarding path from the Technicians page, but
+// only ever for installers — their requested position is forced to 'installer'.
+router.post('/users', authorizeAdminOr('hr', 'booking_coordinator'), async (req, res) => {
+  const { password, firstName, lastName, phone, role } = req.body;
+  const email = req.body.email?.trim().toLowerCase();
+  if (!email || !firstName?.trim() || !lastName?.trim()) {
+    return res.status(400).json({ error: 'Email, first name, and last name are required.' });
+  }
+  const position = req.user.position === 'booking_coordinator' ? 'installer' : req.body.position;
   const finalRole = req.user.role === 'admin' ? (role || 'employee') : 'employee';
   if (finalRole === 'employee' && position && !EMPLOYEE_POSITIONS.includes(position)) {
-    return res.status(400).json({ error: 'Invalid position' });
+    return res.status(400).json({ error: 'Invalid department' });
   }
+  // Checked before queuing too, so HR/coordinators can't submit a request that could never be approved.
+  const conflict = await emailConflictMessage(email);
+  if (conflict) return res.status(409).json({ error: conflict });
   const passwordHash = await bcrypt.hash(password || 'employee123', 10);
 
   if (req.user.role !== 'admin') {
     const requestId = await createChangeRequest('employee', 'create', null, {
-      email: email.toLowerCase(), passwordHash, firstName, lastName, phone: phone || '', position: position || null,
+      email, passwordHash, firstName, lastName, phone: phone || '', position: position || null,
     }, req.user.id);
     return res.status(202).json({ pending: true, requestId, message: 'Submitted for admin approval.' });
   }
 
-  const { id, staffCode } = await insertEmployeeAccount({ email: email.toLowerCase(), passwordHash, firstName, lastName, phone, role: finalRole, position });
-  await logActivity(req, 'user.create', 'user', id, { email: email.toLowerCase(), role: finalRole, position: finalRole === 'employee' ? position : null, staffCode });
-  res.status(201).json({ id, staffCode });
+  try {
+    const { id, staffCode } = await insertEmployeeAccount({ email, passwordHash, firstName, lastName, phone, role: finalRole, position });
+    await logActivity(req, 'user.create', 'user', id, { email, role: finalRole, position: finalRole === 'employee' ? position : null, staffCode });
+    res.status(201).json({ id, staffCode });
+  } catch (err) {
+    // Same-email race with the check above (e.g. the person signs up as a customer mid-request).
+    if (err.code === '23505') return res.status(409).json({ error: 'A user with that email already exists.' });
+    throw err;
+  }
 });
+
+// Emails are unique across every account type, so onboarding someone who already has an
+// account (most often a customer who signed up themselves) hits the users.email constraint.
+// Say what to do instead of letting it surface as a generic 500.
+async function emailConflictMessage(email) {
+  const existing = await db.prepare('SELECT role, archived FROM users WHERE email = ?').get(email);
+  if (!existing) return null;
+  if (existing.archived) return 'That email belongs to an archived account. Restore it from the Archived view instead of creating a new one.';
+  if (existing.role === 'customer') return 'That email is already registered as a customer account. Use a different email, or have an admin promote that customer from User Management → Customers.';
+  return 'That email is already used by another staff account.';
+}
 
 // A staff code is assigned once and kept even if the position changes later.
 async function applyEmployeePromotion(id, position) {
@@ -116,7 +144,7 @@ async function applyEmployeePromotion(id, position) {
 // position. Same admin-immediate / HR-proposed split as onboarding above.
 router.put('/users/:id/promote', authorizeAdminOr('hr'), async (req, res) => {
   const { position } = req.body;
-  if (!EMPLOYEE_POSITIONS.includes(position)) return res.status(400).json({ error: 'Invalid position' });
+  if (!EMPLOYEE_POSITIONS.includes(position)) return res.status(400).json({ error: 'Invalid department' });
 
   if (req.user.role !== 'admin') {
     const user = await db.prepare('SELECT role FROM users WHERE id = ?').get(req.params.id);
@@ -740,7 +768,7 @@ router.put('/support-messages/:id/reopen', authorizeAdminOr('general_staff', 'in
 // HR's employee/supplier calls, and installers' booking-completion calls above are captured
 // here instead of applied immediately. Each entity type has its own reviewer position (an
 // admin can always review anything); entity types with no listed position — employee,
-// supplier — are admin-only, since there's no peer role to trust with those.
+// supplier, password_reset — are admin-only, since there's no peer role to trust with those.
 // Approving performs the underlying insert/update/delete and logs it under the normal
 // product.*/service.*/voucher.*/user.*/supplier.*/booking.* actions (attributed to the
 // reviewer, who is the one actually authorizing it); rejecting it just marks the request
@@ -773,8 +801,18 @@ router.get('/approvals', authorizeAdminOr('inventory_clerk', 'booking_coordinato
     WHERE cr.status = ? ${visibleTypes ? `AND cr.entity_type IN (${visibleTypes.map(() => '?').join(',')})` : ''}
     ORDER BY cr.created_at DESC
   `).all(...(visibleTypes ? [status, ...visibleTypes] : [status]));
-  res.json(rows.map(r => ({ ...r, payload: r.payload ? JSON.parse(r.payload) : null })));
+  res.json(rows.map(r => ({ ...r, payload: visibleApprovalPayload(r) })));
 });
+
+// An approved password reset's code is shown on its card until it's used, replaced, or
+// expired — once expired it no longer works, so it's no longer sent to the browser either.
+function visibleApprovalPayload(row) {
+  const payload = row.payload ? JSON.parse(row.payload) : null;
+  if (row.entity_type === 'password_reset' && payload?.code && new Date(payload.expiresAt) <= new Date()) {
+    return { expiresAt: payload.expiresAt, expired: true };
+  }
+  return payload;
+}
 
 // Lets any employee see the status of change requests they personally submitted — including
 // the reviewer's name and rejection note — without exposing everyone else's requests to them.
@@ -785,7 +823,8 @@ router.get('/approvals/mine', async (req, res) => {
     LEFT JOIN users r ON cr.reviewed_by = r.id
     WHERE cr.requested_by = ? ORDER BY cr.created_at DESC LIMIT 20
   `).all(req.user.id);
-  res.json(rows.map(r => ({ ...r, payload: r.payload ? JSON.parse(r.payload) : null })));
+  // A password reset's code is the admin's to hand over, so it's never echoed back here.
+  res.json(rows.map(r => ({ ...r, payload: r.entity_type === 'password_reset' ? null : (r.payload ? JSON.parse(r.payload) : null) })));
 });
 
 router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'booking_coordinator', 'hr'), async (req, res) => {
@@ -801,6 +840,7 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
   let entityId = cr.entity_id;
   let logAction = null;
   let logDetails = null;
+  let approvedPayload = null;
 
   if (cr.entity_type === 'product') {
     if (cr.action === 'create') {
@@ -917,11 +957,30 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
     logAction = 'support.resolve';
     logDetails = { subject: ticket.subject, ticketNumber: ticket.ticket_number };
     await notifyUser(cr.requested_by, 'support.resolved', 'Resolution Approved', `${reviewer.first_name} ${reviewer.last_name} approved the resolution for ${formatTicketNo(ticket.ticket_number)} — "${ticket.subject}".`, '/admin/support');
+  } else if (cr.entity_type === 'password_reset') {
+    const account = await db.prepare('SELECT id, email, first_name, last_name, staff_code, archived FROM users WHERE id = ?').get(cr.entity_id);
+    if (!account) return res.status(404).json({ error: 'That account no longer exists.' });
+    if (account.archived) return res.status(400).json({ error: 'That account is archived. Restore it before resetting its password.' });
+    const code = generateVerificationCode();
+    const expiresAt = new Date(Date.now() + STAFF_RESET_CODE_TTL_MS).toISOString();
+    await db.prepare('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?').run(hashVerificationCode(code), expiresAt, account.id);
+    // Only the newest code works, so retire any earlier approval's code still showing on its card.
+    await db.prepare("UPDATE change_requests SET payload = ? WHERE entity_type = 'password_reset' AND entity_id = ? AND status = 'approved'")
+      .run(JSON.stringify({ supersededAt: new Date().toISOString() }), account.id);
+    // Kept in plain text on the request (admin-only) so the card can keep showing it until the
+    // employee uses it — the user row itself only ever stores the hash.
+    approvedPayload = { code, expiresAt };
+    logAction = 'auth.password_reset_approve';
+    logDetails = { email: account.email, name: `${account.first_name} ${account.last_name}`, staffCode: account.staff_code };
   }
 
-  await db.prepare("UPDATE change_requests SET status='approved', reviewed_by=?, reviewed_at=now() WHERE id=?").run(req.user.id, cr.id);
+  if (approvedPayload) {
+    await db.prepare("UPDATE change_requests SET status='approved', reviewed_by=?, reviewed_at=now(), payload=? WHERE id=?").run(req.user.id, JSON.stringify(approvedPayload), cr.id);
+  } else {
+    await db.prepare("UPDATE change_requests SET status='approved', reviewed_by=?, reviewed_at=now() WHERE id=?").run(req.user.id, cr.id);
+  }
   if (logAction) await logActivity(req, logAction, cr.entity_type, entityId, { ...logDetails, authorizedBy: reviewer.staff_code, requestedBy: cr.requested_by });
-  res.json({ message: 'Approved' });
+  res.json({ message: 'Approved', ...(approvedPayload ? { resetCode: approvedPayload.code, expiresAt: approvedPayload.expiresAt } : {}) });
 });
 
 router.put('/approvals/:id/reject', authorizeAdminOr('inventory_clerk', 'booking_coordinator', 'hr'), async (req, res) => {
@@ -961,6 +1020,126 @@ router.delete('/announcements/:id', authorize('admin'), async (req, res) => {
   await db.prepare('DELETE FROM announcements WHERE id = ?').run(req.params.id);
   if (announcement) await logActivity(req, 'announcement.delete', 'announcement', req.params.id, { title: announcement.title });
   res.json({ message: 'Deleted' });
+});
+
+router.put('/announcements/:id/toggle', authorize('admin'), async (req, res) => {
+  const announcement = await db.prepare('SELECT * FROM announcements WHERE id = ?').get(req.params.id);
+  if (!announcement) return res.status(404).json({ error: 'Not found' });
+  await db.prepare('UPDATE announcements SET active = ? WHERE id = ?').run(announcement.active ? 0 : 1, req.params.id);
+  res.json({ message: 'Updated' });
+});
+
+// Gallery (About page photo grid)
+router.get('/gallery', authorize('admin'), async (req, res) => res.json(await db.prepare('SELECT * FROM gallery ORDER BY sort_order').all()));
+
+router.post('/gallery', authorize('admin'), async (req, res) => {
+  const { title, image, category, sortOrder } = req.body;
+  if (!image) return res.status(400).json({ error: 'Image is required' });
+  const id = uuid();
+  await db.prepare('INSERT INTO gallery (id, title, image, category, sort_order) VALUES (?,?,?,?,?)').run(id, title || null, image, category || null, sortOrder || 0);
+  res.status(201).json({ id });
+});
+
+router.put('/gallery/:id', authorize('admin'), async (req, res) => {
+  const { title, image, category, sortOrder } = req.body;
+  const item = await db.prepare('SELECT * FROM gallery WHERE id = ?').get(req.params.id);
+  if (!item) return res.status(404).json({ error: 'Not found' });
+  await db.prepare('UPDATE gallery SET title=?, image=?, category=?, sort_order=? WHERE id=?')
+    .run(title ?? item.title, image || item.image, category ?? item.category, sortOrder ?? item.sort_order, req.params.id);
+  res.json({ message: 'Updated' });
+});
+
+router.delete('/gallery/:id', authorize('admin'), async (req, res) => {
+  await db.prepare('DELETE FROM gallery WHERE id = ?').run(req.params.id);
+  res.json({ message: 'Deleted' });
+});
+
+// FAQs
+router.get('/faqs', authorize('admin'), async (req, res) => res.json(await db.prepare('SELECT * FROM faqs ORDER BY sort_order').all()));
+
+router.post('/faqs', authorize('admin'), async (req, res) => {
+  const { question, answer, sortOrder } = req.body;
+  if (!question || !answer) return res.status(400).json({ error: 'Question and answer are required' });
+  const id = uuid();
+  await db.prepare('INSERT INTO faqs (id, question, answer, sort_order) VALUES (?,?,?,?)').run(id, question, answer, sortOrder || 0);
+  res.status(201).json({ id });
+});
+
+router.put('/faqs/:id', authorize('admin'), async (req, res) => {
+  const { question, answer, sortOrder, active } = req.body;
+  const faq = await db.prepare('SELECT * FROM faqs WHERE id = ?').get(req.params.id);
+  if (!faq) return res.status(404).json({ error: 'Not found' });
+  await db.prepare('UPDATE faqs SET question=?, answer=?, sort_order=?, active=? WHERE id=?')
+    .run(question ?? faq.question, answer ?? faq.answer, sortOrder ?? faq.sort_order, active === undefined ? faq.active : (active ? 1 : 0), req.params.id);
+  res.json({ message: 'Updated' });
+});
+
+router.delete('/faqs/:id', authorize('admin'), async (req, res) => {
+  await db.prepare('DELETE FROM faqs WHERE id = ?').run(req.params.id);
+  res.json({ message: 'Deleted' });
+});
+
+// Policies
+router.get('/policies', authorize('admin'), async (req, res) => res.json(await db.prepare('SELECT * FROM policies ORDER BY sort_order').all()));
+
+router.post('/policies', authorize('admin'), async (req, res) => {
+  const { title, content, sortOrder } = req.body;
+  if (!title || !content) return res.status(400).json({ error: 'Title and content are required' });
+  const id = uuid();
+  await db.prepare('INSERT INTO policies (id, title, content, sort_order) VALUES (?,?,?,?)').run(id, title, content, sortOrder || 0);
+  res.status(201).json({ id });
+});
+
+router.put('/policies/:id', authorize('admin'), async (req, res) => {
+  const { title, content, sortOrder, active } = req.body;
+  const policy = await db.prepare('SELECT * FROM policies WHERE id = ?').get(req.params.id);
+  if (!policy) return res.status(404).json({ error: 'Not found' });
+  await db.prepare('UPDATE policies SET title=?, content=?, sort_order=?, active=? WHERE id=?')
+    .run(title ?? policy.title, content ?? policy.content, sortOrder ?? policy.sort_order, active === undefined ? policy.active : (active ? 1 : 0), req.params.id);
+  res.json({ message: 'Updated' });
+});
+
+router.delete('/policies/:id', authorize('admin'), async (req, res) => {
+  await db.prepare('DELETE FROM policies WHERE id = ?').run(req.params.id);
+  res.json({ message: 'Deleted' });
+});
+
+// Site settings — flat key/value store for platform config (currency, shipping, payment
+// options) and CMS content strings (homepage/about/contact copy). Stored rows are merged
+// over these defaults so an empty table behaves exactly like the old hardcoded values.
+const SETTINGS_DEFAULTS = {
+  currency_code: 'PHP',
+  currency_symbol: '₱',
+  tax_rate: '0',
+  shipping_fee: '0',
+  free_shipping_threshold: '0',
+  delivery_estimate: '3-5 business days',
+  payment_card_enabled: 'true',
+  payment_gcash_enabled: 'true',
+  payment_qrph_enabled: 'true',
+  about_heading: 'Home improvement, done right',
+  about_intro: 'HomeLink brings home improvement products and the professionals who install them into one place, so homeowners can shop, book, and get the job done without juggling multiple vendors.',
+  contact_address: process.env.COMPANY_ADDRESS || '123 HomeLink Avenue, Metro Manila, Philippines',
+  contact_phone: '(02) 8123-4567',
+  contact_email: 'support@homelink.com',
+  contact_lat: String(process.env.COMPANY_LAT || 14.5995),
+  contact_lng: String(process.env.COMPANY_LNG || 120.9842),
+};
+
+router.get('/settings', authorize('admin'), async (req, res) => {
+  const rows = await db.prepare('SELECT key, value FROM site_settings').all();
+  res.json({ ...SETTINGS_DEFAULTS, ...Object.fromEntries(rows.map(r => [r.key, r.value])) });
+});
+
+router.put('/settings', authorize('admin'), async (req, res) => {
+  const entries = Object.entries(req.body || {}).filter(([key]) => key in SETTINGS_DEFAULTS);
+  for (const [key, value] of entries) {
+    await db.prepare(`
+      INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, now())
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+    `).run(key, String(value));
+  }
+  res.json({ message: 'Settings updated' });
 });
 
 // Audit trail
@@ -1080,8 +1259,13 @@ router.get('/hr/stats', authorizeAdminOr('hr'), async (req, res) => {
   res.json({ totalEmployees, totalCustomers, positionBreakdown, supplierStats, recentHires });
 });
 
-// Reports
-router.get('/reports/sales', authorize('admin'), async (req, res) => {
+// Reports — sales & analytics: revenue trend, product/service performance, customer insights
+router.get('/reports', authorize('admin'), async (req, res) => {
+  const { revenue, salesByMonth } = await getRevenueStats();
+  const totalOrders = (await db.prepare("SELECT COUNT(*) as c FROM orders WHERE payment_status='paid'").get()).c;
+  const totalBookings = (await db.prepare("SELECT COUNT(*) as c FROM bookings WHERE payment_status='paid'").get()).c;
+  const avgOrderValue = totalOrders ? revenue / (totalOrders + totalBookings) : 0;
+
   const byMonth = await db.prepare(`
     SELECT to_char(created_at, 'YYYY-MM') as month, COUNT(*) as orders, SUM(total) as revenue
     FROM orders WHERE payment_status='paid' GROUP BY month ORDER BY month DESC LIMIT 12
@@ -1091,7 +1275,43 @@ router.get('/reports/sales', authorize('admin'), async (req, res) => {
     FROM order_items oi JOIN products p ON oi.product_id=p.id JOIN categories c ON p.category_id=c.id
     GROUP BY c.name ORDER BY revenue DESC
   `).all();
-  res.json({ byMonth, byCategory });
+  const topProducts = await db.prepare(`
+    SELECT p.id, p.name, SUM(oi.quantity) as units_sold, SUM(oi.quantity * oi.price) as revenue
+    FROM order_items oi JOIN products p ON oi.product_id = p.id
+    JOIN orders o ON oi.order_id = o.id WHERE o.payment_status = 'paid'
+    GROUP BY p.id, p.name ORDER BY revenue DESC LIMIT 10
+  `).all();
+  const topServices = await db.prepare(`
+    SELECT s.id, s.name, COUNT(*) as bookings, SUM(b.price) as revenue
+    FROM bookings b JOIN services s ON b.service_id = s.id WHERE b.payment_status = 'paid'
+    GROUP BY s.id, s.name ORDER BY revenue DESC LIMIT 10
+  `).all();
+  const topCustomers = await db.prepare(`
+    SELECT u.id, u.first_name, u.last_name, u.email, COUNT(*) as orders, SUM(o.total) as total_spent
+    FROM orders o JOIN users u ON o.user_id = u.id WHERE o.payment_status = 'paid'
+    GROUP BY u.id, u.first_name, u.last_name, u.email ORDER BY total_spent DESC LIMIT 10
+  `).all();
+  const payingCustomers = (await db.prepare(`
+    SELECT COUNT(DISTINCT user_id) as c FROM orders WHERE payment_status = 'paid'
+  `).get()).c;
+  const repeatCustomers = (await db.prepare(`
+    SELECT COUNT(*) as c FROM (
+      SELECT user_id FROM orders WHERE payment_status = 'paid' GROUP BY user_id HAVING COUNT(*) > 1
+    ) t
+  `).get()).c;
+  const newCustomersThisMonth = (await db.prepare(`
+    SELECT COUNT(*) as c FROM users WHERE role = 'customer' AND to_char(created_at, 'YYYY-MM') = to_char(now(), 'YYYY-MM')
+  `).get()).c;
+
+  res.json({
+    totals: { revenue, orders: totalOrders, bookings: totalBookings, avgOrderValue },
+    salesByMonth, byMonth, byCategory, topProducts, topServices, topCustomers,
+    customerInsights: {
+      payingCustomers,
+      newCustomersThisMonth,
+      repeatCustomerRate: payingCustomers ? Math.round((repeatCustomers / payingCustomers) * 100) : 0,
+    },
+  });
 });
 
 export default router;

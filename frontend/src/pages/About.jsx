@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ShieldCheck, HeartHandshake, Target, Sparkles, Home as HomeIcon, Wrench, Expand } from 'lucide-react';
+import { ArrowRight, ShieldCheck, HeartHandshake, Target, Sparkles, Home as HomeIcon, Wrench, Expand, Shield, Truck, Star } from 'lucide-react';
 import { api } from '../api/client';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
@@ -23,10 +23,24 @@ const VALUES = [
   { icon: Target, title: 'One platform', desc: 'Products and professional installation in one place, so you never have to coordinate between vendors.' },
 ];
 
+const PROMISES = [
+  { icon: Shield, title: 'Verified Technicians', desc: 'All service providers are verified and trained professionals, background-checked before they ever step into your home.' },
+  { icon: Truck, title: 'Reliable Delivery', desc: 'Track your orders from purchase to doorstep delivery, with real-time updates every step of the way.' },
+  { icon: Wrench, title: 'Expert Services', desc: 'Book installation, cleaning, and repair services easily, with pros matched to the job you need done.' },
+  { icon: Star, title: 'Quality Products', desc: 'Curated home improvement products from trusted brands, vetted for durability and performance.' },
+];
+
+const DEFAULT_HERO = {
+  heading: 'Home improvement, done right',
+  intro: 'HomeLink brings home improvement products and the professionals who install them into one place, so homeowners can shop, book, and get the job done without juggling multiple vendors.',
+};
+
 export default function About() {
   const [items, setItems] = useState({ data: [], loading: true, error: false });
   const [category, setCategory] = useState('');
   const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [hero, setHero] = useState(DEFAULT_HERO);
+  const [activePromise, setActivePromise] = useState(0);
 
   const loadItems = useCallback(() => {
     setItems(s => ({ ...s, loading: true, error: false }));
@@ -36,6 +50,11 @@ export default function About() {
   }, []);
 
   useEffect(() => { loadItems(); }, [loadItems]);
+  useEffect(() => {
+    api.get('/promos/about-hero')
+      .then(data => setHero({ heading: data.heading || DEFAULT_HERO.heading, intro: data.intro || DEFAULT_HERO.intro }))
+      .catch(() => {});
+  }, []);
 
   const categories = useMemo(() => [...new Set(items.data.map(g => g.category).filter(Boolean))], [items.data]);
   const filtered = useMemo(() => category ? items.data.filter(g => g.category === category) : items.data, [items.data, category]);
@@ -46,11 +65,8 @@ export default function About() {
       <section className="pt-16 pb-14 md:pt-20 md:pb-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <p className="eyebrow justify-center mb-4"><HomeIcon className="w-3.5 h-3.5" /> About HomeLink</p>
-          <h1 className="section-title mb-4">Home improvement, done right</h1>
-          <p className="text-gray-500 leading-relaxed">
-            HomeLink brings home improvement products and the professionals who install them into one place,
-            so homeowners can shop, book, and get the job done without juggling multiple vendors.
-          </p>
+          <h1 className="section-title mb-4">{hero.heading}</h1>
+          <p className="text-gray-500 leading-relaxed">{hero.intro}</p>
         </div>
       </section>
 
@@ -96,6 +112,59 @@ export default function About() {
               <p className="text-xs md:text-sm text-white/60 mt-1">{s.label}</p>
             </Reveal>
           ))}
+        </div>
+      </section>
+
+      {/* Promise — expanding panels: hovering, focusing, or tapping one widens
+          it and reveals its description while the others collapse. */}
+      <section className="py-16 md:py-20 bg-gradient-to-br from-brand-navy to-brand-blue">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <Reveal className="text-center max-w-xl mx-auto mb-10">
+            <p className="eyebrow justify-center mb-3">Why HomeLink</p>
+            <h2 className="section-title text-white">The HomeLink promise</h2>
+          </Reveal>
+          <Reveal>
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:h-[240px]">
+              {PROMISES.map((f, i) => {
+                const isOpen = activePromise === i;
+                return (
+                  <button
+                    key={f.title}
+                    type="button"
+                    onClick={() => setActivePromise(i)}
+                    onMouseEnter={() => setActivePromise(i)}
+                    onFocus={() => setActivePromise(i)}
+                    aria-expanded={isOpen}
+                    className={`group relative text-left rounded-2xl border p-5 flex flex-col justify-between overflow-hidden transition-all duration-500 ease-in-out ${
+                      isOpen
+                        ? 'sm:flex-[2.6] bg-gradient-to-br from-white/[0.14] to-white/[0.04] border-white/20'
+                        : 'sm:flex-1 bg-white/[0.03] border-white/10 hover:bg-white/[0.07]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-500 ${isOpen ? 'bg-brand-orange/25' : 'bg-white/10 group-hover:bg-white/15'}`}>
+                        <f.icon className={`w-4 h-4 transition-colors duration-500 ${isOpen ? 'text-brand-orange' : 'text-white/70'}`} />
+                      </div>
+                      <span className={`font-display font-black tabular-nums transition-all duration-500 ${isOpen ? 'text-2xl md:text-3xl text-white/30' : 'text-base text-white/20'}`}>
+                        .{String(i + 1).padStart(2, '0')}
+                      </span>
+                    </div>
+
+                    <div className="mt-4">
+                      <h3 className={`font-display font-bold text-white transition-all duration-500 ${isOpen ? 'text-lg mb-1.5' : 'text-sm'}`}>
+                        {f.title}
+                      </h3>
+                      <div className="grid transition-[grid-template-rows] duration-500 ease-in-out" style={{ gridTemplateRows: isOpen ? '1fr' : '0fr' }}>
+                        <div className="overflow-hidden">
+                          <p className="text-white/70 text-sm leading-relaxed max-w-xs">{f.desc}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </Reveal>
         </div>
       </section>
 

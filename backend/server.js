@@ -68,6 +68,14 @@ app.get('/api/gallery', async (req, res) => {
   res.json(await db.prepare('SELECT * FROM gallery ORDER BY sort_order').all());
 });
 
+app.get('/api/faqs', async (req, res) => {
+  res.json(await db.prepare('SELECT * FROM faqs WHERE active = 1 ORDER BY sort_order').all());
+});
+
+app.get('/api/policies', async (req, res) => {
+  res.json(await db.prepare('SELECT * FROM policies WHERE active = 1 ORDER BY sort_order').all());
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/services', serviceRoutes);

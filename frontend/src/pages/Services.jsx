@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import ServiceCard from '../components/ServiceCard';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
+import CategoryTile, { countLabel } from '../components/CategoryTile';
 import { getServiceCategoryIcon } from '../constants/serviceCategoryIcons';
 import { ServiceCardSkeleton, CategorySkeleton } from '../components/Skeleton';
 
@@ -23,10 +24,14 @@ export default function Services() {
   const category = searchParams.get('category') || '';
 
   useEffect(() => {
-    api.get('/services/categories')
-      .then(data => setCategories({ data, loading: false }))
+    // [{ category, count }]; an API build without ?withCounts support returns
+    // plain names instead, in which case the cards just omit their count line.
+    api.get('/services/categories?withCounts=1')
+      .then(data => setCategories({ data: data.map(c => (typeof c === 'string' ? { category: c, count: null } : c)), loading: false }))
       .catch(() => setCategories({ data: [], loading: false }));
   }, []);
+
+  const hasCounts = categories.data.length > 0 && categories.data.every(c => c.count != null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -61,38 +66,36 @@ export default function Services() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-16">
-        {/* Category filter row — same card treatment as the Products page (which
-            itself ports the homepage's "Shop by category" cards), repurposed as
-            toggleable filters with an "All" card replacing the old text tabs. */}
-        <div className="flex gap-2 sm:gap-4 mb-8">
-          <button
-            onClick={() => setSearchParams({})}
-            className={`card group h-full flex-1 min-w-0 flex flex-col items-center text-center p-3 sm:p-5 gap-2 sm:gap-3 transition ${!category ? 'border-brand-orange/50 ring-1 ring-brand-orange/20' : 'hover:border-brand-orange/40'}`}
-          >
-            <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${!category ? 'bg-brand-orange/10' : 'bg-brand-navy/5 group-hover:bg-brand-orange/10 group-hover:scale-105'}`}>
-              <LayoutGrid className={`w-5 h-5 sm:w-7 sm:h-7 transition-colors ${!category ? 'text-brand-orange' : 'text-brand-navy group-hover:text-brand-orange'}`} />
-            </div>
-            <h3 className={`font-medium text-xs sm:text-sm leading-tight ${!category ? 'text-brand-navy font-semibold' : 'text-gray-800'}`}>All</h3>
-          </button>
+        {/* Category filter row — CategoryTile cards, same treatment and hover
+            animation as the Products page and the homepage's "Shop by
+            category", with an "All" card replacing the old text tabs. Scrolls
+            sideways below lg (see the matching note in Products.jsx). */}
+        <div className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 lg:overflow-visible pt-2 pb-4 mb-4">
+          <div className="shrink-0 w-24 sm:w-28 lg:w-auto lg:flex-1 lg:min-w-0">
+            <CategoryTile
+              icon={LayoutGrid}
+              label="All"
+              meta={hasCounts ? countLabel(categories.data.reduce((sum, c) => sum + c.count, 0), 'service') : null}
+              action="View"
+              active={!category}
+              onClick={() => setSearchParams({})}
+            />
+          </div>
           {categories.loading ? (
-            Array.from({ length: 6 }).map((_, i) => <div key={i} className="flex-1 min-w-0"><CategorySkeleton /></div>)
+            Array.from({ length: 6 }).map((_, i) => <div key={i} className="shrink-0 w-24 sm:w-28 lg:w-auto lg:flex-1 lg:min-w-0"><CategorySkeleton /></div>)
           ) : (
-            categories.data.map(c => {
-              const Icon = getServiceCategoryIcon(c);
-              const active = category === c;
-              return (
-                <button
-                  key={c}
-                  onClick={() => setSearchParams({ category: c })}
-                  className={`card group h-full flex-1 min-w-0 flex flex-col items-center text-center p-3 sm:p-5 gap-2 sm:gap-3 transition ${active ? 'border-brand-orange/50 ring-1 ring-brand-orange/20' : 'hover:border-brand-orange/40'}`}
-                >
-                  <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${active ? 'bg-brand-orange/10' : 'bg-brand-navy/5 group-hover:bg-brand-orange/10 group-hover:scale-105'}`}>
-                    <Icon className={`w-5 h-5 sm:w-7 sm:h-7 transition-colors ${active ? 'text-brand-orange' : 'text-brand-navy group-hover:text-brand-orange'}`} />
-                  </div>
-                  <h3 className={`font-medium text-xs sm:text-sm leading-tight ${active ? 'text-brand-navy font-semibold' : 'text-gray-800'}`}>{c}</h3>
-                </button>
-              );
-            })
+            categories.data.map(c => (
+              <div key={c.category} className="shrink-0 w-24 sm:w-28 lg:w-auto lg:flex-1 lg:min-w-0">
+                <CategoryTile
+                  icon={getServiceCategoryIcon(c.category)}
+                  label={c.category}
+                  meta={hasCounts ? countLabel(c.count, 'service') : null}
+                  action="View"
+                  active={category === c.category}
+                  onClick={() => setSearchParams({ category: c.category })}
+                />
+              </div>
+            ))
           )}
         </div>
 

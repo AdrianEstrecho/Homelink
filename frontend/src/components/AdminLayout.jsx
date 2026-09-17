@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Wrench, ShoppingCart, Calendar, Users, Ticket, ShieldCheck, Settings,
   Search, Bell, Home, LogOut, History, LifeBuoy, X, User, ClipboardCheck, Truck, UserCog,
-  HardHat, MessageSquare, CheckCircle,
+  HardHat, MessageSquare, CheckCircle, BarChart3, FileText, SlidersHorizontal, KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -15,6 +15,7 @@ const NAV_SECTIONS = [
     label: 'Main',
     items: [
       { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
+      { to: '/admin/reports', icon: BarChart3, label: 'Reports' },
       { to: '/admin/products', icon: Package, label: 'Product' },
       { to: '/admin/services', icon: Wrench, label: 'Service' },
       { to: '/admin/orders', icon: ShoppingCart, label: 'Order' },
@@ -35,15 +36,6 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    label: 'Archive',
-    items: [
-      { to: '/admin/products?tab=archived', icon: Package, label: 'Archived Products' },
-      { to: '/admin/services?tab=archived', icon: Wrench, label: 'Archived Services' },
-      { to: '/admin/archived-users', icon: Users, label: 'Archived Users' },
-      { to: '/admin/hr/employees/archived', icon: UserCog, label: 'Archived Employees' },
-    ],
-  },
-  {
     label: 'Super Admin',
     items: [
       { to: '/admin/staff', icon: ShieldCheck, label: 'Admin Management' },
@@ -52,6 +44,8 @@ const NAV_SECTIONS = [
   {
     label: 'System',
     items: [
+      { to: '/admin/cms', icon: FileText, label: 'Content (CMS)' },
+      { to: '/admin/settings', icon: SlidersHorizontal, label: 'Platform Settings' },
       { to: '/admin/audit-log', icon: History, label: 'Audit Trail' },
       { to: '/admin/profile', icon: Settings, label: 'Security & Settings' },
     ],
@@ -63,18 +57,14 @@ const NAV_SECTIONS = [
 const POSITION_NAV_PATHS = {
   inventory_clerk: ['/admin/products', '/admin/services', '/admin/orders', '/admin/bookings', '/admin/vouchers', '/admin/support', '/admin/approvals'],
   general_staff: ['/admin/products', '/admin/services', '/admin/orders', '/admin/bookings', '/admin/vouchers', '/admin/support'],
-  booking_coordinator: ['/admin/bookings', '/admin/technicians', '/admin/messages', '/admin/approvals'],
+  booking_coordinator: ['/admin/bookings', '/admin/technicians', '/admin/approvals'],
   hr: ['/admin/hr/employees', '/admin/suppliers', '/admin/approvals'],
-  installer: ['/admin/messages'],
+  installer: [],
 };
 
-// Archive-section pages a position may see — kept separate from POSITION_NAV_PATHS
-// since it maps to the "Archive" NAV_SECTIONS group rather than "Main".
-const POSITION_ARCHIVE_PATHS = {
-  inventory_clerk: ['/admin/products?tab=archived', '/admin/services?tab=archived'],
-  general_staff: ['/admin/products?tab=archived', '/admin/services?tab=archived'],
-  hr: ['/admin/hr/employees/archived'],
-};
+// Pages every employee gets on top of their position's own slice (including employees with
+// no scoped position at all) — Messages holds the staff directory and the General channel.
+const ALL_STAFF_NAV_PATHS = ['/admin/messages'];
 
 // Every scoped position's own stats overview, injected ahead of their filtered
 // NAV_SECTIONS items rather than living inside NAV_SECTIONS itself — admin
@@ -115,6 +105,7 @@ const NOTIF_META = {
   'booking.create': { Icon: Calendar, className: 'bg-blue-100 text-blue-700', title: 'New Booking', link: '/admin/bookings' },
   'support.create': { Icon: LifeBuoy, className: 'bg-red-100 text-red-700', title: 'Support Message', link: '/admin/support' },
   'booking.completed': { Icon: CheckCircle, className: 'bg-green-100 text-green-700', title: 'Installation Completed', link: '/admin/bookings' },
+  'auth.password_reset_request': { Icon: KeyRound, className: 'bg-amber-100 text-amber-700', title: 'Password Reset Request', link: '/admin/approvals' },
 };
 
 // Employees (booking coordinators, installers, ...) get their own personal notification
@@ -190,8 +181,7 @@ export default function AdminLayout({ children, title, subtitle }) {
   const navSections = useMemo(() => {
     if (isAdmin) return NAV_SECTIONS;
     const hasScopedPosition = Object.prototype.hasOwnProperty.call(POSITION_NAV_PATHS, user?.position);
-    const mainAllowed = new Set(POSITION_NAV_PATHS[user?.position] || []);
-    const archiveAllowed = new Set(POSITION_ARCHIVE_PATHS[user?.position] || []);
+    const mainAllowed = new Set([...(POSITION_NAV_PATHS[user?.position] || []), ...ALL_STAFF_NAV_PATHS]);
     const sections = [];
     // "Main" and "Management" are two visually separate groups for admin, but a
     // scoped employee's allowed items come from either — fold both into their
@@ -200,16 +190,15 @@ export default function AdminLayout({ children, title, subtitle }) {
       ...(NAV_SECTIONS.find(s => s.label === 'Main')?.items || []),
       ...(NAV_SECTIONS.find(s => s.label === 'Management')?.items || []),
     ];
+    const allowedItems = selectableItems.filter(item => mainAllowed.has(item.to));
     const mainItems = hasScopedPosition
       ? [
           ...(POSITION_DASHBOARD_ITEM[user?.position] ? [POSITION_DASHBOARD_ITEM[user.position]] : []),
           ...(user?.position === 'installer' ? [INSTALLER_JOB_STATUS_ITEM] : []),
-          ...selectableItems.filter(item => mainAllowed.has(item.to)),
+          ...allowedItems,
         ]
-      : [EMPLOYEE_DASHBOARD_ITEM];
+      : [EMPLOYEE_DASHBOARD_ITEM, ...allowedItems];
     if (mainItems.length) sections.push({ label: 'Main', items: mainItems });
-    const archiveItems = (NAV_SECTIONS.find(s => s.label === 'Archive')?.items || []).filter(item => archiveAllowed.has(item.to));
-    if (archiveItems.length) sections.push({ label: 'Archive', items: archiveItems });
     return sections;
   }, [isAdmin, user?.position]);
 
@@ -219,7 +208,7 @@ export default function AdminLayout({ children, title, subtitle }) {
 
   useEffect(() => {
     if (!isAdmin) return;
-    api.get('/admin/audit-logs?action=order.create,booking.create,support.create,booking.completed&limit=50').then(setActivity).catch(() => {});
+    api.get('/admin/audit-logs?action=order.create,booking.create,support.create,booking.completed,auth.password_reset_request&limit=50').then(setActivity).catch(() => {});
   }, [isAdmin]);
 
   const loadEmployeeNotifs = () => api.get('/notifications').then(setEmployeeNotifs).catch(() => {});
@@ -294,7 +283,10 @@ export default function AdminLayout({ children, title, subtitle }) {
   const bellCount = bellItems.filter(a => a.unread).length;
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    // Normally one screen tall at minimum; while a Select dropdown hangs past the bottom of the
+    // page, it publishes how tall the page needs to be so the background and sticky sidebar
+    // stretch over the extra scroll room instead of leaving a bare strip below them.
+    <div className="flex bg-gray-50" style={{ minHeight: 'max(100vh, var(--select-panel-page-min-height, 0px))' }}>
       {/* Sidebar */}
       <aside className="w-60 shrink-0 h-screen sticky top-0 bg-brand-navy text-white flex flex-col">
         <div className="flex items-center gap-2 px-5 h-16 border-b border-white/10 shrink-0">

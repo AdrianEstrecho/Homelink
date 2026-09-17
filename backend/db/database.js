@@ -1,5 +1,6 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
+import { v4 as uuid } from 'uuid';
 
 // This module reads process.env.DATABASE_URL as soon as it's imported, which in an ESM
 // graph can happen before server.js's own dotenv.config() call runs (imported modules are
@@ -419,7 +420,7 @@ await db.exec(`
   -- entity doesn't exist yet.
   CREATE TABLE IF NOT EXISTS change_requests (
     id TEXT PRIMARY KEY,
-    entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking','support')),
+    entity_type TEXT NOT NULL CHECK(entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking','support','password_reset')),
     entity_id TEXT,
     action TEXT NOT NULL CHECK(action IN ('create','update','delete','archive','restore')),
     payload TEXT,
@@ -431,6 +432,11 @@ await db.exec(`
     reviewed_at TIMESTAMPTZ
   );
   CREATE INDEX IF NOT EXISTS idx_change_requests_status ON change_requests(status);
+  -- Widen entity_type to allow 'password_reset' (an employee's forgot-password request, which
+  -- an admin must approve to generate their reset code) on databases created before it was
+  -- added to the CHECK above.
+  ALTER TABLE change_requests DROP CONSTRAINT IF EXISTS change_requests_entity_type_check;
+  ALTER TABLE change_requests ADD CONSTRAINT change_requests_entity_type_check CHECK (entity_type IN ('product','service','voucher','employee','supplier','salary','payment','booking','support','password_reset'));
 
   CREATE TABLE IF NOT EXISTS suppliers (
     id TEXT PRIMARY KEY,
@@ -475,6 +481,82 @@ await db.exec(`
     created_at TIMESTAMPTZ DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS idx_staff_messages_parties ON staff_messages(sender_id, recipient_id);
+
+  -- The one staff-wide "General" channel (team chat + announcements) shown pinned above the
+  -- direct-message list. Read state is a single per-user watermark rather than a per-message
+  -- flag, since every message goes to everyone. Both cascade on user delete so a posted
+  -- message never blocks permanently deleting an employee.
+  CREATE TABLE IF NOT EXISTS general_chat_messages (
+    id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_general_chat_messages_created ON general_chat_messages(created_at);
+  CREATE TABLE IF NOT EXISTS general_chat_reads (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    last_read_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+
+  -- Flat key/value store for admin-editable platform config (currency, shipping, payment
+  -- options) and small CMS content strings (homepage/about/contact copy). 'category' just
+  -- splits the two groups for the admin UI; both are read the same way (stored rows merged
+  -- over in-code defaults, so an empty table behaves exactly like the old hardcoded values).
+  CREATE TABLE IF NOT EXISTS site_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    category TEXT NOT NULL DEFAULT 'config',
+    updated_at TIMESTAMPTZ DEFAULT now()
+  );
+
+  CREATE TABLE IF NOT EXISTS faqs (
+    id TEXT PRIMARY KEY,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    active INTEGER DEFAULT 1
+  );
+
+  CREATE TABLE IF NOT EXISTS policies (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    active INTEGER DEFAULT 1
+  );
 `);
+
+// One-time content seed for the two tables above, guarded on an empty table so it only ever
+// runs once per environment — ports the copy that used to be hardcoded in FAQ.jsx/Policies.jsx
+// so those pages look identical the moment they switch to reading from the DB.
+if ((await db.prepare('SELECT COUNT(*) as c FROM faqs').get()).c === 0) {
+  const faqs = [
+    ['How do I order a product?', 'Browse our catalog, add items to your cart, and check out with your preferred payment method. You can track your order status anytime from your account.'],
+    ['How does service booking work?', 'Pick a service, choose an available date and time, and confirm your booking. A verified technician will be assigned and you can track the job status right up to completion.'],
+    ['Are your technicians verified?', 'Yes. Every technician on HomeLink is background-checked and trained before they\'re allowed to take on jobs, so you can trust who shows up at your door.'],
+    ['What payment methods do you accept?', 'We accept major credit/debit cards, GCash, and other popular online payment methods through our secure checkout.'],
+    ['Can I cancel or reschedule a booking?', 'Yes, service bookings can be cancelled or rescheduled up to 24 hours before the scheduled appointment. Product orders can be cancelled before they ship.'],
+    ['What is your refund policy?', 'If a product or service isn\'t received or fulfilled, you\'re eligible for a refund. Requests must be submitted within 7 days of the expected delivery or service date, and are processed within 5-10 business days.'],
+    ['Do installed products come with a warranty?', 'Most products carry a manufacturer warranty, and installation work is backed by our service guarantee. Warranty details are listed on each product and service page.'],
+    ['How do I get help if something goes wrong?', 'Reach our support team at support@homelink.com or (02) 8123-4567. We respond within 24 hours on business days.'],
+  ];
+  for (let i = 0; i < faqs.length; i++) {
+    const [question, answer] = faqs[i];
+    await db.prepare('INSERT INTO faqs (id, question, answer, sort_order) VALUES (?,?,?,?)').run(uuid(), question, answer, i);
+  }
+}
+
+if ((await db.prepare('SELECT COUNT(*) as c FROM policies').get()).c === 0) {
+  const policies = [
+    ['Refund Policy', 'Customers are eligible for a refund if purchased products or services are not received or fulfilled. Refund requests must be submitted within 7 days of the expected delivery or service date. Refunds are processed within 5-10 business days to the original payment method.'],
+    ['Service Support', 'Customers may report service-related issues to our support team for resolution. Contact us at support@homelink.com or call (02) 8123-4567. Our team responds within 24 hours on business days.'],
+    ['Data Privacy', 'All customer information, including personal contact details and payment data, is handled with strict confidentiality and protected by our security protocols. We comply with the Data Privacy Act and never share your data with third parties without consent.'],
+    ['Cancellation Policy', 'Customers may request to cancel orders for products or services, provided the request is submitted within the designated timeframe and meets our cancellation criteria. Product orders can be cancelled before shipping. Service bookings can be cancelled up to 24 hours before the scheduled appointment.'],
+  ];
+  for (let i = 0; i < policies.length; i++) {
+    const [title, content] = policies[i];
+    await db.prepare('INSERT INTO policies (id, title, content, sort_order) VALUES (?,?,?,?)').run(uuid(), title, content, i);
+  }
+}
 
 export default db;

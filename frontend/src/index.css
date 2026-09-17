@@ -272,8 +272,8 @@
   to { width: 0%; }
 }
 
-/* Marquee showcase band (Home hero-to-content transition): looping text behind a
-   single centered floating image. See .showcase usage in pages/Home.jsx. */
+/* Endless marquee (Home announcements strip): the content is rendered twice
+   side by side, so sliding the track by -50% loops seamlessly. */
 .marquee-track {
   display: flex;
   white-space: nowrap;
@@ -283,18 +283,71 @@
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
-.showcase-float {
-  animation: showcaseFloat 6s ease-in-out infinite;
-}
-@keyframes showcaseFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-14px); }
-}
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track,
-  .showcase-float {
+  .marquee-track {
     animation: none;
   }
+}
+
+/* Testimonials marquee (components/home/Testimonials.jsx): the same seamless
+   -50% loop as .marquee-track, with its duration set inline from the card
+   count so the speed stays constant. Pauses while hovered or while anything
+   inside has focus; the edge mask fades cards in and out instead of
+   hard-clipping them. The track's vertical padding leaves room for a card's
+   hover lift and shadow inside the clipped area. Reduced motion: no loop and
+   no duplicate copy — the row just becomes horizontally scrollable. */
+.testimonial-marquee {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+.testimonial-track {
+  display: flex;
+  width: max-content;
+  padding: 12px 0 28px;
+  animation: marqueeScroll linear infinite;
+}
+.testimonial-marquee:hover .testimonial-track,
+.testimonial-marquee:focus-within .testimonial-track {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .testimonial-marquee {
+    overflow-x: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+    padding: 0 16px;
+  }
+  .testimonial-track { animation: none; }
+  .testimonial-track > [aria-hidden="true"] { display: none; }
+}
+
+/* Active step in How it works (components/home/HowItWorks.jsx): a soft ring
+   that swells out of the orange icon tile and fades, on repeat. */
+.step-pulse {
+  animation: stepPulse 1.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes stepPulse {
+  0% { transform: scale(1); opacity: 0.45; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+/* Pointer-following glow for SpotlightCard (components/home/SpotlightCard.jsx);
+   --spot-x/--spot-y are written on mousemove. */
+.spotlight-glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(260px circle at var(--spot-x, 50%) var(--spot-y, 50%), rgba(255, 107, 53, 0.2), transparent 70%);
+}
+.spotlight-card:hover .spotlight-glow {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-pulse { animation: none; opacity: 0; }
 }
 
 /* Pinned scroll hero (Home.jsx <Hero />): the wrap is taller than one viewport so
@@ -335,6 +388,25 @@
   background: linear-gradient(180deg, #0a1d42 0%, #163f7f 55%, #2f6bb0 100%);
   opacity: var(--progress);
   will-change: opacity;
+}
+/* Background footage (moved here from the old Home showcase band) — kept
+   barely visible on purpose: soft-light blending keeps the sky's navy hue
+   and only lets the footage's light/shadow through, at an opacity low enough
+   to read as texture rather than content (luminosity/normal blending at any
+   noticeable opacity greys the navy out). Sits above both sky gradients
+   (same z-index as ::before, later in paint order) and below everything else.
+   Note: Homepage.mp4 is HEVC, which Chrome only decodes with GPU support and
+   Firefox not at all — where it can't play, this simply shows nothing. */
+.hero-video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.2;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
 }
 /* Recedes as the villa grows, so the text reads as moving away/behind rather
    than just getting occluded — same --progress driver as .villa-stage,
@@ -463,6 +535,160 @@
   object-position: center 70%;
 }
 
+/* Product cards flanking the hero copy (Hero.jsx HeroProductCard).
+   z-index 2 sits under .villa-stage (3), so as --progress grows each card
+   travels (--tx/--ty) down and inward into the growing house and is covered
+   by it, straightening its tilt (--rot) and shrinking slightly on the way.
+   Opacity holds at 1 until progress 0.4 and reaches 0 at 0.8 — the same
+   threshold where Hero.jsx sets [data-cards-hidden] to take the invisible
+   links out of the tab order. Slots are placed relative to the page center
+   so they hug the copy at any desktop width.
+   Slots 1-4 are the front layer (inner column, beside the copy). Slots 5-8
+   are a back layer (z-index 1, scaled down via --s) in the outer column,
+   partly overlapped by the front cards and, low down, partly tucked behind
+   the house's wings already — their min() keeps them 16px inside the
+   viewport edge on narrower desktops. Overlaps are arranged so a covering
+   card only ever hides the image or cart button of the one beneath, never
+   its name/price: on the right side that means slot 7 sits low (image
+   behind slot 4) and slot 8 sits top-outer, in front of slot 3's image. */
+.hero-products {
+  display: contents;
+}
+.hero-product {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  border-radius: 1rem;
+  transform:
+    translate3d(calc(var(--progress) * var(--tx)), calc(var(--progress) * var(--ty)), 0)
+    rotate(calc(var(--rot) * (1 - var(--progress))))
+    scale(calc(var(--s, 1) * (1 - var(--progress) * 0.2)));
+  opacity: calc(2 - var(--progress) * 2.5);
+  will-change: transform, opacity;
+}
+.hero-pin[data-cards-hidden] .hero-product {
+  visibility: hidden;
+}
+/* The inner compact cards' top never rides up into the tall card above them
+   on short windows (262px ≈ tall card height + tilt + gap), and the top card
+   never tucks under the 80px navbar. */
+.hero-product--1 { right: calc(50% + 290px); top: max(12%, 92px);                          --tx: 90px;  --ty: 400px; --rot: -5deg; }
+.hero-product--2 { right: calc(50% + 250px); top: max(47%, calc(max(12%, 92px) + 262px)); --tx: 60px;  --ty: 220px; --rot: 3deg; }
+.hero-product--3 { left: calc(50% + 290px);  top: 20%;                                      --tx: -90px; --ty: 360px; --rot: 5deg; }
+.hero-product--4 { left: calc(50% + 250px);  top: max(55%, calc(20% + 262px));             --tx: -60px; --ty: 190px; --rot: -3deg; }
+.hero-product--5,
+.hero-product--6,
+.hero-product--7,
+.hero-product--8 { z-index: 1; --s: 0.9; }
+.hero-product--5 { right: min(calc(50% + 470px), calc(100% - 212px)); top: 33%; --tx: 140px;  --ty: 300px; --rot: 6deg; }
+.hero-product--6 { right: min(calc(50% + 400px), calc(100% - 248px)); top: 67%; --tx: 110px;  --ty: 150px; --rot: -4deg; }
+.hero-product--7 { left: min(calc(50% + 470px), calc(100% - 212px));  top: 50%; --tx: -140px; --ty: 220px; --rot: -6deg; }
+.hero-product--8 { left: min(calc(50% + 430px), calc(100% - 248px));  top: max(10%, 92px); z-index: 2; --tx: -130px; --ty: 400px; --rot: 4deg; }
+
+/* Wide desktop (from 1500px — i.e. a 1920px screen at 125% Windows scaling
+   and 100% browser zoom, not just true 1920px viewports): enough room to
+   drop the overlaps entirely. Each side becomes a mirrored two-column grid
+   with every card at full size (--s: 1) —
+     inner column: tall on top (outer edge 290px from center), compact below;
+     outer column: compact on top, tall below, both right-aligned to a shared
+     edge 526px from center, so there's a clean gutter to the inner column.
+   The outer column slides outward on wider screens but its max() floor
+   (24px for compact, +36px for the narrower tall card) keeps that shared
+   edge intact once it reaches the viewport edge. The right side sits a step
+   lower than the left so the halves don't read as a rigid reflection, and
+   the outer cards travel further inward to end up behind the house. */
+@media (min-width: 1500px) {
+  .hero-product--5,
+  .hero-product--6,
+  .hero-product--7,
+  .hero-product--8 { --s: 1; }
+  .hero-product--2 { right: calc(50% + 266px); }
+  .hero-product--4 { left: calc(50% + 266px); }
+  .hero-product--5 { right: auto; left: max(60px, calc(50% - 722px));  top: 31%;               --tx: 200px;  --ty: 320px; }
+  .hero-product--6 { right: auto; left: max(24px, calc(50% - 758px));  top: max(9%, 90px);     --tx: 220px;  --ty: 480px; }
+  .hero-product--7 { left: auto; right: max(60px, calc(50% - 722px));  top: 39%;               --tx: -200px; --ty: 300px; }
+  .hero-product--8 { left: auto; right: max(24px, calc(50% - 758px));  top: max(12%, 100px); z-index: 1; --tx: -220px; --ty: 470px; }
+}
+
+.hero-product-float {
+  animation: heroCardFloat 6s ease-in-out infinite;
+}
+@keyframes heroCardFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.hero-product-card {
+  background: #fff;
+  border-radius: 1rem;
+  padding: 10px;
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.6);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.hero-product:hover .hero-product-card {
+  transform: translateY(-4px);
+  box-shadow: 0 36px 70px -20px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 107, 53, 0.7);
+}
+.hero-product-card--tall { width: 196px; }
+.hero-product-card--tall .hero-product-img { height: 112px; }
+.hero-product-card--compact { width: 232px; padding-right: 12px; }
+
+/* Laptop in a short window (e.g. 1366x768 screen at 100% zoom): the
+   overlapping collage gets too crowded, so drop the two outer compact cards. */
+@media (min-width: 1280px) and (max-width: 1499px) and (max-height: 760px) {
+  .hero-product--6,
+  .hero-product--8 { display: none; }
+}
+/* Small laptop: the outer column has no room, so only the front layer. */
+@media (min-width: 1140px) and (max-width: 1279px) {
+  .hero-product--5,
+  .hero-product--6,
+  .hero-product--7,
+  .hero-product--8 { display: none; }
+}
+/* Tablet landscape: the front four, stacked tall-over-compact against each
+   viewport edge beside the copy. */
+@media (min-width: 900px) and (max-width: 1139px) {
+  .hero-product--5,
+  .hero-product--6,
+  .hero-product--7,
+  .hero-product--8 { display: none; }
+  .hero-product--1 { right: auto; left: 20px;  top: 14%; --tx: 60px; }
+  .hero-product--2 { right: auto; left: 20px;  top: 49%; --tx: 50px; }
+  .hero-product--3 { left: auto;  right: 20px; top: 18%; --tx: -60px; }
+  .hero-product--4 { left: auto;  right: 20px; top: 53%; --tx: -50px; }
+  .hero-product-card--tall { width: 176px; }
+  .hero-product-card--tall .hero-product-img { height: 98px; }
+  .hero-product-card--compact { width: 222px; }
+}
+/* Phone / portrait tablet: the copy spans the full width, so two tall cards
+   sit side by side under the CTAs instead, and sink straight down into the
+   house as it rises. The row is in normal flow right after .hero-copy
+   (rather than absolutely placed), so on short screens it can never ride up
+   over the buttons — it just starts lower and tucks into the clouds. */
+@media (max-width: 899px) {
+  .hero-products {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 0 16px;
+  }
+  .hero-product--2,
+  .hero-product--4,
+  .hero-product--5,
+  .hero-product--6,
+  .hero-product--7,
+  .hero-product--8 { display: none; }
+  .hero-product--1,
+  .hero-product--3 { position: relative; inset: auto; }
+  .hero-product--1 { --tx: 16px; --ty: 300px; --rot: -4deg; }
+  .hero-product--3 { margin-top: 18px; --tx: -16px; --ty: 280px; --rot: 4deg; }
+  .hero-product-card--tall { width: min(150px, calc(50vw - 22px)); padding: 8px; }
+  .hero-product-card--tall .hero-product-img { height: 82px; }
+}
+
 @media (max-width: 860px) {
   .villa-stage { transform: scale(calc(1.3 + var(--progress) * 0.7)) rotate(calc((1 - var(--progress)) * -2.5deg)); }
 }
@@ -483,6 +709,139 @@
   .villa-stage { position: relative; width: 100%; height: 46vh; margin-top: 32px; transform: none; }
   .villa-ground { opacity: 0.5; transform: translateX(-50%) scale(1); }
   .stage-house { animation: none; }
+  .hero-product-float { animation: none; }
+}
+
+/* Auth pages (components/AuthLayout.jsx + components/auth/*). The scene reuses
+   the hero's night-sky gradient so login/signup feel like the same world as
+   the homepage; its windows fade on via inline opacity driven by form progress
+   (see AuthScene.jsx), which .auth-light eases. */
+.auth-sky {
+  background: linear-gradient(180deg, #0a1d42 0%, #123a73 55%, #1a4a8a 100%);
+}
+.auth-star {
+  position: absolute;
+  border-radius: 9999px;
+  background: #fff;
+  opacity: 0.7;
+  animation: starTwinkle 4.5s ease-in-out infinite;
+}
+@keyframes starTwinkle {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 0.2; }
+}
+/* Crescent from an inset shadow on an otherwise transparent circle. */
+.auth-moon {
+  position: absolute;
+  top: 11%;
+  right: 12%;
+  width: 56px;
+  height: 56px;
+  border-radius: 9999px;
+  box-shadow: inset -12px 9px 0 0 #f3ecdc;
+  filter: drop-shadow(0 0 18px rgba(243, 236, 220, 0.35));
+}
+.auth-moon--compact {
+  top: 14%;
+  right: 8%;
+  width: 28px;
+  height: 28px;
+  box-shadow: inset -6px 5px 0 0 #f3ecdc;
+}
+.auth-light {
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* A failed attempt makes the lit windows stutter once. steps(1) makes each
+   keyframe a hard cut, which reads as a flicker rather than a fade. */
+.auth-lights-flicker {
+  animation: lightsFlicker 0.6s steps(1, end);
+}
+@keyframes lightsFlicker {
+  0% { opacity: 1; }
+  15% { opacity: 0.25; }
+  30% { opacity: 1; }
+  45% { opacity: 0.4; }
+  60% { opacity: 1; }
+}
+.auth-signal path {
+  fill: none;
+  stroke: #ff6b35;
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0;
+}
+.auth-signal circle {
+  fill: #ff6b35;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.auth-signal[data-on="true"] circle { opacity: 1; }
+.auth-signal[data-on="true"] path { animation: signalPulse 1.2s ease-out infinite; }
+.auth-signal[data-on="true"] path:nth-child(2) { animation-delay: 0.15s; }
+.auth-signal[data-on="true"] path:nth-child(3) { animation-delay: 0.3s; }
+@keyframes signalPulse {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0.15; }
+}
+
+/* Entrance and step-change motion. All use fill-mode `backwards` (not `both`)
+   so no transform lingers once they finish — a leftover transform would make
+   these wrappers the containing block for position:fixed descendants, and
+   Register renders TermsModal inside one (same reasoning as .route-fade). */
+.auth-rise {
+  animation: authRise 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+@keyframes authRise {
+  from { opacity: 0; transform: translateY(14px); }
+}
+.auth-step-forward {
+  animation: authStepForward 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.auth-step-back {
+  animation: authStepBack 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+@keyframes authStepForward {
+  from { opacity: 0; transform: translateX(16px); }
+}
+@keyframes authStepBack {
+  from { opacity: 0; transform: translateX(-16px); }
+}
+.auth-pop {
+  animation: authPop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@keyframes authPop {
+  from { opacity: 0; transform: scale(0.6); }
+}
+.auth-shake {
+  animation: authShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+@keyframes authShake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+.code-caret {
+  width: 2px;
+  height: 1.4rem;
+  border-radius: 1px;
+  background: #ff6b35;
+  animation: caretBlink 1s steps(1, end) infinite;
+}
+@keyframes caretBlink {
+  50% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-star,
+  .auth-lights-flicker,
+  .auth-rise,
+  .auth-step-forward,
+  .auth-step-back,
+  .auth-pop,
+  .auth-shake,
+  .code-caret { animation: none; }
+  .auth-signal[data-on="true"] path { animation: none; opacity: 1; }
 }
 
 /* Generic single-area print isolation — toggle .printing-active on <body> and mark

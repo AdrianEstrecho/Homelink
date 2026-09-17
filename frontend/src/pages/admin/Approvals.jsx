@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Package, Wrench, Ticket, Check, X, Clock, Users, Truck, Calendar, LifeBuoy } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Package, Wrench, Ticket, Check, X, Clock, Users, Truck, Calendar, LifeBuoy, KeyRound, Copy } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useAuth } from '../../context/AuthContext';
-import { POSITION_LABELS, parseUtc } from '../../data/auditActions';
+import { DEPARTMENT_LABELS, parseUtc } from '../../data/auditActions';
 import { formatTicketNo } from '../../utils/ticketNumber';
 
 const ENTITY_META = {
@@ -15,15 +16,18 @@ const ENTITY_META = {
   supplier: { label: 'Supplier', Icon: Truck },
   booking: { label: 'Job Completion', Icon: Calendar },
   support: { label: 'Support Ticket', Icon: LifeBuoy },
+  password_reset: { label: 'Password Reset', Icon: KeyRound },
 };
 
 // Which positions this page's requests can come from — mirrors the entity types above
 // (general_staff/inventory_clerk propose products/services/vouchers, HR proposes
-// employee/supplier changes, installers propose job completions).
+// employee/supplier changes, booking coordinators propose new technicians, installers
+// propose job completions).
 const REQUESTER_FILTERS = [
   { key: '', label: 'All' },
   { key: 'inventory_clerk', label: 'Inventory Clerk' },
   { key: 'hr', label: 'HR' },
+  { key: 'booking_coordinator', label: 'Booking Coordinator' },
   { key: 'general_staff', label: 'General Staff' },
   { key: 'installer', label: 'Installer' },
 ];
@@ -64,12 +68,17 @@ function describePayload(cr, current) {
   // handled together here rather than split across the create/update and delete branches below.
   if (cr.entity_type === 'employee') {
     const who = current ? `${current.first_name} ${current.last_name} (${current.email})` : null;
-    if (cr.action === 'create') return `${p.firstName} ${p.lastName} (${p.email}) — ${p.position ? POSITION_LABELS[p.position] || p.position : 'No position'}`;
-    if (cr.action === 'update') return current ? `${current.first_name} ${current.last_name} — ${POSITION_LABELS[current.position] || current.position || 'No position'} → ${POSITION_LABELS[p.position] || p.position}` : `Promote to ${POSITION_LABELS[p.position] || p.position}`;
+    if (cr.action === 'create') return `${p.firstName} ${p.lastName} (${p.email}) — ${p.position ? DEPARTMENT_LABELS[p.position] || p.position : 'No department'}`;
+    if (cr.action === 'update') return current ? `${current.first_name} ${current.last_name} — ${DEPARTMENT_LABELS[current.position] || current.position || 'No department'} → ${DEPARTMENT_LABELS[p.position] || p.position}` : `Move to ${DEPARTMENT_LABELS[p.position] || p.position}`;
     if (cr.action === 'archive') return who ? `Archive ${who}` : 'User no longer exists';
     if (cr.action === 'restore') return who ? `Restore ${who}` : 'User no longer exists';
     if (cr.action === 'delete') return who ? `Permanently delete ${who}` : 'User no longer exists';
     return '';
+  }
+
+  if (cr.entity_type === 'password_reset') {
+    const who = current ? `${current.first_name} ${current.last_name} (${current.email})` : `${cr.requester_first_name} ${cr.requester_last_name}`;
+    return cr.status === 'pending' ? `${who} forgot their password and is asking for a reset code` : `${who} — password reset`;
   }
 
   if (cr.entity_type === 'booking') {
@@ -131,6 +140,9 @@ export default function Approvals() {
   const [confirmApproveId, setConfirmApproveId] = useState(null);
   const [confirmRejectId, setConfirmRejectId] = useState(null);
   const [error, setError] = useState('');
+  // The code from a password reset that was just approved, shown straight away in a dialog —
+  // the request itself moves to the Approved tab, where the code stays visible until it's used.
+  const [issuedCode, setIssuedCode] = useState(null);
 
   // Employee/supplier requests (and their lookups) are admin-only — inventory clerks never
   // see them, so there's no reason for them to fetch /admin/users or /admin/suppliers here.
@@ -163,7 +175,7 @@ export default function Approvals() {
     if (cr.entity_type === 'product') return products.find(p => p.id === cr.entity_id);
     if (cr.entity_type === 'service') return services.find(s => s.id === cr.entity_id);
     if (cr.entity_type === 'voucher') return vouchers.find(v => v.id === cr.entity_id);
-    if (cr.entity_type === 'employee') return employees.find(e => e.id === cr.entity_id);
+    if (cr.entity_type === 'employee' || cr.entity_type === 'password_reset') return employees.find(e => e.id === cr.entity_id);
     if (cr.entity_type === 'supplier') return suppliers.find(s => s.id === cr.entity_id);
     if (cr.entity_type === 'booking') return bookings.find(b => b.id === cr.entity_id);
     if (cr.entity_type === 'support') return tickets.find(t => t.id === cr.entity_id);
@@ -173,8 +185,12 @@ export default function Approvals() {
   const approve = async (id) => {
     setError('');
     try {
-      await api.put(`/admin/approvals/${id}/approve`);
+      const target = requests?.find(r => r.id === id);
+      const result = await api.put(`/admin/approvals/${id}/approve`);
       setConfirmApproveId(null);
+      if (result?.resetCode) {
+        setIssuedCode({ code: result.resetCode, expiresAt: result.expiresAt, name: target ? `${target.requester_first_name} ${target.requester_last_name}` : 'the employee' });
+      }
       load();
       loadLookups();
     } catch (err) {
@@ -205,7 +221,7 @@ export default function Approvals() {
 
   return (
     <AdminLayout title="Approvals" subtitle={
-      isAdmin ? "Review general staff's, HR's, and installers' pending requests." :
+      isAdmin ? "Review general staff's, HR's, and installers' pending requests, plus staff password resets." :
       user?.position === 'booking_coordinator' ? "Review installers' job completions before they're finalized." :
       user?.position === 'hr' ? "Review support ticket resolutions before they're finalized." :
       "Review general staff's product, service, and voucher requests."
@@ -215,7 +231,9 @@ export default function Approvals() {
         icon={Check}
         tone="create"
         title="Approve this request?"
-        message={approveTarget ? describePayload(approveTarget, currentOf(approveTarget)) : ''}
+        message={approveTarget
+          ? `${describePayload(approveTarget, currentOf(approveTarget))}${approveTarget.entity_type === 'password_reset' ? '.\n\nApproving creates a one-time reset code for you to give them.' : ''}`
+          : ''}
         confirmLabel="Approve"
         onConfirm={() => approve(confirmApproveId)}
         onCancel={() => setConfirmApproveId(null)}
@@ -230,6 +248,8 @@ export default function Approvals() {
         onConfirm={() => reject(confirmRejectId)}
         onCancel={() => setConfirmRejectId(null)}
       />
+
+      {issuedCode && <IssuedCodeDialog issued={issuedCode} onClose={() => setIssuedCode(null)} />}
 
       {error && <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
 
@@ -282,13 +302,14 @@ export default function Approvals() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="font-semibold text-gray-800">{entityLabel}</span>
-                        <span className={`badge capitalize ${ACTION_STYLE[cr.action]}`}>{cr.action}</span>
+                        <span className={`badge capitalize ${ACTION_STYLE[cr.action]}`}>{cr.entity_type === 'password_reset' ? 'reset' : cr.action}</span>
                       </div>
                       <p className="text-sm text-gray-600">{describePayload(cr, currentOf(cr))}</p>
                       <p className="text-xs text-gray-400 mt-1">
                         Requested by {cr.requester_first_name} {cr.requester_last_name}{cr.requester_staff_code ? ` (${cr.requester_staff_code})` : ''} · {timeAgo(cr.created_at)}
                         {cr.status !== 'pending' && cr.reviewer_first_name && ` · ${cr.status === 'approved' ? 'Approved' : 'Rejected'} by ${cr.reviewer_first_name} ${cr.reviewer_last_name}`}
                       </p>
+                      {cr.entity_type === 'password_reset' && cr.status === 'approved' && <ResetCodeStatus cr={cr} />}
                     </div>
                   </div>
                   {cr.status === 'pending' && (
@@ -304,5 +325,68 @@ export default function Approvals() {
         </div>
       )}
     </AdminLayout>
+  );
+}
+
+const formatExpiry = (iso) => new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+// A one-time reset code with a copy button. select-all lets it be copied by hand too, in case
+// the browser blocks clipboard access.
+function ResetCode({ code }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable — the code is still on screen to copy manually.
+    }
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <span className="font-mono text-lg font-bold tracking-[0.3em] text-brand-navy bg-white border border-gray-200 rounded-lg px-3 py-1.5 select-all">{code}</span>
+      <button type="button" onClick={copy} title={copied ? 'Copied' : 'Copy code'} aria-label="Copy reset code" className="p-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition">
+        {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+}
+
+// What an approved password reset's card shows: the code while it's still usable, otherwise
+// why it isn't (used, replaced by a newer approval, or expired).
+function ResetCodeStatus({ cr }) {
+  const p = cr.payload || {};
+  if (p.code) {
+    return (
+      <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 p-3 space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Reset code</p>
+        <ResetCode code={p.code} />
+        <p className="text-xs text-gray-600">Give this to {cr.requester_first_name} once you've confirmed it's really them. It works once and expires {formatExpiry(p.expiresAt)}.</p>
+      </div>
+    );
+  }
+  if (p.usedAt) return <p className="mt-2 text-xs font-medium text-green-700">Code used · password changed {timeAgo(p.usedAt)}</p>;
+  if (p.supersededAt) return <p className="mt-2 text-xs text-gray-400">This code was replaced by a newer reset approval.</p>;
+  if (p.expired) return <p className="mt-2 text-xs text-gray-400">Code expired {formatExpiry(p.expiresAt)} — {cr.requester_first_name} will need to request a new reset.</p>;
+  return null;
+}
+
+function IssuedCodeDialog({ issued, onClose }) {
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="modal-scrim" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-labelledby="issued-code-title" className="modal-panel w-full max-w-sm p-6 fade-up">
+        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-green-100 text-green-600">
+          <KeyRound className="w-6 h-6" />
+        </div>
+        <h2 id="issued-code-title" className="font-display text-lg font-bold text-brand-navy">Password reset approved</h2>
+        <p className="text-sm text-gray-600 mt-1.5">Give this code to {issued.name}. They enter it on the staff sign-in page under <span className="font-medium">Forgot password?</span>, along with their new password.</p>
+        <div className="mt-4"><ResetCode code={issued.code} /></div>
+        <p className="text-xs text-gray-400 mt-2">Works once · expires {formatExpiry(issued.expiresAt)} · also shown under Approved</p>
+        <button type="button" onClick={onClose} className="btn-secondary w-full mt-6 py-2.5">Done</button>
+      </div>
+    </div>,
+    document.body
   );
 }

@@ -6,6 +6,7 @@ import ProductCard from '../components/ProductCard';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
 import Select from '../components/Select';
+import CategoryTile, { countLabel } from '../components/CategoryTile';
 import { getCategoryIcon } from '../constants/categoryIcons';
 import { ProductCardSkeleton, CategorySkeleton } from '../components/Skeleton';
 
@@ -66,39 +67,38 @@ export default function Products() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-16">
-        {/* Category filter row — same card treatment as the homepage's "Shop by
-            category" section, repurposed as toggleable filters (buttons, not
-            links) with an "All Products" card standing in for the old sidebar's
-            reset option. */}
-        <div className="flex gap-2 sm:gap-4 mb-8">
-          <button
-            onClick={() => { const p = new URLSearchParams(searchParams); p.delete('category'); setSearchParams(p); }}
-            className={`card group h-full flex-1 min-w-0 flex flex-col items-center text-center p-3 sm:p-5 gap-2 sm:gap-3 transition ${!category ? 'border-brand-orange/50 ring-1 ring-brand-orange/20' : 'hover:border-brand-orange/40'}`}
-          >
-            <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${!category ? 'bg-brand-orange/10' : 'bg-brand-navy/5 group-hover:bg-brand-orange/10 group-hover:scale-105'}`}>
-              <LayoutGrid className={`w-5 h-5 sm:w-7 sm:h-7 transition-colors ${!category ? 'text-brand-orange' : 'text-brand-navy group-hover:text-brand-orange'}`} />
-            </div>
-            <h3 className={`font-medium text-xs sm:text-sm leading-tight ${!category ? 'text-brand-navy font-semibold' : 'text-gray-800'}`}>All</h3>
-          </button>
+        {/* Category filter row — CategoryTile cards (the homepage's "Shop by
+            category" treatment, hover animation included) as toggleable
+            filters, with an "All" card standing in for the old sidebar's reset
+            option. Below lg the row scrolls sideways instead of squeezing ten
+            cards into one line; its vertical padding keeps the hover lift and
+            shadow from being clipped by the scroll container. */}
+        <div className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 lg:overflow-visible pt-2 pb-4 mb-4">
+          <div className="shrink-0 w-24 sm:w-28 lg:w-auto lg:flex-1 lg:min-w-0">
+            <CategoryTile
+              icon={LayoutGrid}
+              label="All"
+              meta={categories.loading ? null : countLabel(categories.data.reduce((sum, c) => sum + (Number(c.product_count) || 0), 0), 'item')}
+              action="View"
+              active={!category}
+              onClick={() => { const p = new URLSearchParams(searchParams); p.delete('category'); setSearchParams(p); }}
+            />
+          </div>
           {categories.loading ? (
-            Array.from({ length: 9 }).map((_, i) => <div key={i} className="flex-1 min-w-0"><CategorySkeleton /></div>)
+            Array.from({ length: 9 }).map((_, i) => <div key={i} className="shrink-0 w-24 sm:w-28 lg:w-auto lg:flex-1 lg:min-w-0"><CategorySkeleton /></div>)
           ) : (
-            categories.data.map(c => {
-              const Icon = getCategoryIcon(c.slug);
-              const active = category === c.slug;
-              return (
-                <button
-                  key={c.id}
+            categories.data.map(c => (
+              <div key={c.id} className="shrink-0 w-24 sm:w-28 lg:w-auto lg:flex-1 lg:min-w-0">
+                <CategoryTile
+                  icon={getCategoryIcon(c.slug)}
+                  label={c.name}
+                  meta={countLabel(c.product_count, 'item')}
+                  action="View"
+                  active={category === c.slug}
                   onClick={() => { const p = new URLSearchParams(searchParams); p.set('category', c.slug); setSearchParams(p); }}
-                  className={`card group h-full flex-1 min-w-0 flex flex-col items-center text-center p-3 sm:p-5 gap-2 sm:gap-3 transition ${active ? 'border-brand-orange/50 ring-1 ring-brand-orange/20' : 'hover:border-brand-orange/40'}`}
-                >
-                  <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${active ? 'bg-brand-orange/10' : 'bg-brand-navy/5 group-hover:bg-brand-orange/10 group-hover:scale-105'}`}>
-                    <Icon className={`w-5 h-5 sm:w-7 sm:h-7 transition-colors ${active ? 'text-brand-orange' : 'text-brand-navy group-hover:text-brand-orange'}`} />
-                  </div>
-                  <h3 className={`font-medium text-xs sm:text-sm leading-tight ${active ? 'text-brand-navy font-semibold' : 'text-gray-800'}`}>{c.name}</h3>
-                </button>
-              );
-            })
+                />
+              </div>
+            ))
           )}
         </div>
 

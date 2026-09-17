@@ -5,13 +5,28 @@ export const POSITION_LABELS = {
   booking_coordinator: 'Booking Coordinator',
   installer: 'Installer / Technician',
   hr: 'Human Resources',
+  accounting: 'Accounting',
   general_staff: 'General Staff',
+};
+
+// The same employee `position` values, named as the department each one belongs to — the
+// stored value still drives access scoping, this is only how HR-facing screens label it.
+export const DEPARTMENT_LABELS = {
+  accounting: 'Accounting',
+  booking_coordinator: 'Bookings',
+  hr: 'Human Resources',
+  installer: 'Installation',
+  inventory_clerk: 'Inventory',
+  general_staff: 'Operations',
 };
 
 export const ROLE_LABELS = { admin: 'Administrator', employee: 'Employee' };
 
 export const ACTION_META = {
   'auth.login': { category: 'login', entity: 'User', describe: () => 'Logged in' },
+  'auth.password_reset_request': { category: 'update', entity: 'User', describe: d => `${d.name || d.email} forgot their password and is waiting for approval` },
+  'auth.password_reset_approve': { category: 'update', entity: 'User', describe: d => `Approved a password reset for ${d.name || d.email} and issued a reset code` },
+  'auth.password_reset': { category: 'update', entity: 'User', describe: d => `Changed their password using a reset code (${d.email})` },
   'user.create': { category: 'create', entity: 'User', describe: d => `Created user ${d.email}${d.role ? ` (${ROLE_LABELS[d.role] || d.role}${d.position ? `, ${POSITION_LABELS[d.position] || d.position}` : ''})` : ''}` },
   'user.promote': { category: 'update', entity: 'User', describe: d => `Promoted ${d.email} to ${POSITION_LABELS[d.toPosition] || d.toPosition}` },
   'user.delete': { category: 'delete', entity: 'User', describe: d => `Deleted user ${d.email}` },

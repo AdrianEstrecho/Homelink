@@ -6,8 +6,6 @@ import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
 import { Skeleton } from '../components/Skeleton';
 
-const CONTACT = { phone: '(02) 8123-4567', phoneHref: 'tel:+6281234567', email: 'support@homelink.com' };
-
 function getOpenStatus() {
   const now = new Date();
   const day = now.getDay(); // 0 = Sunday
@@ -92,13 +90,13 @@ export default function Location() {
             </div>
 
             <div className="pt-6 border-t border-gray-100 space-y-3">
-              <a href={CONTACT.phoneHref} className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-brand-navy transition group">
+              <a href={`tel:${loc.phone}`} className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-brand-navy transition group">
                 <span className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 group-hover:border-brand-teal/40 transition"><Phone className="w-4 h-4 text-brand-teal" /></span>
-                {CONTACT.phone}
+                {loc.phone}
               </a>
-              <a href={`mailto:${CONTACT.email}`} className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-brand-navy transition group">
+              <a href={`mailto:${loc.email}`} className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-brand-navy transition group">
                 <span className="w-8 h-8 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center shrink-0 group-hover:border-brand-teal/40 transition"><Mail className="w-4 h-4 text-brand-teal" /></span>
-                {CONTACT.email}
+                {loc.email}
               </a>
             </div>
 

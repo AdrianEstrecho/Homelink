@@ -31,6 +31,7 @@ import Location from './pages/Location';
 import About from './pages/About';
 import FAQ from './pages/FAQ';
 import AdminLogin from './pages/admin/AdminLogin';
+import StaffForgotPassword from './pages/admin/StaffForgotPassword';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminProducts from './pages/admin/Products';
 import AdminServices from './pages/admin/Services';
@@ -42,14 +43,15 @@ import OrdersDashboard from './pages/admin/OrdersDashboard';
 import BookingsDashboard from './pages/admin/BookingsDashboard';
 import AdminUsers from './pages/admin/Users';
 import AdminManagement from './pages/admin/AdminManagement';
-import ArchivedUsers from './pages/admin/ArchivedUsers';
 import AdminVouchers from './pages/admin/Vouchers';
 import AdminSupportMessages from './pages/admin/SupportMessages';
 import AdminAuditLog from './pages/admin/AuditLog';
 import AdminProfile from './pages/admin/Profile';
+import AdminReports from './pages/admin/Reports';
+import AdminCMS from './pages/admin/CMS';
+import AdminSettings from './pages/admin/Settings';
 import HRDashboard from './pages/admin/HRDashboard';
 import EmployeeManagement from './pages/admin/EmployeeManagement';
-import HRArchivedEmployees from './pages/admin/HRArchivedEmployees';
 import Suppliers from './pages/admin/Suppliers';
 import Technicians from './pages/admin/Technicians';
 import Messages from './pages/admin/Messages';
@@ -159,6 +161,7 @@ export default function App() {
           <Route path="/about" element={<About />} />
           <Route path="/faq" element={<FAQ />} />
           <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/forgot-password" element={<StaffForgotPassword />} />
           <Route path="/admin" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/products/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk']} redirectTo="/admin/login"><InventoryDashboard /></ProtectedRoute>} />
           <Route path="/admin/approvals" element={<ProtectedRoute roles={['admin', 'employee']} positions={['inventory_clerk', 'booking_coordinator', 'hr']} redirectTo="/admin/login"><Approvals /></ProtectedRoute>} />
@@ -169,17 +172,18 @@ export default function App() {
           <Route path="/admin/bookings/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator']} redirectTo="/admin/login"><BookingsDashboard /></ProtectedRoute>} />
           <Route path="/admin/bookings" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator', 'general_staff', 'inventory_clerk']} redirectTo="/admin/login"><AdminBookings /></ProtectedRoute>} />
           <Route path="/admin/technicians" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator']} redirectTo="/admin/login"><Technicians /></ProtectedRoute>} />
-          <Route path="/admin/messages" element={<ProtectedRoute roles={['admin', 'employee']} positions={['booking_coordinator', 'installer']} redirectTo="/admin/login"><Messages /></ProtectedRoute>} />
+          <Route path="/admin/messages" element={<ProtectedRoute roles={['admin', 'employee']} redirectTo="/admin/login"><Messages /></ProtectedRoute>} />
           <Route path="/admin/users" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminUsers /></ProtectedRoute>} />
-          <Route path="/admin/archived-users" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><ArchivedUsers /></ProtectedRoute>} />
           <Route path="/admin/staff" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminManagement /></ProtectedRoute>} />
           <Route path="/admin/vouchers" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff', 'inventory_clerk']} redirectTo="/admin/login"><AdminVouchers /></ProtectedRoute>} />
           <Route path="/admin/support" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff', 'inventory_clerk']} redirectTo="/admin/login"><AdminSupportMessages /></ProtectedRoute>} />
           <Route path="/admin/audit-log" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminAuditLog /></ProtectedRoute>} />
           <Route path="/admin/profile" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminProfile /></ProtectedRoute>} />
+          <Route path="/admin/reports" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminReports /></ProtectedRoute>} />
+          <Route path="/admin/cms" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminCMS /></ProtectedRoute>} />
+          <Route path="/admin/settings" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminSettings /></ProtectedRoute>} />
           <Route path="/admin/hr/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><HRDashboard /></ProtectedRoute>} />
           <Route path="/admin/hr/employees" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><EmployeeManagement /></ProtectedRoute>} />
-          <Route path="/admin/hr/employees/archived" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><HRArchivedEmployees /></ProtectedRoute>} />
           <Route path="/admin/suppliers" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><Suppliers /></ProtectedRoute>} />
           <Route path="/employee" element={<ProtectedRoute roles={['employee']} redirectTo="/admin/login"><EmployeeDashboard /></ProtectedRoute>} />
           <Route path="/employee/job-status" element={<ProtectedRoute roles={['admin', 'employee']} positions={['installer']} redirectTo="/admin/login"><JobStatus /></ProtectedRoute>} />
