@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { getFirstTimeServiceDiscount, getHolidayDiscount, calculateDiscount } from '../utils/promos.js';
-import { fulfillBooking } from '../utils/bookingFulfillment.js';
+import { fulfillBooking, isSlotTakenByAnotherCustomer, SLOT_TAKEN_ERROR } from '../utils/bookingFulfillment.js';
 import { createCheckoutSessionV2, retrieveCheckoutSession } from '../utils/paymongo.js';
 import { logActivity } from '../utils/audit.js';
 import { BOOKING_STEPS, ORIGIN, getBookingTimeline, getBookingDestination } from '../utils/tracking.js';
@@ -57,7 +57,10 @@ export async function finalizePendingBooking(pending, req) {
     `).get(pending.booking_id);
   }
 
-  const booking = await fulfillBooking({
+  // Passing pending.id makes fulfillBooking mark this checkout succeeded in the same
+  // transaction that creates the booking, so a webhook and a /status poll landing together
+  // yield one booking — and a slot lost while paying is flagged, not refused (already charged).
+  return await fulfillBooking({
     userId: pending.user_id,
     serviceId: pending.service_id,
     scheduledDate: pending.scheduled_date,
@@ -69,11 +72,7 @@ export async function finalizePendingBooking(pending, req) {
     paymentMethod: pending.payment_method,
     paymentStatus: 'paid',
     paymongoPaymentIntentId: pending.paymongo_payment_intent_id,
-  }, req || { user: { id: pending.user_id }, ip: null });
-
-  await db.prepare("UPDATE pending_bookings SET status = 'succeeded', booking_id = ? WHERE id = ?").run(booking.id, pending.id);
-
-  return booking;
+  }, req || { user: { id: pending.user_id }, ip: null }, pending.id);
 }
 
 // Only bank transfer goes through this endpoint — it's manual/informational, so the booking
@@ -106,7 +105,7 @@ router.post('/', authenticate, async (req, res) => {
 
     res.status(201).json(booking);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -128,6 +127,14 @@ router.post('/checkout-session', authenticate, async (req, res) => {
 
     const priced = await priceService(serviceId, req.user.id);
     if (!priced) return res.status(404).json({ error: 'Service not found' });
+
+    // Checked again right before sending the customer off to pay, since the slot they picked
+    // may have been taken since the availability list loaded — much better to say so now than
+    // to charge them for a slot that's gone. (fulfillBooking still guards the rarer case of it
+    // being taken during payment itself.)
+    if (await isSlotTakenByAnotherCustomer(scheduledDate, scheduledTime, req.user.id)) {
+      return res.status(409).json({ error: SLOT_TAKEN_ERROR });
+    }
 
     const pendingId = uuid();
     await db.prepare(`

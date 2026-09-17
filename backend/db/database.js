@@ -170,6 +170,18 @@ await db.exec(`
     created_at TIMESTAMPTZ DEFAULT now()
   );
 
+  -- Last line of defense against overselling: order creation already only deducts stock that's
+  -- actually there (see orderFulfillment.js), this makes the database itself refuse a negative
+  -- count. NOT VALID skips re-checking existing rows, so a product that somehow already sits
+  -- below zero can't stop the server from starting — every insert/update is still checked.
+  -- Postgres has no ADD CONSTRAINT IF NOT EXISTS, hence the pg_constraint lookup.
+  DO $$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_stock_not_negative') THEN
+      ALTER TABLE products ADD CONSTRAINT products_stock_not_negative CHECK (stock >= 0) NOT VALID;
+    END IF;
+  END $$;
+
   CREATE TABLE IF NOT EXISTS services (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -205,6 +217,12 @@ await db.exec(`
   -- so the tracking map/ETA don't re-hit the geocoder on every fetch.
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_lat DOUBLE PRECISION;
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS dest_lng DOUBLE PRECISION;
+
+  -- Set when a card/GCash/QR Ph order had to be created even though something ran out while
+  -- the customer was on PayMongo's page (stock, or the voucher's last use) — the charge was
+  -- already captured, so staff sort it out (restock or refund) instead of the order failing.
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS needs_review INTEGER DEFAULT 0;
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS review_reason TEXT;
 
   CREATE TABLE IF NOT EXISTS order_items (
     id TEXT PRIMARY KEY,
@@ -268,6 +286,11 @@ await db.exec(`
   ALTER TABLE bookings ADD COLUMN IF NOT EXISTS technician_lat DOUBLE PRECISION;
   ALTER TABLE bookings ADD COLUMN IF NOT EXISTS technician_lng DOUBLE PRECISION;
   ALTER TABLE bookings ADD COLUMN IF NOT EXISTS technician_location_at TIMESTAMPTZ;
+
+  -- Same idea as orders.needs_review: a paid booking whose time slot was taken by another
+  -- customer while this one was still paying — kept (not refused) and flagged for rescheduling.
+  ALTER TABLE bookings ADD COLUMN IF NOT EXISTS needs_review INTEGER DEFAULT 0;
+  ALTER TABLE bookings ADD COLUMN IF NOT EXISTS review_reason TEXT;
 
   -- Same purpose as pending_checkouts, but for service bookings: holds a validated booking
   -- request between "redirect out to PayMongo's hosted Checkout Session" and "webhook/poll

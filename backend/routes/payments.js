@@ -5,7 +5,6 @@ import { authenticate } from '../middleware/auth.js';
 import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
 import { createCheckoutSessionV2, retrieveCheckoutSession, verifyWebhookSignature } from '../utils/paymongo.js';
-import { logActivity } from '../utils/audit.js';
 import { resolveFrontendUrl } from '../utils/frontendUrl.js';
 import { finalizePendingBooking } from './bookings.js';
 
@@ -29,20 +28,14 @@ async function finalizePendingCheckout(pending, req) {
     return { ...order, items };
   }
 
-  const orderItems = orderItemsFromSnapshot(pending.items);
-
-  // Stock may have sold out between /checkout-session and now (payment can take minutes on
-  // PayMongo's hosted page) — the charge is already captured, so we still fulfill and flag it
-  // for admin follow-up rather than stranding a customer who already paid.
-  const oversold = [];
-  for (const oi of orderItems) {
-    const product = await db.prepare('SELECT stock FROM products WHERE id = ?').get(oi.product.id);
-    if (!product || product.stock < oi.quantity) oversold.push(oi);
-  }
-
-  const order = await fulfillOrder({
+  // Stock (or the voucher's last use) may have run out between /checkout-session and now —
+  // payment can take minutes on PayMongo's hosted page. The charge is already captured, so
+  // fulfillOrder still creates the order and flags it needs_review rather than stranding a
+  // customer who already paid. Passing pending.id also makes it mark this checkout succeeded in
+  // the same transaction, so a webhook and a /status poll landing together yield one order.
+  return await fulfillOrder({
     userId: pending.user_id,
-    orderItems,
+    orderItems: orderItemsFromSnapshot(pending.items),
     subtotal: pending.subtotal,
     discount: pending.discount,
     total: pending.total,
@@ -52,17 +45,7 @@ async function finalizePendingCheckout(pending, req) {
     paymentStatus: 'paid',
     shippingAddress: pending.shipping_address,
     paymongoPaymentIntentId: pending.paymongo_payment_intent_id,
-  }, req || { user: { id: pending.user_id }, ip: null });
-
-  await db.prepare("UPDATE pending_checkouts SET status = 'succeeded', order_id = ? WHERE id = ?").run(order.id, pending.id);
-
-  if (oversold.length) {
-    await logActivity(req || { user: { id: pending.user_id }, ip: null }, 'order.oversold_after_payment', 'order', order.id, {
-      productIds: oversold.map(oi => oi.product.id),
-    });
-  }
-
-  return order;
+  }, req || { user: { id: pending.user_id }, ip: null }, pending.id);
 }
 
 // Card, GCash, and QR Ph all go through PayMongo's hosted Checkout Session (v2) — the browser

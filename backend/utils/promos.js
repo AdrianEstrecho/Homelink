@@ -30,6 +30,11 @@ export function calculateDiscount(amount, promo) {
   return Math.min(promo.value, amount);
 }
 
-export async function applyVoucherUse(code) {
-  await db.prepare('UPDATE vouchers SET used_count = used_count + 1 WHERE code = ?').run(code.toUpperCase());
+// Counts one use only while the voucher is still under max_uses — the check and the increment
+// are a single statement, so two checkouts racing for a voucher's last use can't both get it
+// (validateVoucher's earlier read can't guarantee that on its own). Returns whether it counted.
+// Pass the transaction's executor so the use is undone if the rest of the order fails.
+export async function applyVoucherUse(code, executor = db) {
+  const { changes } = await executor.prepare('UPDATE vouchers SET used_count = used_count + 1 WHERE code = ? AND used_count < max_uses').run(code.toUpperCase());
+  return changes > 0;
 }

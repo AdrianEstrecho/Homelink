@@ -4,6 +4,7 @@ import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import NeedsReviewFlag from '../../components/NeedsReviewFlag';
 
 const STATUSES = ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled'];
 const statusLabel = (s) => s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -152,6 +153,7 @@ export default function AdminBookings() {
                   ) : (
                     <span className={`badge capitalize ${statusColor(b.status)}`}>{b.status.replace('_', ' ')}</span>
                   )}
+                  {!!b.needs_review && <NeedsReviewFlag reason={b.review_reason} />}
                 </td>
                 <td className="p-3 text-right font-medium">{formatPrice(b.price)}</td>
                 <td className="p-3">

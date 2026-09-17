@@ -38,9 +38,13 @@ export const ACTION_META = {
   'booking.assign': { category: 'update', entity: 'Booking', describe: (d, nameOf) => `Assigned to ${nameOf?.(d.toEmployeeId) || '—'}` },
   'booking.unassign': { category: 'update', entity: 'Booking', describe: (d, nameOf) => `Unassigned from ${nameOf?.(d.fromEmployeeId) || '—'}` },
   'booking.cancel': { category: 'update', entity: 'Booking', describe: d => `${d.customerName || 'A customer'} cancelled their booking${d.reason ? ` — "${d.reason}"` : ''}` },
+  'booking.needs_review': { category: 'update', entity: 'Booking', describe: d => `Flagged ${d.customerName ? `${d.customerName}'s` : 'a'} paid booking for review — ${d.reason}` },
   'order.create': { category: 'create', entity: 'Order', describe: d => `${d.customerName || 'A customer'} placed an order for ${d.itemCount || ''} item${d.itemCount === 1 ? '' : 's'} (₱${Number(d.total || 0).toLocaleString('en-PH')})` },
   'order.status_update': { category: 'update', entity: 'Order', describe: d => `Status changed: ${d.from || '—'} → ${d.to}` },
   'order.cancel': { category: 'update', entity: 'Order', describe: d => `${d.customerName || 'A customer'} cancelled their order${d.reason ? ` — "${d.reason}"` : ''}` },
+  'order.needs_review': { category: 'update', entity: 'Order', describe: d => `Flagged ${d.customerName ? `${d.customerName}'s` : 'a'} paid order for review — ${d.reason}` },
+  // Older entries, from before paid orders carried their own needs_review flag.
+  'order.oversold_after_payment': { category: 'update', entity: 'Order', describe: () => 'An item sold out while the customer was paying — needs review' },
   'support.create': { category: 'create', entity: 'Support', describe: d => `${d.customerName || 'A customer'} sent a ${d.type || 'support'} message${d.ticketNumber ? ` (${formatTicketNo(d.ticketNumber)})` : ''}: "${d.subject}"` },
   'support.reply': { category: 'update', entity: 'Support', describe: d => `Replied to ${d.ticketNumber ? formatTicketNo(d.ticketNumber) : `"${d.subject}"`}${d.preview ? `: "${d.preview}"` : ''}` },
   'support.request_resolve': { category: 'update', entity: 'Support', describe: d => `Requested resolution approval for ${d.ticketNumber ? formatTicketNo(d.ticketNumber) : `"${d.subject}"`}` },

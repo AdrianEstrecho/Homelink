@@ -6,6 +6,7 @@ import AdminLayout from '../../components/AdminLayout';
 import OrderDetailsModal from '../../components/OrderDetailsModal';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import NeedsReviewFlag from '../../components/NeedsReviewFlag';
 
 const STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
 const STATUS_OPTIONS = STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }));
@@ -120,6 +121,7 @@ export default function AdminOrders() {
                   ) : (
                     <span className={`badge capitalize ${statusColor(o.status)}`}>{o.status}</span>
                   )}
+                  {!!o.needs_review && <NeedsReviewFlag reason={o.review_reason} />}
                 </td>
                 <td className="p-3 text-right font-medium">{formatPrice(o.total)}</td>
                 <td className="p-3" onClick={e => e.stopPropagation()}>
