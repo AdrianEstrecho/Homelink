@@ -23,6 +23,8 @@ services:
         value: "123 HomeLink Avenue, Metro Manila, Philippines"
       - key: RESEND_API_KEY
         sync: false
+      - key: BREVO_API_KEY
+        sync: false
       - key: EMAIL_FROM
         sync: false
       - key: PAYMONGO_SECRET_KEY

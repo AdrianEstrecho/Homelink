@@ -9,10 +9,39 @@
 // outbound SMTP ports.
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
-// Until a domain is verified (see comment above), this must be "<Name> <onboarding@resend.dev>".
+// Brevo takes priority when its key is set. Unlike Resend's sandbox, it needs no domain to reach
+// arbitrary recipients — only a sender address verified under Senders & IPs in the Brevo
+// dashboard, which EMAIL_FROM must then use. Also HTTPS, so Render's SMTP block doesn't apply.
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+
+// Until a domain is verified (see comment above), this must be "<Name> <onboarding@resend.dev>"
+// for Resend; for Brevo, "<Name> <your-verified-sender@example.com>".
 const FROM = process.env.EMAIL_FROM;
 
+// Brevo wants the sender as { name, email } rather than the "Name <email>" string Resend takes.
+function parseFrom(from) {
+  const match = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(from || '');
+  return match ? { name: match[1] || undefined, email: match[2] } : { email: from };
+}
+
+async function sendViaBrevo({ to, subject, html }) {
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': BREVO_API_KEY,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ sender: parseFrom(FROM), to: [{ email: to }], subject, htmlContent: html }),
+  });
+  if (!res.ok) {
+    throw new Error(`Brevo send failed (${res.status}): ${await res.text()}`);
+  }
+  return { sent: true };
+}
+
 export async function sendEmail({ to, subject, html }) {
+  if (BREVO_API_KEY) return sendViaBrevo({ to, subject, html });
   if (!RESEND_API_KEY) {
     console.log(`[Email Mock] To: ${to} | Subject: ${subject}`);
     return { mock: true };
