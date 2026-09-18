@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
+import db from '../db/database.js';
 
-export function authenticate(req, res, next) {
+export async function authenticate(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Authentication required' });
@@ -8,10 +9,19 @@ export function authenticate(req, res, next) {
   try {
     const token = header.split(' ')[1];
     req.user = jwt.verify(token, process.env.JWT_SECRET || 'homelink-super-secret-key-change-in-production');
-    next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+  // Tokens stay valid for 7 days, so staff tokens are re-checked against the account on every
+  // request — archiving or deleting an admin/employee cuts off a session they already have
+  // open, instead of leaving them their access until the token expires. Customers skip it.
+  if (req.user.role !== 'customer') {
+    const account = await db.prepare('SELECT archived FROM users WHERE id = ?').get(req.user.id);
+    if (!account || account.archived) {
+      return res.status(401).json({ error: 'This account is no longer active. Contact an administrator.' });
+    }
+  }
+  next();
 }
 
 export function authorize(...roles) {

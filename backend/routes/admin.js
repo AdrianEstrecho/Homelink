@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'uuid';
-import db from '../db/database.js';
+import db, { withTransaction } from '../db/database.js';
 import { authenticate, authorize, authorizeAdminOr } from '../middleware/auth.js';
 import { logActivity } from '../utils/audit.js';
 import { generateStaffCode } from '../utils/staffCode.js';
@@ -54,7 +54,7 @@ router.get('/dashboard', authorize('admin'), async (req, res) => {
 });
 
 // Users
-const EMPLOYEE_POSITIONS = ['inventory_clerk', 'booking_coordinator', 'installer', 'hr', 'accounting', 'general_staff'];
+const EMPLOYEE_POSITIONS = ['inventory_clerk', 'booking_coordinator', 'installer', 'hr', 'general_staff'];
 
 // general_staff and inventory_clerk have no User Management page of their own — this
 // stays open to them only because Bookings' technician-assignment dropdown queries it
@@ -160,10 +160,17 @@ router.put('/users/:id/promote', authorizeAdminOr('hr'), async (req, res) => {
   res.json({ message: 'User promoted', position, staffCode: result.staffCode });
 });
 
-async function archiveEmployee(id) {
+// Only an admin can archive another admin (HR's requests never reach an admin — see the
+// archive route), and never themselves or the last active admin, so the panel can't be
+// left with nobody able to sign in to it.
+async function archiveEmployee(id, actorId) {
   const user = await db.prepare('SELECT email, role FROM users WHERE id = ?').get(id);
   if (!user) return { error: 'User not found', status: 404 };
-  if (user.role === 'admin') return { error: 'Cannot archive an administrator', status: 400 };
+  if (user.role === 'admin') {
+    if (id === actorId) return { error: "You can't archive your own account.", status: 400 };
+    const { c } = await db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'admin' AND COALESCE(archived, 0) = 0 AND id <> ?").get(id);
+    if (c === 0) return { error: 'At least one active administrator has to remain.', status: 400 };
+  }
   await db.prepare('UPDATE users SET archived = 1 WHERE id = ?').run(id);
   return { user };
 }
@@ -175,10 +182,38 @@ async function restoreEmployee(id) {
   return { user };
 }
 
-async function deleteEmployeeById(id) {
-  const user = await db.prepare('SELECT email, role FROM users WHERE id = ?').get(id);
-  const result = await db.prepare('DELETE FROM users WHERE id = ? AND role != ?').run(id, 'admin');
-  return result.changes > 0 ? user : null;
+// Permanently deletes a staff account. What only mattered to that person goes with it (their
+// notifications, direct messages, and their own still-open or password-reset requests), and
+// approvals they reviewed keep their outcome but lose the reviewer's name. Records other
+// people rely on — support replies customers can read, bookings they were assigned, orders,
+// approval requests they submitted — would be broken by the delete, so those block it and the
+// account should stay archived instead. Admins must be archived before they can be deleted.
+async function deleteStaffAccount(id, actorId) {
+  const user = await db.prepare('SELECT id, email, role, archived FROM users WHERE id = ?').get(id);
+  if (!user) return { error: 'User not found', status: 404 };
+  if (id === actorId) return { error: "You can't delete your own account.", status: 400 };
+  if (user.role === 'admin' && !user.archived) return { error: 'Archive this administrator before deleting them permanently.', status: 400 };
+
+  const count = async (sql) => (await db.prepare(sql).get(id)).c;
+  const blockers = [
+    [await count('SELECT COUNT(*) as c FROM support_replies WHERE author_id = ?'), 'support ticket reply', 'support ticket replies'],
+    [await count('SELECT COUNT(*) as c FROM bookings WHERE employee_id = ?'), 'assigned booking', 'assigned bookings'],
+    [await count('SELECT COUNT(*) as c FROM orders WHERE user_id = ?') + await count('SELECT COUNT(*) as c FROM bookings WHERE user_id = ?'), 'order or booking of their own', 'orders or bookings of their own'],
+    [await count("SELECT COUNT(*) as c FROM change_requests WHERE requested_by = ? AND status <> 'pending' AND entity_type <> 'password_reset'"), 'reviewed approval request they submitted', 'reviewed approval requests they submitted'],
+  ].filter(([n]) => n > 0).map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
+  if (blockers.length) {
+    return { error: `This account can't be permanently deleted because it's linked to ${blockers.join(', ')}. Keep it archived instead — archived accounts can't sign in.`, status: 409 };
+  }
+
+  await withTransaction(async (tx) => {
+    await tx.prepare('DELETE FROM notifications WHERE user_id = ?').run(id);
+    await tx.prepare('DELETE FROM staff_messages WHERE sender_id = ? OR recipient_id = ?').run(id, id);
+    await tx.prepare("DELETE FROM change_requests WHERE requested_by = ? AND (status = 'pending' OR entity_type = 'password_reset')").run(id);
+    await tx.prepare("DELETE FROM change_requests WHERE entity_type = 'password_reset' AND entity_id = ?").run(id);
+    await tx.prepare('UPDATE change_requests SET reviewed_by = NULL WHERE reviewed_by = ?').run(id);
+    await tx.prepare('DELETE FROM users WHERE id = ?').run(id);
+  });
+  return { user };
 }
 
 // Archiving a user revokes their ability to log in but keeps their data intact and
@@ -192,7 +227,7 @@ router.put('/users/:id/archive', authorizeAdminOr('hr'), async (req, res) => {
     const requestId = await createChangeRequest('employee', 'archive', req.params.id, null, req.user.id);
     return res.status(202).json({ pending: true, requestId, message: 'Submitted for admin approval.' });
   }
-  const result = await archiveEmployee(req.params.id);
+  const result = await archiveEmployee(req.params.id, req.user.id);
   if (result.error) return res.status(result.status).json({ error: result.error });
   await logActivity(req, 'user.archive', 'user', req.params.id, { email: result.user.email, role: result.user.role });
   res.json({ message: 'User archived' });
@@ -200,8 +235,9 @@ router.put('/users/:id/archive', authorizeAdminOr('hr'), async (req, res) => {
 
 router.put('/users/:id/restore', authorizeAdminOr('hr'), async (req, res) => {
   if (req.user.role !== 'admin') {
-    const user = await db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+    const user = await db.prepare('SELECT role FROM users WHERE id = ?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin') return res.status(400).json({ error: 'Cannot restore an administrator' });
     const requestId = await createChangeRequest('employee', 'restore', req.params.id, null, req.user.id);
     return res.status(202).json({ pending: true, requestId, message: 'Submitted for admin approval.' });
   }
@@ -211,9 +247,10 @@ router.put('/users/:id/restore', authorizeAdminOr('hr'), async (req, res) => {
   res.json({ message: 'User restored' });
 });
 
-// Permanent delete stays reachable only from the Archived Users view (same as before) but
-// is now also open to HR — proposed as a change request rather than applied immediately,
-// since it's irreversible.
+// Permanent delete stays reachable only from the Archived view (for every role tab,
+// including Admins) and is also open to HR — proposed as a change request rather than
+// applied immediately, since it's irreversible. See deleteStaffAccount for what it removes
+// and what blocks it.
 router.delete('/users/:id', authorizeAdminOr('hr'), async (req, res) => {
   if (req.user.role !== 'admin') {
     const user = await db.prepare('SELECT role FROM users WHERE id = ?').get(req.params.id);
@@ -222,8 +259,9 @@ router.delete('/users/:id', authorizeAdminOr('hr'), async (req, res) => {
     const requestId = await createChangeRequest('employee', 'delete', req.params.id, null, req.user.id);
     return res.status(202).json({ pending: true, requestId, message: 'Deletion request submitted for admin approval.' });
   }
-  const user = await deleteEmployeeById(req.params.id);
-  if (user) await logActivity(req, 'user.delete', 'user', req.params.id, { email: user.email, role: user.role });
+  const result = await deleteStaffAccount(req.params.id, req.user.id);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  await logActivity(req, 'user.delete', 'user', req.params.id, { email: result.user.email, role: result.user.role });
   res.json({ message: 'User deleted' });
 });
 
@@ -901,7 +939,7 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
       if (result.error) return res.status(result.status).json({ error: result.error });
       logAction = 'user.promote'; logDetails = { email: result.user.email, fromPosition: result.user.position, toPosition: payload.position, staffCode: result.staffCode };
     } else if (cr.action === 'archive') {
-      const result = await archiveEmployee(cr.entity_id);
+      const result = await archiveEmployee(cr.entity_id, req.user.id);
       if (result.error) return res.status(result.status).json({ error: result.error });
       logAction = 'user.archive'; logDetails = { email: result.user.email, role: result.user.role };
     } else if (cr.action === 'restore') {
@@ -909,8 +947,9 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
       if (result.error) return res.status(result.status).json({ error: result.error });
       logAction = 'user.restore'; logDetails = { email: result.user.email, role: result.user.role };
     } else if (cr.action === 'delete') {
-      const user = await deleteEmployeeById(cr.entity_id);
-      if (user) { logAction = 'user.delete'; logDetails = { email: user.email, role: user.role }; }
+      const result = await deleteStaffAccount(cr.entity_id, req.user.id);
+      if (result.error) return res.status(result.status).json({ error: result.error });
+      logAction = 'user.delete'; logDetails = { email: result.user.email, role: result.user.role };
     }
   } else if (cr.entity_type === 'supplier') {
     if (cr.action === 'create') {

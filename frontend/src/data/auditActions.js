@@ -5,14 +5,12 @@ export const POSITION_LABELS = {
   booking_coordinator: 'Booking Coordinator',
   installer: 'Installer / Technician',
   hr: 'Human Resources',
-  accounting: 'Accounting',
   general_staff: 'General Staff',
 };
 
 // The same employee `position` values, named as the department each one belongs to — the
 // stored value still drives access scoping, this is only how HR-facing screens label it.
 export const DEPARTMENT_LABELS = {
-  accounting: 'Accounting',
   booking_coordinator: 'Bookings',
   hr: 'Human Resources',
   installer: 'Installation',

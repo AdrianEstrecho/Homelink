@@ -8,7 +8,6 @@ import { useAuth } from '../../context/AuthContext';
 import { DEPARTMENT_LABELS } from '../../data/auditActions';
 
 const DEPARTMENT_COLORS = {
-  accounting: 'bg-violet-100 text-violet-800',
   booking_coordinator: 'bg-blue-100 text-blue-800',
   hr: 'bg-pink-100 text-pink-800',
   installer: 'bg-orange-100 text-orange-800',
@@ -38,8 +37,9 @@ function maskAddress(address) {
 // (HR's employee-only slice) — the role tabs decide which slice of the same /admin/users
 // list each page shows, and the Active/Archived toggle below lives inside this same panel
 // (rather than a separate nav page) so admins don't need to leave the page to find
-// archived accounts. Admins are never archivable (see the archive button's `role !== 'admin'`
-// guard further down), so the toggle only shows for non-admin role tabs.
+// archived accounts. On the Admins tab only an admin sees the toggle, and can archive any
+// other admin (never themselves — the backend also keeps at least one admin active); an
+// archived admin can then be restored or permanently deleted from the Archived view.
 // HR sees the same write actions as admin (add, promote, archive, restore, delete), but
 // every one of HR's writes is only *proposed*: the backend queues it as a change request
 // for admin to approve rather than applying it immediately (see api responses' `pending`
@@ -55,7 +55,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
   const [tab, setTab] = useState(roleTabs[0].key);
   const [view, setView] = useState('active');
   const archivedView = view === 'archived';
-  const canToggleArchive = tab !== 'admin';
+  const canToggleArchive = tab !== 'admin' || isAdmin;
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '', phone: '', position: 'general_staff' });
   const [revealed, setRevealed] = useState(new Set());
@@ -63,6 +63,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
   const [confirmArchiveId, setConfirmArchiveId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [notice, setNotice] = useState('');
+  const [actionError, setActionError] = useState('');
   const [formError, setFormError] = useState('');
   const [myRequests, setMyRequests] = useState([]);
 
@@ -114,39 +115,45 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
     loadMyRequests();
   };
 
-  const archiveUser = async (id) => {
+  // Every row action goes through here so a refusal from the backend (e.g. archiving the last
+  // active admin, or deleting an account other records still depend on) is shown instead of
+  // failing silently.
+  const runAction = async (request, pendingMessage) => {
     setNotice('');
-    const result = await api.put(`/admin/users/${id}/archive`);
-    if (result?.pending) setNotice(result.message || 'Submitted for admin approval.');
+    setActionError('');
+    try {
+      const result = await request();
+      if (result?.pending) setNotice(result.message || pendingMessage);
+    } catch (err) {
+      setActionError(err.message || 'Something went wrong. Please try again.');
+    }
     load();
     loadMyRequests();
   };
-  const restoreUser = async (id) => {
-    setNotice('');
-    const result = await api.put(`/admin/users/${id}/restore`);
-    if (result?.pending) setNotice(result.message || 'Submitted for admin approval.');
-    load();
-    loadMyRequests();
-  };
-  const deleteForever = async (id) => {
-    setNotice('');
-    const result = await api.delete(`/admin/users/${id}`);
-    if (result?.pending) setNotice(result.message || 'Deletion request submitted for admin approval.');
-    load();
-    loadMyRequests();
-  };
+  const archiveUser = (id) => runAction(() => api.put(`/admin/users/${id}/archive`), 'Submitted for admin approval.');
+  const restoreUser = (id) => runAction(() => api.put(`/admin/users/${id}/restore`), 'Submitted for admin approval.');
+  const deleteForever = (id) => runAction(() => api.delete(`/admin/users/${id}`), 'Deletion request submitted for admin approval.');
 
   const confirmArchive = () => { archiveUser(confirmArchiveId); setConfirmArchiveId(null); };
   const confirmDelete = () => { deleteForever(confirmDeleteId); setConfirmDeleteId(null); };
 
   const promote = async (id, position) => {
-    setNotice('');
-    const result = await api.put(`/admin/users/${id}/promote`, { position });
     setPromotingId(null);
-    if (result?.pending) setNotice(result.message || 'Submitted for admin approval.');
-    load();
-    loadMyRequests();
+    await runAction(() => api.put(`/admin/users/${id}/promote`, { position }), 'Submitted for admin approval.');
   };
+
+  const archiveTarget = users.find(u => u.id === confirmArchiveId);
+  const deleteTarget = users.find(u => u.id === confirmDeleteId);
+  const archiveMessage = !isAdmin
+    ? 'An admin will need to approve this before the account is archived.'
+    : archiveTarget?.role === 'customer'
+      ? 'They will no longer be able to sign in, but their data is kept and can be restored later.'
+      : "They'll be signed out right away and can't sign in again until restored. Their data is kept.";
+  const deleteMessage = !isAdmin
+    ? 'An admin will need to approve this before the account is permanently deleted.'
+    : deleteTarget?.role === 'customer'
+      ? 'This cannot be undone.'
+      : 'This cannot be undone. Their notifications and direct messages are deleted too; approvals they reviewed are kept.';
 
   return (
     <AdminLayout title={title} subtitle={subtitle}>
@@ -154,8 +161,8 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
         open={!!confirmArchiveId}
         icon={Archive}
         tone="archive"
-        title={isAdmin ? 'Archive this user?' : 'Request to archive this user?'}
-        message={isAdmin ? 'They will no longer be able to sign in, but their data is kept and can be restored later.' : 'An admin will need to approve this before the account is archived.'}
+        title={isAdmin ? (archiveTarget?.role === 'admin' ? 'Archive this administrator?' : 'Archive this user?') : 'Request to archive this user?'}
+        message={archiveMessage}
         confirmLabel={isAdmin ? 'Archive' : 'Request Archive'}
         onConfirm={confirmArchive}
         onCancel={() => setConfirmArchiveId(null)}
@@ -164,14 +171,15 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
         open={!!confirmDeleteId}
         icon={Trash2}
         tone="delete"
-        title={isAdmin ? 'Permanently delete this user?' : 'Request permanent deletion?'}
-        message={isAdmin ? 'This cannot be undone.' : 'An admin will need to approve this before the account is permanently deleted.'}
+        title={isAdmin ? (deleteTarget?.role === 'admin' ? 'Permanently delete this administrator?' : 'Permanently delete this user?') : 'Request permanent deletion?'}
+        message={deleteMessage}
         confirmLabel={isAdmin ? 'Delete' : 'Request Deletion'}
         onConfirm={confirmDelete}
         onCancel={() => setConfirmDeleteId(null)}
       />
 
       {notice && <p className="mb-4 text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">{notice}</p>}
+      {actionError && <p role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{actionError}</p>}
 
       {isHR && myRequests.length > 0 && (
         <div className="card p-4 mb-4">
@@ -310,7 +318,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
                           </>
                         )
                       ) : (
-                        canManage && u.role !== 'admin' && (
+                        canManage && (u.role !== 'admin' || (isAdmin && u.id !== currentUser?.id)) && (
                           <button onClick={() => setConfirmArchiveId(u.id)} title={isAdmin ? 'Archive' : 'Request archive'} className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><Archive className="w-3.5 h-3.5" /></button>
                         )
                       )}

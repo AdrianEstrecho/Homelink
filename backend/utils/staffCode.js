@@ -5,7 +5,6 @@ const POSITION_PREFIX = {
   booking_coordinator: 'BC',
   installer: 'IN',
   hr: 'HR',
-  accounting: 'AC',
   general_staff: 'GS',
 };
 
