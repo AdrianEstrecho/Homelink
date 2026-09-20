@@ -5,8 +5,39 @@ import { api, formatPrice, statusColor } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import OrderDetailsModal from '../components/OrderDetailsModal';
+import SafeImage from '../components/SafeImage';
 import CancelReasonModal from '../components/CancelReasonModal';
 import TrackingModal from '../components/TrackingModal';
+
+// Up to three product shots per row, overlapped so a big order can't push the order number
+// and date off the line; whatever's left over is counted in a +N chip. /orders/my already
+// joins the product image onto every line item, so this costs no extra request.
+const THUMBS_SHOWN = 3;
+
+function OrderThumbs({ items }) {
+  if (!items?.length) return null;
+  const shown = items.slice(0, THUMBS_SHOWN);
+  const extra = items.length - shown.length;
+
+  return (
+    <div className="flex items-center shrink-0">
+      {shown.map((i, index) => (
+        <SafeImage
+          key={i.id || `${i.product_id}-${index}`}
+          src={i.image}
+          alt={i.name}
+          className={`w-12 h-12 rounded-lg object-cover bg-gray-100 ring-2 ring-white ${index ? '-ml-4' : ''}`}
+          iconClassName="w-5 h-5"
+        />
+      ))}
+      {extra > 0 && (
+        <span className="w-12 h-12 -ml-4 rounded-lg ring-2 ring-white bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-500">
+          +{extra}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
@@ -48,11 +79,14 @@ export default function Orders() {
               onClick={() => setSelectedOrder(o)}
               className="card p-5 w-full text-left flex flex-wrap items-center justify-between gap-3 hover:border-brand-navy/20 hover:shadow-md transition"
             >
-              <div>
-                <p className="font-semibold text-brand-ink">Order #{o.id.slice(0, 8).toUpperCase()}</p>
-                <p className="text-sm text-gray-500">
-                  {new Date(o.created_at).toLocaleDateString()} · {o.items?.length || 0} item{o.items?.length === 1 ? '' : 's'}
-                </p>
+              <div className="flex items-center gap-4 min-w-0">
+                <OrderThumbs items={o.items} />
+                <div className="min-w-0">
+                  <p className="font-semibold text-brand-ink">Order #{o.id.slice(0, 8).toUpperCase()}</p>
+                  <p className="text-sm text-gray-500">
+                    {new Date(o.created_at).toLocaleDateString()} · {o.items?.length || 0} item{o.items?.length === 1 ? '' : 's'}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <span className={`badge ${statusColor(o.status)}`}>{o.status}</span>
