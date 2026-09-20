@@ -71,10 +71,7 @@ export default function AddressesTab() {
             <button type="button" onClick={cancel} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
           </div>
 
-          {/* Keyed on the address being edited so switching straight from one address's
-              Edit button to another's remounts the cascade instead of leaving the previous
-              address's province and city resolved behind the new names. */}
-          <AddressFormFields key={editingId || 'new'} form={form} onChange={setForm} />
+          <AddressFormFields form={form} onChange={setForm} />
 
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <button type="submit" disabled={saving} className="btn-primary text-sm disabled:opacity-60">{saving ? 'Saving...' : 'Save Address'}</button>

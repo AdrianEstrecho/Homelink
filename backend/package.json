@@ -7,8 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "seed": "node db/seed.js",
-    "build:locations": "node scripts/build-ph-locations.js"
+    "seed": "node db/seed.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
