@@ -549,9 +549,17 @@ router.get('/orders/stats', authorizeAdminOr('general_staff'), async (req, res) 
 });
 
 router.put('/orders/:id/status', authorizeAdminOr('general_staff', 'inventory_clerk'), async (req, res) => {
-  const order = await db.prepare('SELECT status FROM orders WHERE id = ?').get(req.params.id);
+  const order = await db.prepare('SELECT status, payment_method, payment_status FROM orders WHERE id = ?').get(req.params.id);
   await db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(req.body.status, req.params.id);
   await logActivity(req, 'order.status_update', 'order', req.params.id, { from: order?.status, to: req.body.status });
+
+  // Cash on delivery collects the money at the door, so "delivered" *is* the payment event —
+  // settle it here rather than leaving staff to remember a second click on every COD order.
+  // Anything already 'refunded' is left alone; only a still-'pending' COD order moves.
+  if (req.body.status === 'delivered' && order?.payment_method === 'cod' && order.payment_status === 'pending') {
+    await db.prepare("UPDATE orders SET payment_status = 'paid' WHERE id = ?").run(req.params.id);
+    await logActivity(req, 'order.payment_status_update', 'order', req.params.id, { from: 'pending', to: 'paid', reason: 'Cash collected on delivery' });
+  }
 
   // Only email on a real transition, so re-saving the same status doesn't re-notify the customer.
   if (order && order.status !== req.body.status) {

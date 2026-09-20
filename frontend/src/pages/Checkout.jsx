@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import AddressPicker from '../components/AddressPicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import OrderDetailsModal from '../components/OrderDetailsModal';
+import { isOfflinePayment } from '../constants/paymentMethods';
 
 function calcDiscount(amount, promo) {
   if (!promo) return 0;
@@ -78,8 +79,9 @@ export default function Checkout() {
     });
   };
 
-  // Step 2: only now does the order actually get placed. Bank transfer creates the order
-  // immediately (payment_status 'pending', verified manually later). Card, GCash, and QR Ph
+  // Step 2: only now does the order actually get placed. Bank transfer and cash on delivery
+  // create the order immediately (payment_status 'pending' — settled later by a staff member
+  // verifying the deposit, or by the order being marked delivered). Card, GCash, and QR Ph
   // all hand off to PayMongo's hosted Checkout Session — PayMongo's own page collects the
   // actual payment details, so the order itself is only created once PayMongo confirms the
   // charge went through (via /checkout/return after the redirect back).
@@ -87,11 +89,11 @@ export default function Checkout() {
     setPlacingOrder(true);
     setError('');
     try {
-      if (pendingOrder.payment_method === 'bank') {
+      if (isOfflinePayment(pendingOrder.payment_method)) {
         const order = await api.post('/orders', {
           items: pendingOrder.items.map(i => ({ productId: i.id, quantity: i.quantity })),
           shippingAddress: pendingOrder.shipping_address,
-          paymentMethod: 'bank',
+          paymentMethod: pendingOrder.payment_method,
           promoCode: pendingOrder.promo_code || undefined,
         });
         clearCart();
@@ -173,7 +175,7 @@ export default function Checkout() {
           </section>
 
           <section className="card p-6">
-            <PaymentMethodPicker ref={paymentRef} stepNumber={2} />
+            <PaymentMethodPicker ref={paymentRef} stepNumber={2} allowCashOnDelivery />
           </section>
 
           <section className="card p-6">

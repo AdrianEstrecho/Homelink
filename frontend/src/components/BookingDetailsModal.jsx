@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom';
 import { X, MapPin, CreditCard, User, StickyNote, Truck, CheckCircle2 } from 'lucide-react';
 import { formatPrice, statusColor } from '../api/client';
 import SafeImage from './SafeImage';
+import { paymentMethodLabel } from '../constants/paymentMethods';
 
 // Portaled to <body> — same reasoning as OrderDetailsModal/ConfirmDialog/PromptDialog: rendered
 // inline, this ended up boxed inside its position in the page instead of sitting above everything.
@@ -123,7 +124,7 @@ export default function BookingDetailsModal({
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
                 <CreditCard className="w-3.5 h-3.5" /> Payment Method
               </h3>
-              <p className="text-sm text-gray-700 capitalize">{booking.payment_method}</p>
+              <p className="text-sm text-gray-700">{paymentMethodLabel(booking.payment_method)}</p>
             </div>
           )}
 

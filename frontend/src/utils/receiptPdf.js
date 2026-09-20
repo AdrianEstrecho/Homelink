@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { paymentMethodLabel } from '../constants/paymentMethods';
 
 const NAVY = '#0f2b5b';
 const ORANGE = '#ff6b35';
@@ -156,7 +157,7 @@ function drawReceipt(doc, order, person, personLabel) {
     doc.setFont('courier', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(INK);
-    doc.text(capitalize(order.payment_method), MARGIN, y);
+    doc.text(paymentMethodLabel(order.payment_method), MARGIN, y);
     y += 12;
   }
 

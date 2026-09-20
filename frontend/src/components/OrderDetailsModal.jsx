@@ -4,6 +4,7 @@ import { X, MapPin, CreditCard, Printer, Download, CheckCircle2, Truck } from 'l
 import { formatPrice, statusColor } from '../api/client';
 import { downloadReceiptPdf } from '../utils/receiptPdf';
 import SafeImage from './SafeImage';
+import { paymentMethodLabel } from '../constants/paymentMethods';
 
 export default function OrderDetailsModal({
   order, onClose, onDismiss, person, personLabel = 'Customer', onCancelOrder, onTrackOrder, justConfirmed = false,
@@ -151,7 +152,7 @@ export default function OrderDetailsModal({
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5 print:font-mono">
                 <CreditCard className="w-3.5 h-3.5 print:hidden" /> Payment Method
               </h3>
-              <p className="text-sm text-gray-700 capitalize print:font-mono">{order.payment_method}</p>
+              <p className="text-sm text-gray-700 print:font-mono">{paymentMethodLabel(order.payment_method)}</p>
             </div>
           )}
 

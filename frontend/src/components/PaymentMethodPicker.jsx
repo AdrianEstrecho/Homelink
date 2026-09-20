@@ -1,13 +1,7 @@
 import { forwardRef, useImperativeHandle, useState } from 'react';
-import { CreditCard, Smartphone, Landmark, QrCode, ShieldCheck, Copy, Check } from 'lucide-react';
+import { ShieldCheck, Copy, Check, Banknote, Wallet } from 'lucide-react';
 import Select from './Select';
-
-const PAYMENT_METHODS = [
-  { value: 'card', label: 'Credit / Debit Card', description: 'Visa, Mastercard & more', icon: CreditCard },
-  { value: 'gcash', label: 'GCash', description: 'Pay with your wallet', icon: Smartphone },
-  { value: 'qrph', label: 'QR Ph', description: 'Scan with any app', icon: QrCode },
-  { value: 'bank', label: 'Bank Transfer', description: 'Direct bank deposit', icon: Landmark },
-];
+import { PAYMENT_METHODS } from '../constants/paymentMethods';
 
 const BANK_DETAILS = { bank: 'BDO Unibank', accountName: 'HomeLink Home Improvement Inc.', accountNumber: '0012 3456 7890' };
 
@@ -22,7 +16,10 @@ const sanitizeGcashNumber = (raw) => {
 const emptyCardForm = { cardNumber: '', expMonth: '', expYear: '', cvc: '' };
 const cardYearOptions = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() + i);
 
-const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber = 2 }, ref) {
+// Cash on delivery is only offered where there's a delivery to pay for, so it's opt-in per
+// page rather than part of the default list (the service booking form shares this picker).
+const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber = 2, allowCashOnDelivery = false }, ref) {
+  const methods = PAYMENT_METHODS.filter(m => allowCashOnDelivery || !m.deliveryOnly);
   const [method, setMethod] = useState('card');
 
   const [cardForm, setCardForm] = useState(emptyCardForm);
@@ -75,8 +72,8 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
         <span className="w-6 h-6 rounded-full bg-brand-navy text-white text-xs font-bold flex items-center justify-center shrink-0">{stepNumber}</span>
         Payment Method
       </h2>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {PAYMENT_METHODS.map(m => (
+      <div className={`grid sm:grid-cols-2 gap-3 ${methods.length > 4 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
+        {methods.map(m => (
           <label key={m.value} className={`flex flex-col items-center text-center gap-1.5 p-4 rounded-xl border cursor-pointer transition ${method === m.value ? 'border-brand-orange bg-brand-orange/5' : 'border-gray-200 hover:border-gray-300'}`}>
             <input type="radio" name="payment" className="sr-only" checked={method === m.value} onChange={() => setMethod(m.value)} />
             <m.icon className={`w-6 h-6 mb-1 ${method === m.value ? 'text-brand-orange' : 'text-gray-400'}`} />
@@ -151,6 +148,22 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
             </div>
           </div>
           <p className="text-xs text-gray-400 mt-2">Please use your reference number as the payment reference.</p>
+        </div>
+      )}
+
+      {method === 'cod' && (
+        <div className="mt-5 pt-5 border-t border-gray-100">
+          <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 space-y-3">
+            <p className="flex items-start gap-2 text-sm text-brand-ink">
+              <Banknote className="w-4 h-4 text-brand-teal shrink-0 mt-0.5" />
+              <span>Pay the courier in cash when your order arrives. Nothing is charged now.</span>
+            </p>
+            <p className="flex items-start gap-2 text-sm text-gray-500">
+              <Wallet className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+              <span>Please prepare the exact amount — our riders may not carry change.</span>
+            </p>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">Someone aged 18 or over needs to be at the address to receive the order and pay.</p>
         </div>
       )}
     </div>

@@ -64,6 +64,18 @@ function capitalize(s) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
+// orders.payment_method holds the wire value ('gcash', 'qrph', 'cod'); capitalize() alone
+// would print these as "Gcash", "Qrph" and "Cod" on a customer's receipt.
+const PAYMENT_METHOD_LABELS = {
+  card: 'Credit / Debit Card',
+  gcash: 'GCash',
+  qrph: 'QR Ph',
+  bank: 'Bank Transfer',
+  cod: 'Cash on Delivery',
+};
+
+const paymentMethodLabel = (method) => PAYMENT_METHOD_LABELS[method] || capitalize(method);
+
 const money = (n) => `₱${Number(n).toLocaleString('en-PH')}`;
 const frontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:5173';
 const MONO = "'Courier New',Courier,monospace";
@@ -183,7 +195,7 @@ export function orderConfirmationEmail(order, items, user) {
         </tr>
       </table>
       ${order.shipping_address ? `<p style="margin:16px 0 0;font-family:${MONO};font-size:12px"><strong>Shipping to:</strong> ${order.shipping_address}</p>` : ''}
-      ${order.payment_method ? `<p style="margin:6px 0 0;font-family:${MONO};font-size:12px"><strong>Payment method:</strong> ${capitalize(order.payment_method)}</p>` : ''}
+      ${order.payment_method ? `<p style="margin:6px 0 0;font-family:${MONO};font-size:12px"><strong>Payment method:</strong> ${paymentMethodLabel(order.payment_method)}</p>` : ''}
       ${ctaButton('View your order', `${frontendUrl()}/orders`)}
       <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this order? Reply to this email or reach us from your HomeLink account.</p>
     `),

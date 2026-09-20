@@ -9,15 +9,20 @@ import { ORDER_STEPS, ORIGIN, getOrderTimeline, getOrderDestination, haversineKm
 
 const router = Router();
 
-// Only bank transfer goes through this endpoint — it's manual/informational, so the order
-// is created immediately with payment_status 'pending' until an admin verifies the deposit
-// (see PUT /admin/orders/:id/payment-status). Card, GCash, and QR Ph are real, gateway-
-// verified charges and must go through /api/payments/checkout-session, which only creates
-// the order once PayMongo confirms the payment actually succeeded.
+// The two methods no gateway ever sees go through this endpoint: bank transfer (the customer
+// deposits and staff verify it) and cash on delivery (the rider collects on the doorstep).
+// Neither has money attached yet at this point, so the order is created immediately with
+// payment_status 'pending' — a bank order is marked paid by hand once the deposit is verified
+// (PUT /admin/orders/:id/payment-status), a COD order the moment it's marked delivered.
+// Card, GCash, and QR Ph are real, gateway-verified charges and must go through
+// /api/payments/checkout-session, which only creates the order once PayMongo confirms the
+// payment actually succeeded.
+const OFFLINE_PAYMENT_METHODS = ['bank', 'cod'];
+
 router.post('/', authenticate, async (req, res) => {
   try {
     const { items, shippingAddress, paymentMethod, promoCode } = req.body;
-    if (paymentMethod !== 'bank') {
+    if (!OFFLINE_PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ error: 'Use /api/payments/checkout-session for card, GCash, or QR Ph checkout' });
     }
 
@@ -31,7 +36,7 @@ router.post('/', authenticate, async (req, res) => {
       total,
       appliedPromo,
       promoCode,
-      paymentMethod: 'bank',
+      paymentMethod,
       paymentStatus: 'pending',
       shippingAddress,
     }, req);

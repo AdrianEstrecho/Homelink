@@ -2,9 +2,9 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import AddressFormFields, { emptyAddressForm } from './AddressFormFields';
 
 const PROFILE_ADDRESS_ID = '__profile__';
-const emptyAddressForm = { label: '', houseNumber: '', street: '', village: '', city: '', province: '', postalCode: '' };
 
 const AddressPicker = forwardRef(function AddressPicker({ stepNumber = 1, title = 'Address' }, ref) {
   const { user } = useAuth();
@@ -91,40 +91,7 @@ const AddressPicker = forwardRef(function AddressPicker({ stepNumber = 1, title 
 
       {showForm && (
         <div className={`p-4 rounded-xl bg-gray-50 border border-gray-100 space-y-4 ${options.length > 0 ? 'mt-4' : ''}`}>
-          <div>
-            <label className="block text-sm font-medium mb-1.5 text-gray-700">Label</label>
-            <input value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} placeholder="Home, Office, ..." className="input-field" />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700">House / Unit No.</label>
-              <input value={form.houseNumber} onChange={e => setForm({ ...form, houseNumber: e.target.value })} placeholder="123" className="input-field" />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium mb-1.5 text-gray-700">Street</label>
-              <input value={form.street} onChange={e => setForm({ ...form, street: e.target.value })} placeholder="Rizal Street" className="input-field" />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700">Village / Barangay</label>
-              <input value={form.village} onChange={e => setForm({ ...form, village: e.target.value })} placeholder="Barangay San Isidro" className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700">City / Municipality</label>
-              <input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} placeholder="Makati City" className="input-field" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700">Province</label>
-              <input value={form.province} onChange={e => setForm({ ...form, province: e.target.value })} placeholder="Metro Manila" className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700">Postal Code</label>
-              <input value={form.postalCode} onChange={e => setForm({ ...form, postalCode: e.target.value })} placeholder="1200" className="input-field" />
-            </div>
-          </div>
+          <AddressFormFields form={form} onChange={setForm} />
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <div className="flex gap-2">
             <button type="button" onClick={handleSave} disabled={saving} className="btn-primary text-sm py-2 disabled:opacity-60">
