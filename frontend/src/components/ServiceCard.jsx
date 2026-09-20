@@ -19,16 +19,20 @@ export default function ServiceCard({ service }) {
   return (
     <div className="card hover:border-brand-navy/20 hover:shadow-md group h-full flex flex-col">
       <div className="relative h-40 overflow-hidden bg-gray-100">
-        <SafeImage
-          src={service.image}
-          alt={service.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/80 to-transparent" />
+        <Link to={`/services/${service.slug}`} className="block h-full">
+          <SafeImage
+            src={service.image}
+            alt={service.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/80 to-transparent" />
+        </Link>
         <span className="absolute bottom-3 left-3 badge bg-brand-teal text-white">{service.category}</span>
       </div>
       <div className="p-5 flex flex-col flex-1">
-        <h3 className="font-display font-bold text-brand-ink text-lg mb-2">{service.name}</h3>
+        <Link to={`/services/${service.slug}`}>
+          <h3 className="font-display font-bold text-brand-ink text-lg mb-2 hover:text-brand-orange transition">{service.name}</h3>
+        </Link>
         <p className="text-gray-500 text-sm mb-4 line-clamp-2 leading-relaxed">{service.description}</p>
         <div className="flex items-center gap-4 text-sm text-gray-500 mb-4 mt-auto pt-3 border-t border-gray-100">
           <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> ~{Number(service.duration_hours).toFixed(1)}h</span>

@@ -180,7 +180,9 @@ export default function ServiceBook() {
         <ChevronRight className="w-3.5 h-3.5 shrink-0" />
         <Link to="/services" className="hover:text-brand-navy transition">Services</Link>
         <ChevronRight className="w-3.5 h-3.5 shrink-0" />
-        <span className="text-brand-ink font-medium truncate max-w-[14rem]">{service.name}</span>
+        <Link to={`/services/${service.slug}`} className="hover:text-brand-navy transition truncate max-w-[14rem]">{service.name}</Link>
+        <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+        <span className="text-brand-ink font-medium">Book</span>
       </nav>
 
       <p className="eyebrow mb-3">Schedule</p>
