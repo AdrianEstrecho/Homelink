@@ -182,6 +182,14 @@ await db.exec(`
     END IF;
   END $$;
 
+  -- Catalog detail shown on the customer product page beyond the name/price basics.
+  -- model and warranty are short free text; highlights is a JSON array of short selling
+  -- points, kept as its own column rather than folded into specifications so that column
+  -- stays a clean map of label -> value for the spec table.
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS model TEXT;
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS warranty TEXT;
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS highlights TEXT;
+
   CREATE TABLE IF NOT EXISTS services (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
 import db from '../db/database.js';
+import { shapeProduct } from '../utils/productShape.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
@@ -19,11 +20,7 @@ router.get('/my', authenticate, async (req, res) => {
     WHERE w.user_id = ? AND (p.archived IS NULL OR p.archived = 0) AND (p.status IS NULL OR p.status = 'active')
     ORDER BY w.created_at DESC
   `).all(req.user.id);
-  res.json(items.map(p => ({
-    ...p,
-    specifications: p.specifications ? JSON.parse(p.specifications) : {},
-    featured: !!p.featured,
-  })));
+  res.json(items.map(shapeProduct));
 });
 
 router.post('/', authenticate, async (req, res) => {

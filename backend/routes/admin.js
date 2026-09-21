@@ -10,6 +10,7 @@ import { createChangeRequest } from '../utils/changeRequests.js';
 import { formatTicketNo } from '../utils/ticketNumber.js';
 import { generateVerificationCode, hashVerificationCode, STAFF_RESET_CODE_TTL_MS } from '../utils/verificationCode.js';
 import { orderStatusEmail, bookingConfirmedEmail, bookingStatusEmail } from '../utils/email.js';
+import { shapeProduct, normalizeSpecifications, normalizeHighlights } from '../utils/productShape.js';
 
 const router = Router();
 router.use(authenticate);
@@ -279,7 +280,7 @@ router.get('/products', authorizeAdminOr('inventory_clerk', 'general_staff'), as
     LEFT JOIN categories pc ON c.parent_id = pc.id
     ORDER BY p.archived ASC, p.name ASC
   `).all();
-  res.json(products.map(p => ({ ...p, archived: !!p.archived, featured: !!p.featured })));
+  res.json(products.map(p => ({ ...shapeProduct(p), archived: !!p.archived })));
 });
 
 router.get('/products/stats', authorizeAdminOr('inventory_clerk', 'general_staff'), async (req, res) => {
@@ -303,10 +304,13 @@ router.get('/products/stats', authorizeAdminOr('inventory_clerk', 'general_staff
 });
 
 async function insertProduct(payload) {
-  const { name, slug, categoryId, description, specifications, price, stock, image, featured, brand, discount, status } = payload;
+  const { name, slug, categoryId, description, specifications, highlights, price, stock, image, featured, brand, model, warranty, discount, status } = payload;
   const id = uuid();
-  await db.prepare('INSERT INTO products (id, category_id, name, slug, description, specifications, price, stock, image, featured, brand, discount, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
-    .run(id, categoryId, name, slug, description, JSON.stringify(specifications || {}), price, stock, image, featured ? 1 : 0, brand || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active');
+  await db.prepare(`INSERT INTO products
+      (id, category_id, name, slug, description, specifications, highlights, price, stock, image, featured, brand, model, warranty, discount, status)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, categoryId, name, slug, description, JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeHighlights(highlights)),
+      price, stock, image, featured ? 1 : 0, brand || null, model || null, warranty || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active');
   return id;
 }
 
@@ -315,11 +319,14 @@ async function insertProduct(payload) {
 async function applyProductUpdate(id, payload) {
   const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(id);
   if (!product) return null;
-  const { name, categoryId, description, specifications, price, image, featured, brand, discount, status, addStock } = payload;
+  const { name, categoryId, description, specifications, highlights, price, image, featured, brand, model, warranty, discount, status, addStock } = payload;
   const addQty = Number(addStock) || 0;
   const stock = addQty > 0 ? product.stock + addQty : product.stock;
-  await db.prepare('UPDATE products SET name=?, category_id=?, description=?, specifications=?, price=?, stock=?, image=?, featured=?, brand=?, discount=?, status=? WHERE id=?')
-    .run(name, categoryId, description, JSON.stringify(specifications || {}), price, stock, image, featured ? 1 : 0, brand || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active', id);
+  await db.prepare(`UPDATE products SET
+      name=?, category_id=?, description=?, specifications=?, highlights=?, price=?, stock=?, image=?, featured=?, brand=?, model=?, warranty=?, discount=?, status=?
+      WHERE id=?`)
+    .run(name, categoryId, description, JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeHighlights(highlights)),
+      price, stock, image, featured ? 1 : 0, brand || null, model || null, warranty || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active', id);
   return { from: product.stock, to: stock, addQty };
 }
 

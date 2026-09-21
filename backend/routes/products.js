@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db/database.js';
+import { shapeProduct } from '../utils/productShape.js';
 
 const router = Router();
 
@@ -40,11 +41,7 @@ router.get('/', async (req, res) => {
   params.push(Number(limit), Number(offset));
 
   const products = await db.prepare(sql).all(...params);
-  res.json(products.map(p => ({
-    ...p,
-    specifications: p.specifications ? JSON.parse(p.specifications) : {},
-    featured: !!p.featured,
-  })));
+  res.json(products.map(shapeProduct));
 });
 
 router.get('/:slug', async (req, res) => {
@@ -53,7 +50,7 @@ router.get('/:slug', async (req, res) => {
     FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ? AND (p.archived IS NULL OR p.archived = 0) AND (p.status IS NULL OR p.status = 'active')
   `).get(req.params.slug);
   if (!product) return res.status(404).json({ error: 'Product not found' });
-  res.json({ ...product, specifications: product.specifications ? JSON.parse(product.specifications) : {}, featured: !!product.featured });
+  res.json(shapeProduct(product));
 });
 
 export default router;

@@ -101,6 +101,8 @@ function describePayload(cr, current) {
   }
   if (cr.entity_type === 'product') {
     const bits = [formatPrice(p.price), p.brand || null, p.status === 'inactive' ? 'Inactive' : 'Active'];
+    const specCount = Object.keys(p.specifications || {}).length;
+    if (specCount) bits.push(`${specCount} spec${specCount === 1 ? '' : 's'}`);
     if (cr.action === 'update' && Number(p.addStock) > 0) bits.push(`+${p.addStock} stock`);
     if (cr.action === 'update' && current && Number(current.price) !== Number(p.price)) bits.push(`was ${formatPrice(current.price)}`);
     return `"${p.name}" — ${bits.filter(Boolean).join(' · ')}`;
