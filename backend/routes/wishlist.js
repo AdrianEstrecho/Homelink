@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
 import db from '../db/database.js';
-import { shapeProduct } from '../utils/productShape.js';
+import { shapeProduct } from '../utils/catalogShape.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = Router();

@@ -204,6 +204,15 @@ await db.exec(`
     status TEXT DEFAULT 'active'
   );
 
+  -- The service-side counterparts of products.specifications/highlights/warranty:
+  -- specifications is a label -> value map ("Coverage area", "Team size"), highlights and
+  -- requirements are JSON arrays of short lines — what the visit includes, and what the
+  -- customer should have ready before the technician arrives.
+  ALTER TABLE services ADD COLUMN IF NOT EXISTS specifications TEXT;
+  ALTER TABLE services ADD COLUMN IF NOT EXISTS highlights TEXT;
+  ALTER TABLE services ADD COLUMN IF NOT EXISTS requirements TEXT;
+  ALTER TABLE services ADD COLUMN IF NOT EXISTS warranty TEXT;
+
   CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id),

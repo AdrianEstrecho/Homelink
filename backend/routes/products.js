@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db/database.js';
-import { shapeProduct } from '../utils/productShape.js';
+import { shapeProduct } from '../utils/catalogShape.js';
 
 const router = Router();
 

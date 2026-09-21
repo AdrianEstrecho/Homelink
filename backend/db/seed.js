@@ -200,24 +200,128 @@ for (const p of products) {
 }
 
 const services = [
-  { name: 'Air Conditioner Installation', slug: 'ac-installation', category: 'Air Conditioning', price: 3500, desc: 'Professional split or window AC installation with leak testing.' },
-  { name: 'Air Conditioner Cleaning', slug: 'ac-cleaning', category: 'Air Conditioning', price: 1500, desc: 'Deep cleaning of filters, coils, and drainage system.' },
-  { name: 'Air Conditioner Repair', slug: 'ac-repair', category: 'Air Conditioning', price: 2000, desc: 'Diagnosis and repair of AC units including refrigerant refill.' },
-  { name: 'Solar Panel Installation', slug: 'solar-installation', category: 'Solar Energy', price: 15000, desc: 'Complete solar panel system installation with grid connection.' },
-  { name: 'Solar Panel Maintenance', slug: 'solar-maintenance', category: 'Solar Energy', price: 5000, desc: 'Panel cleaning, inverter check, and performance optimization.' },
-  { name: 'CCTV Installation', slug: 'cctv-installation', category: 'Security', price: 4500, desc: 'Camera mounting, cabling, and NVR/DVR setup.' },
-  { name: 'CCTV Repair', slug: 'cctv-repair', category: 'Security', price: 1800, desc: 'Camera and recording system troubleshooting and repair.' },
-  { name: 'Electrical Installation', slug: 'electrical-installation', category: 'Electrical', price: 3000, desc: 'Wiring, outlets, switches, and breaker panel installation.' },
-  { name: 'Electrical Troubleshooting', slug: 'electrical-troubleshooting', category: 'Electrical', price: 1500, desc: 'Diagnosis and repair of electrical issues and outages.' },
-  { name: 'Plumbing Installation', slug: 'plumbing-installation', category: 'Plumbing', price: 2500, desc: 'Pipe fitting, fixture installation, and water line setup.' },
-  { name: 'Plumbing Repair', slug: 'plumbing-repair', category: 'Plumbing', price: 1200, desc: 'Leak repair, clog removal, and pipe replacement.' },
-  { name: 'General Home Maintenance', slug: 'general-maintenance', category: 'General', price: 2000, desc: 'Routine home inspection and minor repairs.' },
-  { name: 'House Repair Services', slug: 'house-repair', category: 'General', price: 3500, desc: 'Structural and cosmetic home repair services.' },
-  { name: 'Preventive Maintenance', slug: 'preventive-maintenance', category: 'General', price: 2500, desc: 'Scheduled preventive maintenance for home systems.' },
+  {
+    name: 'Air Conditioner Installation', slug: 'ac-installation', category: 'Air Conditioning', price: 3500, hours: 3,
+    desc: 'Complete installation of a split or window air conditioner by a licensed technician, from mounting the unit to pressure-testing the lines. The crew handles bracket fitting, pipe routing, drainage and the final vacuum and leak test, then runs the unit through a full cooling cycle before signing off.',
+    warranty: '1 year workmanship guarantee — we return free of charge if the install develops a fault.',
+    highlights: ['Licensed technician plus one assistant', 'Vacuum and nitrogen leak test before charging', 'Bracket, drain hose and up to 3m of copper included', 'Cooling cycle demonstrated before sign-off'],
+    requirements: ['Clear access to the mounting wall and the outdoor unit location', 'A dedicated power outlet within reach of the unit', 'The unit and its accessories on site before the appointment'],
+    specs: { 'Service Type': 'Installation', 'Unit Types Covered': 'Split and window, up to 2.5 HP', 'Team Size': '2 technicians', 'Parts Included': 'Bracket, drain hose, up to 3m copper piping', 'Leak Testing': 'Vacuum and nitrogen pressure test', 'Follow-up Check': 'Free re-visit within 30 days' },
+  },
+  {
+    name: 'Air Conditioner Cleaning', slug: 'ac-cleaning', category: 'Air Conditioning', price: 1500, hours: 2,
+    desc: 'A deep clean of the indoor and outdoor units, covering filters, evaporator and condenser coils and the full drainage line. Restores the airflow a clogged unit loses over time, which is usually the reason a room stops cooling as quickly as it used to.',
+    warranty: 'Workmanship guaranteed for 30 days.',
+    highlights: ['Filters, coils and blower wheel washed', 'Drainage line flushed to clear blockages', 'Anti-bacterial treatment on the evaporator', 'Before-and-after airflow check'],
+    requirements: ['A water source and drainage point nearby', 'Furniture moved clear of the indoor unit', 'Access to the outdoor unit'],
+    specs: { 'Service Type': 'Cleaning and maintenance', 'Unit Types Covered': 'Split and window', 'Team Size': '1-2 technicians', 'Parts Included': 'Cleaning agents and anti-bacterial treatment', 'Drainage Flush': 'Included', 'Follow-up Check': 'Free re-visit within 30 days' },
+  },
+  {
+    name: 'Air Conditioner Repair', slug: 'ac-repair', category: 'Air Conditioning', price: 2000, hours: 3,
+    desc: 'Diagnosis and repair for a unit that is not cooling, leaking water, tripping the breaker or running noisily. The visit fee covers the diagnosis and common fixes; any major replacement part is quoted for your approval before work continues.',
+    warranty: '90 days on the repair performed and any part we supply.',
+    highlights: ['Full diagnostic before any work starts', 'Refrigerant top-up included where needed', 'Replacement parts quoted for approval first', 'Capacitor, thermistor and contactor replacement on the spot'],
+    requirements: ['The unit accessible and powered', 'A description of the symptoms and when they started', 'Purchase or warranty papers if the unit is still under manufacturer cover'],
+    specs: { 'Service Type': 'Diagnostic and repair', 'Unit Types Covered': 'Split, window and inverter', 'Team Size': '1-2 technicians', 'Refrigerant Top-up': 'Included (R32 / R410A)', 'Major Parts': 'Quoted separately for approval', 'Follow-up Check': 'Free re-visit within 90 days' },
+  },
+  {
+    name: 'Solar Panel Installation', slug: 'solar-installation', category: 'Solar Energy', price: 15000, hours: 8,
+    desc: 'Full rooftop installation of a grid-tied solar array: rail mounting, panel fitting, DC and AC wiring, inverter commissioning and connection to your main panel. The crew also prepares the documentation your utility needs for a net metering application.',
+    warranty: '2 year workmanship guarantee on mounting and wiring; panel and inverter warranties come from the manufacturer.',
+    highlights: ['Roof survey and layout plan before mounting', 'Weather-sealed rail mounting on metal or tile roofs', 'Inverter commissioning and monitoring app setup', 'Net metering paperwork prepared for you'],
+    requirements: ['Roof clear and safely accessible', 'Main electrical panel accessible with space for a new breaker', 'The panels and inverter delivered on site beforehand', 'Someone home to approve the final layout'],
+    specs: { 'Service Type': 'Installation', 'System Sizes Covered': 'Up to 5 kW', 'Team Size': '3-4 technicians', 'Roof Types': 'Metal and tile', 'Permits Handled': 'Net metering documentation prepared', 'Monitoring Setup': 'Included', 'Typical Duration': '1 working day' },
+  },
+  {
+    name: 'Solar Panel Maintenance', slug: 'solar-maintenance', category: 'Solar Energy', price: 5000, hours: 4,
+    desc: 'Scheduled upkeep that keeps a rooftop array producing what it should: panel cleaning, connection checks, inverter diagnostics and a performance report comparing actual output against the system rating.',
+    warranty: '30 day guarantee on any corrective work carried out during the visit.',
+    highlights: ['Deionized-water panel cleaning, no streaking', 'Torque check on every mounting and DC connection', 'Inverter fault log reviewed and cleared', 'Written performance report against rated output'],
+    requirements: ['Safe roof access', 'A water source on site', 'Inverter monitoring login if you have one'],
+    specs: { 'Service Type': 'Preventive maintenance', 'System Sizes Covered': 'Up to 10 kW', 'Team Size': '2 technicians', 'Cleaning Method': 'Deionized water, soft brush', 'Report': 'Written performance summary', 'Recommended Interval': 'Every 6-12 months' },
+  },
+  {
+    name: 'CCTV Installation', slug: 'cctv-installation', category: 'Security', price: 4500, hours: 5,
+    desc: 'Camera mounting, cable routing and NVR or DVR setup for a home or small business. Includes walking the property with you to agree camera angles, then configuring recording schedules, motion zones and remote viewing on your phone.',
+    warranty: '1 year workmanship guarantee on mounting and cabling.',
+    highlights: ['Camera angles walked through and agreed on site', 'Concealed cable routing wherever the structure allows', 'Recording schedule and motion zones configured', 'Mobile app set up and tested before we leave'],
+    requirements: ['Cameras, recorder and drive on site', 'A power outlet near the recorder location', 'WiFi password for remote viewing setup', 'Someone available to approve camera positions'],
+    specs: { 'Service Type': 'Installation', 'Cameras Covered': 'Up to 8 channels', 'Cabling Included': 'Up to 20m per camera', 'Team Size': '2 technicians', 'App Setup': 'Included, iOS and Android', 'Storage Configuration': 'Recording schedule and retention set' },
+  },
+  {
+    name: 'CCTV Repair', slug: 'cctv-repair', category: 'Security', price: 1800, hours: 3,
+    desc: 'Troubleshooting for cameras that have gone dark, a recorder that stopped writing, or remote viewing that no longer connects. Covers diagnosis, re-termination of faulty cable ends and firmware or configuration repair.',
+    warranty: '90 days on the repair performed.',
+    highlights: ['Channel-by-channel diagnostic', 'Cable ends re-terminated and tested', 'Recorder firmware and configuration repair', 'Remote viewing reconnected and verified'],
+    requirements: ['Recorder and cameras accessible', 'Admin password for the recorder', 'A note of which channels are affected'],
+    specs: { 'Service Type': 'Diagnostic and repair', 'Cameras Covered': 'Up to 16 channels', 'Team Size': '1-2 technicians', 'Cabling Included': 'Re-termination of existing runs', 'Replacement Cameras': 'Quoted separately', 'Follow-up Check': 'Free re-visit within 90 days' },
+  },
+  {
+    name: 'Electrical Installation', slug: 'electrical-installation', category: 'Electrical', price: 3000, hours: 4,
+    desc: 'New wiring work by a licensed electrician: convenience outlets, switches, lighting circuits and breaker panel additions. Every circuit is tested under load and labelled at the panel before the job is closed out.',
+    warranty: '1 year workmanship guarantee on all wiring and terminations.',
+    highlights: ['Licensed electrician on every job', 'Circuits tested under load before sign-off', 'Panel labelled so future work is straightforward', 'Wiring to PEC standards'],
+    requirements: ['Main breaker accessible for safe isolation', 'Fixtures and outlets on site if you supplied them', 'Agreement on outlet and switch positions before drilling'],
+    specs: { 'Service Type': 'Installation', Scope: 'Outlets, switches, lighting and panel circuits', 'Team Size': '2 electricians', 'Materials Included': 'Boxes, terminations and up to 15m of wire', Testing: 'Load and continuity test per circuit', Certification: 'Work to PEC standards' },
+  },
+  {
+    name: 'Electrical Troubleshooting', slug: 'electrical-troubleshooting', category: 'Electrical', price: 1500, hours: 2,
+    desc: 'Tracing the cause of a tripping breaker, a dead outlet, flickering lights or a partial outage. The electrician isolates the fault circuit by circuit and carries out minor repairs on the spot; larger rewiring is quoted before it starts.',
+    warranty: '90 days on the repair performed.',
+    highlights: ['Circuit-by-circuit fault isolation', 'Minor repairs completed during the visit', 'Written findings on what caused the fault', 'Larger rewiring quoted before any work starts'],
+    requirements: ['Access to the breaker panel', 'A list of affected outlets, lights or appliances', 'Someone home who can describe when the problem occurs'],
+    specs: { 'Service Type': 'Diagnostic and repair', Scope: 'Tripping breakers, dead circuits, partial outages', 'Team Size': '1 electrician', 'Materials Included': 'Terminations and minor replacement parts', Testing: 'Insulation and continuity testing', 'Follow-up Check': 'Free re-visit within 90 days' },
+  },
+  {
+    name: 'Plumbing Installation', slug: 'plumbing-installation', category: 'Plumbing', price: 2500, hours: 4,
+    desc: 'Pipe fitting and fixture installation for kitchens, bathrooms and laundry areas — faucets, sinks, water heaters, toilets and supply lines. Every joint is pressure-checked before the walls or cabinets go back.',
+    warranty: '1 year workmanship guarantee on joints and fittings.',
+    highlights: ['Joints pressure-checked before closing up', 'Supply and drain lines routed to code', 'Fixtures levelled and sealed', 'Work area cleaned before we leave'],
+    requirements: ['Main water shut-off accessible', 'Fixtures on site if you supplied them', 'Cabinets or vanities cleared underneath'],
+    specs: { 'Service Type': 'Installation', Scope: 'Faucets, sinks, toilets, heaters and supply lines', 'Team Size': '2 plumbers', 'Materials Included': 'Fittings, sealant and up to 5m of pipe', 'Leak Testing': 'Pressure check on every joint', 'Follow-up Check': 'Free re-visit within 30 days' },
+  },
+  {
+    name: 'Plumbing Repair', slug: 'plumbing-repair', category: 'Plumbing', price: 1200, hours: 2,
+    desc: 'Fast response for leaks, clogged drains, running toilets and low water pressure. The plumber locates the fault, clears or repairs it on the visit where possible, and flags anything that needs a larger job.',
+    warranty: '90 days on the repair performed.',
+    highlights: ['Leak located without unnecessary demolition', 'Drain clearing with powered auger', 'Most repairs completed on the first visit', 'Larger work quoted before it starts'],
+    requirements: ['Main water shut-off accessible', 'The affected area cleared', 'A note of when the problem started'],
+    specs: { 'Service Type': 'Diagnostic and repair', Scope: 'Leaks, clogs, running toilets, low pressure', 'Team Size': '1-2 plumbers', 'Materials Included': 'Seals, fittings and pipe sections', 'Leak Testing': 'Included after repair', 'Follow-up Check': 'Free re-visit within 90 days' },
+  },
+  {
+    name: 'General Home Maintenance', slug: 'general-maintenance', category: 'General', price: 2000, hours: 3,
+    desc: 'A general inspection and minor repair visit covering the small jobs that accumulate around a house — sticking doors, loose fixtures, worn seals, minor leaks and touch-up work. You get a written list of anything found that needs a bigger job.',
+    warranty: '30 days on any repair carried out during the visit.',
+    highlights: ['Room-by-room walkthrough with you', 'Minor repairs completed within the visit', 'Written report of larger issues found', 'One technician, one flat visit fee'],
+    requirements: ['Access to the areas you want checked', 'A list of the problems you have noticed', 'Any replacement parts you have already bought'],
+    specs: { 'Service Type': 'Inspection and minor repair', Scope: 'Doors, fixtures, seals, minor leaks and touch-ups', 'Team Size': '1 technician', 'Materials Included': 'Consumables and minor hardware', Report: 'Written findings list', 'Follow-up Visit': 'Quoted if larger work is needed' },
+  },
+  {
+    name: 'House Repair Services', slug: 'house-repair', category: 'General', price: 3500, hours: 5,
+    desc: 'Structural and cosmetic repair work: ceiling and drywall patching, damaged flooring, rotted trim, masonry cracks and repainting of the repaired area. Larger jobs are scoped on the first visit and quoted before work begins.',
+    warranty: '6 months on structural repair work, 90 days on cosmetic finishes.',
+    highlights: ['Ceiling, wall and floor repair in one visit', 'Repaired areas repainted to match', 'Dust sheeting and full clean-up included', 'Bigger jobs scoped and quoted on site'],
+    requirements: ['The work area cleared of furniture', 'Paint colour match or a sample if you have one', 'Water and power available on site'],
+    specs: { 'Service Type': 'Repair and restoration', Scope: 'Drywall, ceilings, flooring, trim and masonry', 'Team Size': '2-3 technicians', 'Materials Included': 'Patching compound, sealant and basic finishes', Cleanup: 'Dust sheeting and site clean-up', 'Follow-up Visit': 'Included for finish touch-ups' },
+  },
+  {
+    name: 'Preventive Maintenance', slug: 'preventive-maintenance', category: 'General', price: 2500, hours: 4,
+    desc: 'A scheduled check of the systems that are expensive to fix once they fail — aircon, electrical panel, plumbing and water heater. Catching a failing capacitor or a weeping joint early is what keeps it from becoming a replacement.',
+    warranty: '30 days on any corrective work carried out during the visit.',
+    highlights: ['Aircon, electrical, plumbing and heater checked in one visit', 'Written condition report per system', 'Minor corrections made on the spot', 'Recommended service intervals for each system'],
+    requirements: ['Access to the breaker panel, aircon units and water heater', 'Service history if you have it', 'Roughly half a day of access to the property'],
+    specs: { 'Service Type': 'Preventive maintenance', Scope: 'Aircon, electrical, plumbing and water heating', 'Team Size': '2 technicians', 'Materials Included': 'Consumables and minor replacement parts', Report: 'Written condition report per system', 'Recommended Interval': 'Every 6 months' },
+  },
 ];
 
-const insertSvc = db.prepare('INSERT INTO services (id, name, slug, description, category, base_price, duration_hours, image) VALUES (?,?,?,?,?,?,?,?)');
-for (const s of services) await insertSvc.run(uuid(), s.name, s.slug, s.desc, s.category, s.price, 2 + Math.random() * 3, 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=600');
+const insertSvc = db.prepare(`INSERT INTO services
+  (id, name, slug, description, category, base_price, duration_hours, image, specifications, highlights, requirements, warranty)
+  VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+for (const s of services) {
+  await insertSvc.run(uuid(), s.name, s.slug, s.desc, s.category, s.price, s.hours,
+    'https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=600',
+    JSON.stringify(s.specs), JSON.stringify(s.highlights), JSON.stringify(s.requirements), s.warranty);
+}
 
 await db.prepare('INSERT INTO vouchers (id, code, discount_type, discount_value, min_order, max_uses, valid_from, valid_until) VALUES (?,?,?,?,?,?,?,?)')
   .run(uuid(), 'HOMELINK10', 'percent', 10, 5000, 100, '2025-01-01', '2027-12-31');

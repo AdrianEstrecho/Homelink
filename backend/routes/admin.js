@@ -10,7 +10,7 @@ import { createChangeRequest } from '../utils/changeRequests.js';
 import { formatTicketNo } from '../utils/ticketNumber.js';
 import { generateVerificationCode, hashVerificationCode, STAFF_RESET_CODE_TTL_MS } from '../utils/verificationCode.js';
 import { orderStatusEmail, bookingConfirmedEmail, bookingStatusEmail } from '../utils/email.js';
-import { shapeProduct, normalizeSpecifications, normalizeHighlights } from '../utils/productShape.js';
+import { shapeProduct, shapeService, normalizeSpecifications, normalizeStringList } from '../utils/catalogShape.js';
 
 const router = Router();
 router.use(authenticate);
@@ -309,7 +309,7 @@ async function insertProduct(payload) {
   await db.prepare(`INSERT INTO products
       (id, category_id, name, slug, description, specifications, highlights, price, stock, image, featured, brand, model, warranty, discount, status)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(id, categoryId, name, slug, description, JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeHighlights(highlights)),
+    .run(id, categoryId, name, slug, description, JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeStringList(highlights)),
       price, stock, image, featured ? 1 : 0, brand || null, model || null, warranty || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active');
   return id;
 }
@@ -325,7 +325,7 @@ async function applyProductUpdate(id, payload) {
   await db.prepare(`UPDATE products SET
       name=?, category_id=?, description=?, specifications=?, highlights=?, price=?, stock=?, image=?, featured=?, brand=?, model=?, warranty=?, discount=?, status=?
       WHERE id=?`)
-    .run(name, categoryId, description, JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeHighlights(highlights)),
+    .run(name, categoryId, description, JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeStringList(highlights)),
       price, stock, image, featured ? 1 : 0, brand || null, model || null, warranty || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active', id);
   return { from: product.stock, to: stock, addQty };
 }
@@ -461,23 +461,31 @@ router.delete('/categories/:id', authorize('admin'), async (req, res) => {
 // approve.
 router.get('/services', authorizeAdminOr('inventory_clerk', 'general_staff'), async (req, res) => {
   const services = await db.prepare('SELECT * FROM services ORDER BY archived ASC, name ASC').all();
-  res.json(services.map(s => ({ ...s, archived: !!s.archived })));
+  res.json(services.map(s => ({ ...shapeService(s), archived: !!s.archived })));
 });
 
 async function insertService(payload) {
-  const { name, slug, description, category, basePrice, durationHours, image, discount, status } = payload;
+  const { name, slug, description, category, basePrice, durationHours, image, discount, status, specifications, highlights, requirements, warranty } = payload;
   const id = uuid();
-  await db.prepare('INSERT INTO services (id, name, slug, description, category, base_price, duration_hours, image, discount, status) VALUES (?,?,?,?,?,?,?,?,?,?)')
-    .run(id, name, slug, description, category, basePrice, durationHours || 2, image, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active');
+  await db.prepare(`INSERT INTO services
+      (id, name, slug, description, category, base_price, duration_hours, image, discount, status, specifications, highlights, requirements, warranty)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, name, slug, description, category, basePrice, durationHours || 2, image, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active',
+      JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeStringList(highlights)),
+      JSON.stringify(normalizeStringList(requirements)), warranty || null);
   return id;
 }
 
 async function applyServiceUpdate(id, payload) {
   const service = await db.prepare('SELECT * FROM services WHERE id = ?').get(id);
   if (!service) return null;
-  const { name, description, category, basePrice, durationHours, image, discount, status } = payload;
-  await db.prepare('UPDATE services SET name=?, description=?, category=?, base_price=?, duration_hours=?, image=?, discount=?, status=? WHERE id=?')
-    .run(name, description, category, basePrice, durationHours, image, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active', id);
+  const { name, description, category, basePrice, durationHours, image, discount, status, specifications, highlights, requirements, warranty } = payload;
+  await db.prepare(`UPDATE services SET
+      name=?, description=?, category=?, base_price=?, duration_hours=?, image=?, discount=?, status=?, specifications=?, highlights=?, requirements=?, warranty=?
+      WHERE id=?`)
+    .run(name, description, category, basePrice, durationHours, image, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active',
+      JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeStringList(highlights)),
+      JSON.stringify(normalizeStringList(requirements)), warranty || null, id);
   return service;
 }
 

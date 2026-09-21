@@ -7,7 +7,7 @@ import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '../context/ToastContext';
 import { useLoginPrompt } from '../hooks/useLoginPrompt';
-import { specEntries, toHighlights } from '../utils/productSpecs';
+import { specEntries, toHighlights } from '../utils/catalogSpecs';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
 import ProductCard from '../components/ProductCard';
@@ -372,24 +372,35 @@ export default function ProductDetail() {
           )}
 
           {tab === 'Delivery & Warranty' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl">
-              <InfoCard icon={Truck} title="Delivery">
-                Delivered across Metro Manila and nearby provinces. Orders confirmed before 2PM are dispatched the next business day, and you can follow the driver on the live tracking map from your Orders page.
-              </InfoCard>
-              <InfoCard icon={ShieldCheck} title="Warranty">
-                {product.warranty || DEFAULT_WARRANTY}
-              </InfoCard>
-              <InfoCard icon={Wrench} title="Installation">
-                Professional installation is available for this product. Book a technician and your appointment is scheduled around your order&apos;s delivery date.
-              </InfoCard>
-              <InfoCard icon={RotateCcw} title="Returns and refunds">
-                Refund requests can be filed within 7 days of the expected delivery date if an item is not received or not as described. Refunds are processed within 5-10 business days.
-              </InfoCard>
-              <InfoCard icon={Headset} title="Support">
-                Something not right? Message our support team from your account and we&apos;ll respond within 24 hours on business days.
-              </InfoCard>
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-5 flex flex-col justify-center">
-                <p className="text-sm text-gray-500 mb-3">Planning an installation with this order?</p>
+            <div className="max-w-5xl">
+              {/* Icon-left rows rather than stacked cards: the five blurbs differ a lot in
+                  length, and a tile grid stretches every card in a row to the tallest one,
+                  leaving obvious dead space under the short ones. */}
+              <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-7">
+                <InfoRow icon={Truck} title="Delivery">
+                  Delivered across Metro Manila and nearby provinces. Orders confirmed before 2PM are dispatched the next business day, and you can follow the driver on the live tracking map from your Orders page.
+                </InfoRow>
+                <InfoRow icon={ShieldCheck} title="Warranty">
+                  {product.warranty || DEFAULT_WARRANTY}
+                </InfoRow>
+                <InfoRow icon={Wrench} title="Installation">
+                  Professional installation is available for this product. Book a technician and your appointment is scheduled around your order&apos;s delivery date.
+                </InfoRow>
+                <InfoRow icon={RotateCcw} title="Returns and refunds">
+                  Refund requests can be filed within 7 days of the expected delivery date if an item is not received or not as described. Refunds are processed within 5-10 business days.
+                </InfoRow>
+                <InfoRow icon={Headset} title="Support">
+                  Something not right? Message our support team from your account and we&apos;ll respond within 24 hours on business days.
+                </InfoRow>
+              </dl>
+
+              <div className="mt-8 rounded-xl border border-gray-100 bg-gray-50 px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="w-9 h-9 rounded-lg bg-white text-brand-teal flex items-center justify-center shrink-0 border border-gray-100">
+                    <Wrench className="w-4 h-4" />
+                  </span>
+                  <p className="text-sm text-gray-600">Planning an installation with this order?</p>
+                </div>
                 <Link to="/services" className="text-sm font-semibold text-brand-teal hover:underline">Browse installation services →</Link>
               </div>
             </div>
@@ -486,14 +497,16 @@ function DetailRow({ label, value }) {
   );
 }
 
-function InfoCard({ icon: Icon, title, children }) {
+function InfoRow({ icon: Icon, title, children }) {
   return (
-    <div className="rounded-xl border border-gray-100 p-5">
-      <div className="w-9 h-9 rounded-lg bg-brand-teal/10 text-brand-teal flex items-center justify-center mb-3">
+    <div className="flex gap-3.5">
+      <span className="w-9 h-9 rounded-lg bg-brand-teal/10 text-brand-teal flex items-center justify-center shrink-0">
         <Icon className="w-4 h-4" />
+      </span>
+      <div className="min-w-0">
+        <dt className="font-semibold text-sm text-brand-ink mb-1">{title}</dt>
+        <dd className="text-sm text-gray-500 leading-relaxed">{children}</dd>
       </div>
-      <h3 className="font-semibold text-sm text-brand-ink mb-1.5">{title}</h3>
-      <p className="text-sm text-gray-500 leading-relaxed">{children}</p>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db/database.js';
+import { shapeService } from '../utils/catalogShape.js';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.get('/', async (req, res) => {
     : ' ORDER BY category, name';
   const max = Number.parseInt(limit, 10);
   if (max > 0) { sql += ' LIMIT ?'; params.push(Math.min(max, 100)); }
-  res.json(await db.prepare(sql).all(...params));
+  res.json((await db.prepare(sql).all(...params)).map(shapeService));
 });
 
 // Plain list of category names by default (the admin Services page relies on
@@ -38,7 +39,7 @@ router.get('/categories', async (req, res) => {
 router.get('/:slug', async (req, res) => {
   const service = await db.prepare("SELECT * FROM services WHERE slug = ? AND (archived IS NULL OR archived = 0) AND (status IS NULL OR status = 'active')").get(req.params.slug);
   if (!service) return res.status(404).json({ error: 'Service not found' });
-  res.json(service);
+  res.json(shapeService(service));
 });
 
 export default router;

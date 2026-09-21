@@ -8,7 +8,7 @@ import PromptDialog from '../../components/PromptDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import Pagination from '../../components/Pagination';
 import { useAuth } from '../../context/AuthContext';
-import { specEntries, toHighlights, presetsForCategory } from '../../utils/productSpecs';
+import { specEntries, toHighlights, presetsForCategory } from '../../utils/catalogSpecs';
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_IMAGE_MB = 5;

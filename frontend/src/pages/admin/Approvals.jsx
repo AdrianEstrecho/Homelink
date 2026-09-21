@@ -109,6 +109,8 @@ function describePayload(cr, current) {
   }
   if (cr.entity_type === 'service') {
     const bits = [p.category, formatPrice(p.basePrice)];
+    const detailCount = Object.keys(p.specifications || {}).length;
+    if (detailCount) bits.push(`${detailCount} detail${detailCount === 1 ? '' : 's'}`);
     if (cr.action === 'update' && current && Number(current.base_price) !== Number(p.basePrice)) bits.push(`was ${formatPrice(current.base_price)}`);
     return `"${p.name}" — ${bits.filter(Boolean).join(' · ')}`;
   }
