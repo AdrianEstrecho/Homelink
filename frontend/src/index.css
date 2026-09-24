@@ -90,6 +90,23 @@
     }
   }
 
+  /* A thin bar across the top of the autocomplete dropdown while a slower lookup is in flight
+     and earlier results are still on screen. Replacing those results with skeletons would be a
+     step backwards — the old list is still the best answer available until the new one lands —
+     so the refresh is signalled above them instead of blanking them out. */
+  .loading-bar::after {
+    content: '';
+    @apply absolute left-0 top-0 h-0.5 w-2/5 rounded-full bg-brand-orange/70;
+    animation: indeterminate 1.1s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .loading-bar::after {
+      /* Still visible, just not travelling — the bar is the only cue that a refresh is running. */
+      @apply w-full opacity-60;
+      animation: none;
+    }
+  }
+
   .reveal {
     opacity: 0;
     transform: translateY(28px);
@@ -234,6 +251,17 @@
 @keyframes shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+/* Travels the full width of the dropdown: the bar is 40% wide, so it starts fully off the left
+   edge and ends fully off the right. */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
   }
 }
 

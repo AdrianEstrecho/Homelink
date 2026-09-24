@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 
 // How long to sit on a keystroke before asking. Long enough that typing a whole word costs one
 // request, short enough that a pause feels answered immediately. Fields that cross the network
@@ -7,11 +6,11 @@ import { Loader2 } from 'lucide-react';
 // longer to ask costs nothing perceptible and spares a run of requests nobody waits for.
 const DEBOUNCE_MS = 180;
 
-// A spinner is only honest once there is a real wait. Province, city and barangay come out of an
-// in-memory index in a few milliseconds, so showing one on every keystroke is pure flicker: the
-// indicator appears and vanishes faster than it can be read, and makes an instant field look
-// busy. It waits this long before admitting to being slow, which in practice means it only ever
-// appears for the street lookup, which crosses the network to a geocoder.
+// A loading state is only honest once there is a real wait. Province, city and barangay come out
+// of an in-memory index in a few milliseconds, so showing one on every keystroke is pure flicker:
+// it would appear and vanish faster than it could be read, and make an instant field look busy.
+// Nothing is shown until a lookup has been outstanding this long, which in practice means only
+// the street field ever reaches it — it is the one that crosses the network to a geocoder.
 const SPINNER_DELAY_MS = 400;
 
 // A text input that offers suggestions without ever insisting on one.
@@ -68,10 +67,15 @@ export default function AutocompleteInput({
     // the reply of any request the next keystroke has already made obsolete — without it a slow
     // response can land after a faster later one and show results for a stale query.
     let cancelled = false;
-    let spinnerTimer;
+
+    // Timed from the keystroke rather than from when the request finally goes out. Started after
+    // the debounce instead, the street field would wait out its own 400ms pause and then a
+    // further 400ms before admitting to anything — the better part of a second of a field that
+    // looks like it ignored you. Measured from the keystroke, the promise is the same everywhere:
+    // nothing is said for 400ms, and after that the wait is always acknowledged.
+    const spinnerTimer = setTimeout(() => { if (!cancelled) setSpinner(true); }, SPINNER_DELAY_MS);
 
     const timer = setTimeout(async () => {
-      spinnerTimer = setTimeout(() => { if (!cancelled) setSpinner(true); }, SPINNER_DELAY_MS);
       try {
         const results = await fetchSuggestions(query);
         if (!cancelled) { setItems(results || []); setActive(-1); setSearched(true); setFailed(false); }
@@ -140,8 +144,12 @@ export default function AutocompleteInput({
   };
 
   const longEnough = (value || '').trim().length >= minChars;
-  const showEmpty = open && longEnough && searched && !items.length;
-  const showList = open && (items.length > 0 || showEmpty);
+  const showEmpty = open && longEnough && searched && !items.length && !spinner;
+  // The dropdown has to open on `spinner` too. Without it the first search on a field shows
+  // nothing at all — no results yet, and `searched` is still false, so there is no empty message
+  // either — which on the street field means several seconds of a form that looks inert.
+  const showList = open && (items.length > 0 || showEmpty || spinner);
+  const showSkeletons = spinner && !items.length;
 
   return (
     <div ref={wrapRef} className="relative">
@@ -155,9 +163,11 @@ export default function AutocompleteInput({
         placeholder={placeholder}
         inputMode={inputMode}
         autoComplete={autoComplete}
-        // Extra right padding only while the spinner is there, so it never sits on top of a long
-        // city name; without the shift the text would slide under it mid-type.
-        className={`${className}${spinner ? ' pr-10' : ''}`}
+        // No loading state is painted into the input itself. Padding that appears with a spinner
+        // shoves the text sideways mid-keystroke, and padding reserved permanently narrows every
+        // field for the sake of an indicator that is almost never showing. The dropdown below is
+        // already anchored under the field and has room to say it properly.
+        className={className}
         role="combobox"
         aria-expanded={showList}
         aria-controls={listId}
@@ -165,44 +175,61 @@ export default function AutocompleteInput({
         aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
       />
 
-      {spinner && (
-        <Loader2
-          className="w-4 h-4 text-gray-400 animate-spin absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-          role="status"
-          aria-label="Searching"
-        />
-      )}
-
       {showList && (
-        <ul
-          id={listId}
-          role="listbox"
-          className="absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg py-1"
+        // Two boxes rather than one. The bar belongs to the outer, unscrolled frame, so it stays
+        // pinned at the top while the list moves under it — and, more to the point, the scroll
+        // container is never switched between auto and hidden. Toggling that on a list long
+        // enough to scroll takes the scrollbar away and puts it back on every refresh, and every
+        // row shifts sideways underneath the cursor.
+        <div
+          className={`absolute z-30 left-0 right-0 mt-1 rounded-lg border border-gray-200 bg-white shadow-lg overflow-hidden ${
+            spinner && items.length ? 'loading-bar' : ''
+          }`}
         >
-          {items.map((item, i) => (
-            <li
-              key={getKey(item, i)}
-              id={`${listId}-${i}`}
-              role="option"
-              aria-selected={i === active}
-              // onMouseDown, not onClick: the input's blur would close the list first.
-              onMouseDown={(e) => { e.preventDefault(); choose(item); }}
-              onMouseEnter={() => setActive(i)}
-              className={`px-3 py-2 cursor-pointer text-sm ${i === active ? 'bg-brand-orange/10' : ''}`}
-            >
-              <span className="block text-brand-ink truncate">{getLabel(item)}</span>
-              {getDescription(item) && (
-                <span className="block text-xs text-gray-500 truncate">{getDescription(item)}</span>
-              )}
-            </li>
-          ))}
+          <ul
+            id={listId}
+            role="listbox"
+            aria-busy={spinner}
+            className="max-h-60 overflow-auto py-1"
+          >
+            {items.map((item, i) => (
+              <li
+                key={getKey(item, i)}
+                id={`${listId}-${i}`}
+                role="option"
+                aria-selected={i === active}
+                // onMouseDown, not onClick: the input's blur would close the list first.
+                onMouseDown={(e) => { e.preventDefault(); choose(item); }}
+                onMouseEnter={() => setActive(i)}
+                className={`px-3 py-2 cursor-pointer text-sm ${i === active ? 'bg-brand-orange/10' : ''}`}
+              >
+                <span className="block text-brand-ink truncate">{getLabel(item)}</span>
+                {getDescription(item) && (
+                  <span className="block text-xs text-gray-500 truncate">{getDescription(item)}</span>
+                )}
+              </li>
+            ))}
 
-          {/* Says so out loud rather than letting the list vanish, which reads as a broken field
-              when it is really just an address the register does not carry. */}
-          {showEmpty && (
-            <li className="px-3 py-2 text-sm text-gray-500">{failed ? errorMessage : emptyMessage}</li>
-          )}
-        </ul>
+            {/* Two bars per row, mirroring the name and the parent names a real suggestion
+                carries, and of staggered width so the block reads as pending content rather than
+                a loading graphic. Three is a guess at the result count, so the dropdown still
+                resizes when the real ones arrive — the shape is what stays put, not the height. */}
+            {showSkeletons && [0, 1, 2].map(i => (
+              <li key={`skeleton-${i}`} className="px-3 py-2" aria-hidden="true">
+                <span className="skeleton block h-3.5 rounded" style={{ width: `${70 - i * 12}%` }} />
+                <span className="skeleton block h-2.5 rounded mt-1.5" style={{ width: `${50 - i * 8}%` }} />
+              </li>
+            ))}
+            {/* The skeletons are decorative, so the wait is announced in words instead. */}
+            {showSkeletons && <li className="sr-only" role="status">Searching</li>}
+
+            {/* Says so out loud rather than letting the list vanish, which reads as a broken field
+                when it is really just an address the register does not carry. */}
+            {showEmpty && (
+              <li className="px-3 py-2 text-sm text-gray-500">{failed ? errorMessage : emptyMessage}</li>
+            )}
+          </ul>
+        </div>
       )}
     </div>
   );
