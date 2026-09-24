@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, ShoppingBag, XCircle, PackageCheck } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../api/client';
+import { paymentMethodLabel } from '../constants/paymentMethods';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import OrderDetailsModal from '../components/OrderDetailsModal';
@@ -10,10 +11,23 @@ import CancelReasonModal from '../components/CancelReasonModal';
 import TrackingModal from '../components/TrackingModal';
 import ReturnRequestModal from '../components/ReturnRequestModal';
 
-// Up to three product shots per row, overlapped so a big order can't push the order number
-// and date off the line; whatever's left over is counted in a +N chip. /orders/my already
-// joins the product image onto every line item, so this costs no extra request.
-const THUMBS_SHOWN = 3;
+// A card lists its first few products in full — brand, name, what each one cost — and folds
+// the rest into a "+N more" line, so a ten-item order can't push the totals off the screen.
+// /orders/my joins name/brand/image onto every line item, so this costs no extra request.
+const ITEMS_SHOWN = 3;
+
+// A hairline of status colour along the top edge, so a column of cards can be read by colour
+// before a single word of it is. Written out as whole class strings because Tailwind scans
+// source text for class names and never sees one that was assembled at runtime.
+const STATUS_ACCENTS = {
+  pending: 'from-yellow-400 to-yellow-400/20',
+  processing: 'from-blue-500 to-blue-500/20',
+  shipped: 'from-purple-500 to-purple-500/20',
+  delivered: 'from-green-500 to-green-500/20',
+  cancelled: 'from-red-400 to-red-400/20',
+  returned: 'from-orange-400 to-orange-400/20',
+};
+const DEFAULT_ACCENT = 'from-gray-300 to-gray-300/20';
 
 // The stages a customer thinks in, mapped onto the statuses an order actually carries
 // (ORDER_STEPS in backend/utils/tracking.js: pending -> processing -> shipped -> delivered).
@@ -31,28 +45,69 @@ const TABS = [
 
 const DEFAULT_TAB = TABS[0].key;
 
-function OrderThumbs({ items }) {
-  if (!items?.length) return null;
-  const shown = items.slice(0, THUMBS_SHOWN);
-  const extra = items.length - shown.length;
+function OrderCard({ order, onOpen }) {
+  const items = order.items || [];
+  const shown = items.slice(0, ITEMS_SHOWN);
+  const hidden = items.length - shown.length;
+  // Units, not line count — "3 items" should mean three things in the box, not three rows.
+  const units = items.reduce((n, i) => n + (i.quantity || 0), 0);
 
   return (
-    <div className="flex items-center shrink-0">
-      {shown.map((i, index) => (
-        <SafeImage
-          key={i.id || `${i.product_id}-${index}`}
-          src={i.image}
-          alt={i.name}
-          className={`w-12 h-12 rounded-lg object-cover bg-gray-100 ring-2 ring-white ${index ? '-ml-4' : ''}`}
-          iconClassName="w-5 h-5"
-        />
-      ))}
-      {extra > 0 && (
-        <span className="w-12 h-12 -ml-4 rounded-lg ring-2 ring-white bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-500">
-          +{extra}
-        </span>
-      )}
-    </div>
+    <button
+      onClick={onOpen}
+      aria-label={`Order ${order.id.slice(0, 8).toUpperCase()}, ${order.status}, ${formatPrice(order.total)}`}
+      className="card group w-full text-left hover:border-brand-navy/20 hover:shadow-lg hover:-translate-y-0.5 transition"
+    >
+      <div className={`h-1 bg-gradient-to-r ${STATUS_ACCENTS[order.status] || DEFAULT_ACCENT}`} />
+
+      <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-4 pb-3">
+        <div className="min-w-0">
+          <p className="font-display font-bold tracking-tight text-brand-ink">
+            Order #{order.id.slice(0, 8).toUpperCase()}
+          </p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {new Date(order.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+            {' · '}{units} item{units === 1 ? '' : 's'}
+          </p>
+        </div>
+        <span className={`badge ${statusColor(order.status)}`}>{order.status}</span>
+      </div>
+
+      <div className="border-t border-gray-100 divide-y divide-gray-100">
+        {shown.map((i, index) => (
+          <div key={i.id || `${i.product_id}-${index}`} className="flex items-center gap-3.5 px-5 py-3">
+            <SafeImage
+              src={i.image}
+              alt={i.name}
+              className="w-14 h-14 shrink-0 rounded-xl object-cover bg-gray-100 ring-1 ring-gray-200/80 group-hover:ring-brand-navy/20 transition"
+              iconClassName="w-5 h-5"
+            />
+            <div className="flex-1 min-w-0">
+              {i.brand && (
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-teal truncate">{i.brand}</p>
+              )}
+              <p className="font-semibold text-sm text-brand-ink truncate">{i.name}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Qty {i.quantity} × {formatPrice(i.price)}</p>
+            </div>
+            <p className="shrink-0 text-sm font-bold text-brand-navy">{formatPrice(i.price * i.quantity)}</p>
+          </div>
+        ))}
+        {hidden > 0 && (
+          <p className="px-5 py-2.5 text-xs font-semibold text-gray-500">
+            +{hidden} more item{hidden === 1 ? '' : 's'} in this order
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-t border-gray-100 bg-gradient-to-r from-brand-light/70 to-transparent">
+        <p className="text-xs text-gray-500 truncate">{paymentMethodLabel(order.payment_method)}</p>
+        <div className="flex items-baseline gap-2.5 shrink-0">
+          <span className="text-xs font-medium text-gray-500">Total</span>
+          <span className="font-display text-lg font-extrabold tracking-tight text-brand-navy">{formatPrice(order.total)}</span>
+          <ChevronRight className="w-4 h-4 self-center text-gray-400 group-hover:text-brand-orange group-hover:translate-x-0.5 transition" />
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -135,28 +190,9 @@ export default function Orders() {
           <p className="text-gray-500">{activeTab.empty}</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {visible.map(o => (
-            <button
-              key={o.id}
-              onClick={() => setSelectedOrder(o)}
-              className="card p-5 w-full text-left flex flex-wrap items-center justify-between gap-3 hover:border-brand-navy/20 hover:shadow-md transition"
-            >
-              <div className="flex items-center gap-4 min-w-0">
-                <OrderThumbs items={o.items} />
-                <div className="min-w-0">
-                  <p className="font-semibold text-brand-ink">Order #{o.id.slice(0, 8).toUpperCase()}</p>
-                  <p className="text-sm text-gray-500">
-                    {new Date(o.created_at).toLocaleDateString()} · {o.items?.length || 0} item{o.items?.length === 1 ? '' : 's'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className={`badge ${statusColor(o.status)}`}>{o.status}</span>
-                <span className="font-bold text-brand-navy">{formatPrice(o.total)}</span>
-                <ChevronRight className="w-4 h-4 text-gray-400" />
-              </div>
-            </button>
+            <OrderCard key={o.id} order={o} onOpen={() => setSelectedOrder(o)} />
           ))}
         </div>
       )}

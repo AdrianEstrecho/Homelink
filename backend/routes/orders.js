@@ -57,7 +57,7 @@ router.get('/my', authenticate, async (req, res) => {
   const result = [];
   for (const o of orders) {
     const items = await db.prepare(`
-      SELECT oi.*, p.name, p.image, p.slug FROM order_items oi
+      SELECT oi.*, p.name, p.image, p.slug, p.brand FROM order_items oi
       JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?
     `).all(o.id);
     result.push({
@@ -74,7 +74,7 @@ router.get('/:id', authenticate, async (req, res) => {
   const order = await db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
   const items = await db.prepare(`
-    SELECT oi.*, p.name, p.image, p.slug FROM order_items oi
+    SELECT oi.*, p.name, p.image, p.slug, p.brand FROM order_items oi
     JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?
   `).all(order.id);
   const returnable = await getReturnableTotals(db, req.user.id);
