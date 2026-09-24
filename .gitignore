@@ -8,3 +8,7 @@ dist/
 *.log
 .vercel
 .env*
+
+# Raw PSGC/GeoNames downloads that scripts/build-psgc.js pulls to regenerate
+# backend/data/psgc.json. ~11 MB of input for a ~1 MB output that is committed.
+.psgc-src/
