@@ -130,12 +130,18 @@ export function canReturnOrder(order, returnableUnits) {
     && returnableUnits > 0;
 }
 
-// How many return requests each of a customer's orders carries, for the Returns tab in My Orders
-// — which otherwise has only payment_status='refunded' to go on, and so stays empty until an
-// entire order has come back.
+// How many *live* return requests each of a customer's orders carries, for the Returns tab in My
+// Orders — which otherwise has only payment_status='refunded' to go on, and so stays empty until
+// an entire order has come back.
+//
+// Only the committed statuses count, the same set that holds a claim on stock above. A rejected
+// or withdrawn return leaves the customer holding the goods, so the order goes back to being an
+// ordinary delivered one — it belongs under To Review again, not filed forever under Returns.
 export async function getReturnCounts(executor = db, userId) {
   const rows = await executor.prepare(`
-    SELECT order_id, COUNT(*) AS n FROM return_requests WHERE user_id = ? GROUP BY order_id
+    SELECT order_id, COUNT(*) AS n FROM return_requests
+    WHERE user_id = ? AND status IN (${COMMITTED_SQL})
+    GROUP BY order_id
   `).all(userId);
   return new Map(rows.map((r) => [r.order_id, Number(r.n)]));
 }

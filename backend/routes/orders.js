@@ -65,6 +65,11 @@ router.get('/my', authenticate, async (req, res) => {
       items,
       canReturn: canReturnOrder(o, returnable.get(o.id) ?? 0),
       returnCount: returnCounts.get(o.id) ?? 0,
+      // The order row itself stays 'delivered' — the return window and the refund both hang off
+      // that — but to the customer who sent it back the order is returned, so it shows that way
+      // and files under Returns instead of To Review. A fully refunded order counts even without
+      // a request row, since the money going back is the return.
+      returned: (returnCounts.get(o.id) ?? 0) > 0 || o.payment_status === 'refunded',
     });
   }
   res.json(result);

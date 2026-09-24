@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, ShoppingBag, XCircle, PackageCheck } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ShoppingBag, XCircle, PackageCheck, Star } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../api/client';
 import { paymentMethodLabel } from '../constants/paymentMethods';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,7 @@ import SafeImage from '../components/SafeImage';
 import CancelReasonModal from '../components/CancelReasonModal';
 import TrackingModal from '../components/TrackingModal';
 import ReturnRequestModal from '../components/ReturnRequestModal';
+import OrderReviewModal from '../components/OrderReviewModal';
 
 // A card lists its first few products in full — brand, name, what each one cost — and folds
 // the rest into a "+N more" line, so a ten-item order can't push the totals off the screen.
@@ -29,36 +30,48 @@ const STATUS_ACCENTS = {
 };
 const DEFAULT_ACCENT = 'from-gray-300 to-gray-300/20';
 
+// A live return outranks the order's own status everywhere a customer sees it. The row itself
+// stays 'delivered' — the return window and the refund are both measured from that — but once
+// something has gone back, "delivered" is no longer the true thing to say about the order.
+// `returned` comes from /orders/my and already discounts rejected and withdrawn requests.
+const displayStatus = (o) => (o.returned ? 'returned' : o.status);
+
 // The stages a customer thinks in, mapped onto the statuses an order actually carries
 // (ORDER_STEPS in backend/utils/tracking.js: pending -> processing -> shipped -> delivered).
-// 'All' keeps everything, cancelled orders included, so nothing is stranded off-screen.
-// Returns catches anything the customer has asked to send back (returnCount, from /orders/my)
-// as well as an order whose money has gone back in full (payment_status 'refunded'), since a
-// fully refunded order is a return whether or not a request row exists for it.
+// Every tab but All is exclusive: an order belongs to exactly one of them, so a returned order
+// is filed under Returns only and does not also sit in To Review waiting to be rated.
 const TABS = [
   { key: 'all', label: 'All', match: () => true, empty: 'No orders yet.' },
   { key: 'to-ship', label: 'To Ship', match: (o) => o.status === 'pending' || o.status === 'processing', empty: 'Nothing waiting to be shipped.' },
   { key: 'to-receive', label: 'To Receive', match: (o) => o.status === 'shipped', empty: 'Nothing on its way right now.' },
-  { key: 'to-review', label: 'To Review', match: (o) => o.status === 'delivered', empty: 'No delivered orders to review yet.' },
-  { key: 'returns', label: 'Returns', match: (o) => o.returnCount > 0 || o.payment_status === 'refunded', empty: 'No returns or refunds.' },
+  { key: 'to-review', label: 'To Review', match: (o) => o.status === 'delivered' && !o.returned, empty: 'No delivered orders to review yet.' },
+  { key: 'returns', label: 'Returns', match: (o) => o.returned, empty: 'No returns or refunds.' },
+  { key: 'cancelled', label: 'Cancelled', match: (o) => o.status === 'cancelled', empty: 'No cancelled orders.' },
 ];
 
 const DEFAULT_TAB = TABS[0].key;
 
-function OrderCard({ order, onOpen }) {
+function OrderCard({ order, onOpen, canReview, onReview }) {
   const items = order.items || [];
   const shown = items.slice(0, ITEMS_SHOWN);
   const hidden = items.length - shown.length;
   // Units, not line count — "3 items" should mean three things in the box, not three rows.
   const units = items.reduce((n, i) => n + (i.quantity || 0), 0);
+  const status = displayStatus(order);
 
+  // A div rather than a button, because the card carries its own action button and a button
+  // inside a button is neither valid nor reachable by keyboard. Same role/tabIndex/key handling
+  // the booking cards use, so the whole card still opens on Enter and Space.
   return (
-    <button
+    <div
       onClick={onOpen}
-      aria-label={`Order ${order.id.slice(0, 8).toUpperCase()}, ${order.status}, ${formatPrice(order.total)}`}
-      className="card group w-full text-left hover:border-brand-navy/20 hover:shadow-lg hover:-translate-y-0.5 transition"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+      aria-label={`Order ${order.id.slice(0, 8).toUpperCase()}, ${status}, ${formatPrice(order.total)}`}
+      className="card group w-full text-left cursor-pointer hover:border-brand-navy/20 hover:shadow-lg hover:-translate-y-0.5 transition"
     >
-      <div className={`h-1 bg-gradient-to-r ${STATUS_ACCENTS[order.status] || DEFAULT_ACCENT}`} />
+      <div className={`h-1 bg-gradient-to-r ${STATUS_ACCENTS[status] || DEFAULT_ACCENT}`} />
 
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-4 pb-3">
         <div className="min-w-0">
@@ -70,7 +83,7 @@ function OrderCard({ order, onOpen }) {
             {' · '}{units} item{units === 1 ? '' : 's'}
           </p>
         </div>
-        <span className={`badge ${statusColor(order.status)}`}>{order.status}</span>
+        <span className={`badge ${statusColor(status)}`}>{status}</span>
       </div>
 
       <div className="border-t border-gray-100 divide-y divide-gray-100">
@@ -107,7 +120,20 @@ function OrderCard({ order, onOpen }) {
           <ChevronRight className="w-4 h-4 self-center text-gray-400 group-hover:text-brand-orange group-hover:translate-x-0.5 transition" />
         </div>
       </div>
-    </button>
+
+      {canReview && (
+        <div className="flex justify-end px-5 py-3 border-t border-gray-100">
+          <button
+            type="button"
+            // The card underneath opens the order details; rating is its own errand.
+            onClick={(e) => { e.stopPropagation(); onReview(); }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-orange/30 bg-brand-orange/5 px-3.5 py-2 text-sm font-semibold text-brand-orange hover:bg-brand-orange/10 active:scale-[0.98] transition"
+          >
+            <Star className="w-4 h-4" /> Add Review
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -117,6 +143,8 @@ export default function Orders() {
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [returnTarget, setReturnTarget] = useState(null);
+  const [reviewTarget, setReviewTarget] = useState(null);
+  const [reviewedIds, setReviewedIds] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -136,7 +164,17 @@ export default function Orders() {
   };
 
   const loadOrders = () => api.get('/orders/my').then(setOrders).catch(() => {});
-  useEffect(() => { loadOrders(); }, []);
+  // One review per customer per product, so the set of products already rated is what decides
+  // whether a delivered order still has anything to review. Fetched once for the whole list
+  // rather than per card, and refreshed after posting.
+  const loadReviewed = () => api.get('/reviews/my')
+    .then(rows => setReviewedIds(new Set(rows.map(r => r.product_id))))
+    .catch(() => setReviewedIds(new Set()));
+  useEffect(() => { loadOrders(); loadReviewed(); }, []);
+
+  const reviewableCount = (order) => (order.items || [])
+    .filter(i => !reviewedIds?.has(i.product_id))
+    .length;
 
   const counts = useMemo(
     () => Object.fromEntries(TABS.map(t => [t.key, orders.filter(t.match).length])),
@@ -192,7 +230,13 @@ export default function Orders() {
       ) : (
         <div className="space-y-4">
           {visible.map(o => (
-            <OrderCard key={o.id} order={o} onOpen={() => setSelectedOrder(o)} />
+            <OrderCard
+              key={o.id}
+              order={o}
+              onOpen={() => setSelectedOrder(o)}
+              canReview={o.status === 'delivered' && !o.returned && reviewableCount(o) > 0}
+              onReview={() => setReviewTarget(o)}
+            />
           ))}
         </div>
       )}
@@ -230,6 +274,22 @@ export default function Orders() {
             iconClass: 'bg-green-100 text-green-600',
             title: 'Return request submitted',
             description: `${created.ref} · we’ll email you once it’s reviewed`,
+          });
+        }}
+      />
+
+      <OrderReviewModal
+        order={reviewTarget}
+        reviewed={reviewedIds}
+        onClose={() => setReviewTarget(null)}
+        onSubmitted={(n) => {
+          setReviewTarget(null);
+          loadReviewed();
+          showToast({
+            icon: Star,
+            iconClass: 'bg-brand-orange/10 text-brand-orange',
+            title: n === 1 ? 'Review posted' : `${n} reviews posted`,
+            description: 'Thanks for helping other shoppers.',
           });
         }}
       />
