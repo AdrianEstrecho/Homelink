@@ -135,7 +135,10 @@ export default function AdminProducts() {
 
   useEffect(() => { setPage(1); }, [tab, search, categoryFilter]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Archiving or deleting from this very table can shrink the list past the page being read, so
+  // the page in use is clamped to one that still exists rather than left pointing at nothing.
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const activeCount = products.filter(p => !p.archived).length;
   const archivedCount = products.filter(p => p.archived).length;
@@ -703,7 +706,7 @@ export default function AdminProducts() {
           </tbody>
         </table>
         </div>
-        <Pagination page={page} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        <Pagination page={currentPage} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </AdminLayout>
   );

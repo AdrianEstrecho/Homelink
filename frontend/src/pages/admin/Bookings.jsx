@@ -5,10 +5,15 @@ import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import NeedsReviewFlag from '../../components/NeedsReviewFlag';
+import Pagination from '../../components/Pagination';
 
 const STATUSES = ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled'];
 const statusLabel = (s) => s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 const STATUS_OPTIONS = STATUSES.map(s => ({ value: s, label: statusLabel(s) }));
+
+// Ten rows a page, the same bargain the product and service lists make, so every admin
+// table fills about one screen and pages the same way.
+const PAGE_SIZE = 10;
 
 export default function AdminBookings() {
   const [bookings, setBookings] = useState([]);
@@ -18,6 +23,7 @@ export default function AdminBookings() {
   const [editingId, setEditingId] = useState(null);
   const [confirmStatus, setConfirmStatus] = useState(null);
   const [confirmAssign, setConfirmAssign] = useState(null);
+  const [page, setPage] = useState(1);
 
   const load = () => {
     api.get('/admin/bookings').then(setBookings).catch(() => {});
@@ -57,6 +63,14 @@ export default function AdminBookings() {
         return `${b.first_name} ${b.last_name}`.toLowerCase().includes(q) || b.service_name.toLowerCase().includes(q);
       });
   }, [bookings, tab, search]);
+
+  useEffect(() => { setPage(1); }, [tab, search]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Clamped rather than reset by an effect: a status change made from this very table can move
+  // a booking out of the tab being viewed and shrink the list past the page being read, and the
+  // nearest page that still exists beats being thrown back to the first one.
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <AdminLayout title="Bookings" subtitle="View and manage service bookings.">
@@ -108,7 +122,8 @@ export default function AdminBookings() {
         </div>
       </div>
 
-      <div className="card overflow-x-auto">
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
@@ -124,7 +139,7 @@ export default function AdminBookings() {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={7} className="p-8 text-center text-gray-400">No bookings found.</td></tr>
-            ) : filtered.map(b => (
+            ) : paginated.map(b => (
               <tr key={b.id} className="border-t border-gray-100">
                 <td className="p-3">
                   <p className="font-medium text-gray-800">{b.first_name} {b.last_name}</p>
@@ -167,6 +182,8 @@ export default function AdminBookings() {
             ))}
           </tbody>
         </table>
+        </div>
+        <Pagination page={currentPage} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </AdminLayout>
   );

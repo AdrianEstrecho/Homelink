@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Pagination from '../../components/Pagination';
 import { useAuth } from '../../context/AuthContext';
 import { DEPARTMENT_LABELS } from '../../data/auditActions';
 
@@ -18,6 +19,9 @@ const DEPARTMENT_COLORS = {
 const DEPARTMENT_OPTIONS = Object.entries(DEPARTMENT_LABELS).map(([value, label]) => ({ value, label }));
 
 const UNSET_BADGE = 'bg-white text-gray-400 border border-dashed border-gray-300';
+
+// Ten rows a page, matching the product and service lists so every admin table pages alike.
+const PAGE_SIZE = 10;
 
 const REQUEST_ACTION_LABELS = { create: 'Onboard', update: 'Change Department', archive: 'Archive', restore: 'Restore', delete: 'Delete' };
 
@@ -66,6 +70,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
   const [actionError, setActionError] = useState('');
   const [formError, setFormError] = useState('');
   const [myRequests, setMyRequests] = useState([]);
+  const [page, setPage] = useState(1);
 
   const load = () => api.get('/admin/users').then(setUsers).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -83,6 +88,14 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
   }, [users, roleTabs, archivedView]);
 
   const filtered = users.filter(u => u.role === tab && !!u.archived === archivedView);
+
+  useEffect(() => { setPage(1); }, [tab, view]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Clamped rather than reset by an effect: archiving or restoring from this very table moves a
+  // row into the other view and can shrink the list past the page being read, and the nearest
+  // page that still exists beats being thrown back to the first one.
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const activeCountForTab = users.filter(u => u.role === tab && !u.archived).length;
   const archivedCountForTab = users.filter(u => u.role === tab && !!u.archived).length;
 
@@ -237,7 +250,8 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
         </div>
       )}
 
-      <div className="card overflow-x-auto">
+      <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
@@ -253,7 +267,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={7} className="p-8 text-center text-gray-400">No {archivedView ? 'archived ' : ''}{tab}s found.</td></tr>
-            ) : filtered.map(u => {
+            ) : paginated.map(u => {
               const isRevealed = revealed.has(u.id);
               return (
                 <tr key={u.id} className="border-t border-gray-100">
@@ -329,6 +343,8 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
             })}
           </tbody>
         </table>
+        </div>
+        <Pagination page={currentPage} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </AdminLayout>
   );
