@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Check, X, Lock, ShieldCheck, Truck, Sparkles, ShoppingBag } from 'lucide-react';
+import { Check, X, Lock, ShieldCheck, Truck, Sparkles, ShoppingBag, ArrowLeft } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -165,6 +165,9 @@ export default function Checkout() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 md:py-14">
+      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-navy transition mb-4">
+        <ArrowLeft className="w-4 h-4" /> Back
+      </button>
       <p className="eyebrow mb-3">Final Step</p>
       <h1 className="section-title mb-8">Checkout</h1>
 
