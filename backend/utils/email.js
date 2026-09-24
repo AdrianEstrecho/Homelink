@@ -350,6 +350,18 @@ const RETURN_STATUS_META = {
   received: { bg: '#dcfce7', fg: '#166534', label: 'Received', message: "we've received your returned items. Your refund is now being processed." },
 };
 
+// A cancellation refund runs through the same statuses but means something else at each one —
+// nothing is being shipped back, so the copy is about the money and never about the goods.
+const CANCELLATION_STATUS_META = {
+  pending: { bg: '#fef3c7', fg: '#92400e', label: 'Refund Pending Review', message: "your order has been cancelled. Because it was already paid for, your refund now goes to our team for approval." },
+  approved: { bg: '#dbeafe', fg: '#1e40af', label: 'Refund Approved', message: 'your refund has been approved and is being sent back to you.' },
+  rejected: { bg: '#fee2e2', fg: '#991b1b', label: 'Refund Not Approved', message: "we've reviewed the refund for your cancelled order and weren't able to approve it this time." },
+  refunded: { bg: '#dcfce7', fg: '#166534', label: 'Refunded', message: 'your refund has been sent back to your original payment method.' },
+};
+
+const statusMetaFor = (kind, status) =>
+  (kind === 'cancellation' ? CANCELLATION_STATUS_META : RETURN_STATUS_META)[status];
+
 // Returned items, laid out like the ITEMS block on an order confirmation so a return reads as a
 // mirror of the receipt it came from.
 function returnItemRows(items) {
@@ -362,6 +374,7 @@ function returnItemRows(items) {
 }
 
 const returnRefOf = (id) => `RET-${String(id).slice(0, 8).toUpperCase()}`;
+const caseRefOf = (id, kind) => `${kind === 'cancellation' ? 'CAN' : 'RET'}-${String(id).slice(0, 8).toUpperCase()}`;
 const orderRefOf = (id) => `#${String(id).slice(0, 8).toUpperCase()}`;
 
 // Sent the moment a customer files a return, so they have the reference number in writing —
@@ -386,30 +399,88 @@ export function returnSubmittedEmail(ret, order, items, user) {
   });
 }
 
-// decision is 'approved' or 'rejected'. The approval copy carries the ship-back instructions;
-// the rejection copy carries the clerk's note, which is the only explanation the customer gets.
+// Sent the moment a paid order is cancelled: the cancellation is already done, but the money
+// hasn't moved yet, so this exists to tell the customer their refund is in the queue rather than
+// leaving a plain "cancelled" email to imply they've been paid back already.
+export function cancellationRefundEmail(ret, order, user) {
+  const meta = CANCELLATION_STATUS_META.pending;
+  return sendEmail({
+    to: user.email,
+    subject: `Order ${orderRefOf(order.id)} cancelled — refund ${caseRefOf(ret.id, 'cancellation')} pending`,
+    html: emailShell(`
+      <h2 style="margin:0 0 6px;text-align:center">Order Cancelled</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, ${meta.message}</p>
+      <div style="text-align:center;margin:14px 0">${statusBadge(meta)}</div>
+      ${receiptMeta(caseRefOf(ret.id, 'cancellation'), `Order ${orderRefOf(order.id)}`)}
+      <table style="width:100%;border-collapse:collapse;margin-top:8px">
+        ${detailRow('Paid with', paymentMethodLabel(order.payment_method))}
+        ${detailRow('Refund due', money(ret.refund_amount), true)}
+      </table>
+      <p style="margin:16px 0 0;font-family:${MONO};font-size:12px"><strong>Your reason:</strong> ${ret.reason}</p>
+      <p style="margin:14px 0 0;color:#6b7280;font-size:12px">Once approved, the money goes back to the ${paymentMethodLabel(order.payment_method)} account you paid from. Refunds take 5-10 business days to arrive.</p>
+      ${ctaButton('Track this refund', `${frontendUrl()}/account?tab=returns`)}
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this refund? Reply to this email or reach us from your HomeLink account.</p>
+    `),
+  });
+}
+
+// Sent once a clerk has actually moved the money for a cancelled order — the point the refund
+// stops being a promise. Returns have returnReceivedEmail for the equivalent moment.
+export function cancellationRefundPaidEmail(ret, order, user) {
+  const meta = CANCELLATION_STATUS_META.refunded;
+  return sendEmail({
+    to: user.email,
+    subject: `Refund ${caseRefOf(ret.id, 'cancellation')} has been sent`,
+    html: emailShell(`
+      <h2 style="margin:0 0 6px;text-align:center">Refund Sent</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, ${meta.message}</p>
+      <div style="text-align:center;margin:14px 0">${statusBadge(meta)}</div>
+      ${receiptMeta(caseRefOf(ret.id, 'cancellation'), `Order ${orderRefOf(order.id)}`)}
+      <table style="width:100%;border-collapse:collapse;margin-top:8px">
+        ${detailRow('Sent to', paymentMethodLabel(order.payment_method))}
+        ${detailRow('Refunded', money(ret.refund_amount), true)}
+      </table>
+      <p style="margin:14px 0 0;color:#6b7280;font-size:12px">Depending on your bank or wallet provider, it can take 5-10 business days to show up on your statement.</p>
+      ${ctaButton('View this refund', `${frontendUrl()}/account?tab=returns`)}
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this refund? Reply to this email or reach us from your HomeLink account.</p>
+    `),
+  });
+}
+
+// decision is 'approved' or 'rejected'. For a return, the approval copy carries the ship-back
+// instructions; for a cancellation there is nothing to ship, so approval means only that the
+// payout is authorised. Either way the rejection copy carries the clerk's note, which is the
+// only explanation the customer gets.
 export function returnDecisionEmail(ret, order, user, decision, note) {
-  const meta = RETURN_STATUS_META[decision] || RETURN_STATUS_META.pending;
-  const body = decision === 'approved'
-    ? `<p style="margin:16px 0 0;color:#4b5563;font-size:13px">Please send the items back to us at the address below. Once they arrive we'll confirm your refund of <strong>${money(ret.refund_amount)}</strong>, which takes 5-10 business days to reach your original payment method.</p>
-       <p style="margin:10px 0 0;font-family:${MONO};font-size:12px">${process.env.COMPANY_ADDRESS || 'HomeLink'}</p>`
-    : '';
+  const cancellation = ret.kind === 'cancellation';
+  const noun = cancellation ? 'Refund' : 'Return';
+  const ref = caseRefOf(ret.id, ret.kind);
+  const meta = statusMetaFor(ret.kind, decision) || statusMetaFor(ret.kind, 'pending');
+
+  let body = '';
+  if (decision === 'approved' && cancellation) {
+    body = `<p style="margin:16px 0 0;color:#4b5563;font-size:13px">There's nothing for you to send back — your refund of <strong>${money(ret.refund_amount)}</strong> is on its way to the ${paymentMethodLabel(order.payment_method)} account you paid from, and takes 5-10 business days to arrive.</p>`;
+  } else if (decision === 'approved') {
+    body = `<p style="margin:16px 0 0;color:#4b5563;font-size:13px">Please send the items back to us at the address below. Once they arrive we'll confirm your refund of <strong>${money(ret.refund_amount)}</strong>, which takes 5-10 business days to reach your original payment method.</p>
+       <p style="margin:10px 0 0;font-family:${MONO};font-size:12px">${process.env.COMPANY_ADDRESS || 'HomeLink'}</p>`;
+  }
+
   const noteBlock = note
     ? `<p style="margin:16px 0 0;font-family:${MONO};font-size:12px;background:#fafbfc;border:1px dashed #c7cad1;padding:12px"><strong>Note from our team:</strong><br>${note}</p>`
     : '';
 
   return sendEmail({
     to: user.email,
-    subject: `Return ${returnRefOf(ret.id)} has been ${decision === 'approved' ? 'approved' : 'reviewed'}`,
+    subject: `${noun} ${ref} has been ${decision === 'approved' ? 'approved' : 'reviewed'}`,
     html: emailShell(`
-      <h2 style="margin:0 0 6px;text-align:center">Return ${decision === 'approved' ? 'Approved' : 'Reviewed'}</h2>
+      <h2 style="margin:0 0 6px;text-align:center">${noun} ${decision === 'approved' ? 'Approved' : 'Reviewed'}</h2>
       <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, ${meta.message}</p>
       <div style="text-align:center;margin:14px 0">${statusBadge(meta)}</div>
-      ${receiptMeta(returnRefOf(ret.id), `Order ${orderRefOf(order.id)}`)}
+      ${receiptMeta(ref, `Order ${orderRefOf(order.id)}`)}
       ${noteBlock}
       ${body}
-      ${ctaButton('View this return', `${frontendUrl()}/account?tab=returns`)}
-      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this return? Reply to this email or reach us from your HomeLink account.</p>
+      ${ctaButton(`View this ${noun.toLowerCase()}`, `${frontendUrl()}/account?tab=returns`)}
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this ${noun.toLowerCase()}? Reply to this email or reach us from your HomeLink account.</p>
     `),
   });
 }

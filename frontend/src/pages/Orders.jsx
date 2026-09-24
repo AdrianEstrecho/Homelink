@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, ShoppingBag, XCircle, PackageCheck, Star } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ShoppingBag, XCircle, PackageCheck, Star, Banknote } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../api/client';
 import { paymentMethodLabel } from '../constants/paymentMethods';
 import { useAuth } from '../context/AuthContext';
@@ -46,7 +46,7 @@ const TABS = [
   { key: 'to-ship', label: 'To Ship', match: (o) => o.status === 'pending' || o.status === 'processing', empty: 'Nothing waiting to be shipped.' },
   { key: 'to-receive', label: 'To Receive', match: (o) => o.status === 'shipped', empty: 'Nothing on its way right now.' },
   { key: 'to-review', label: 'To Review', match: (o) => o.status === 'delivered' && !o.returned, empty: 'No delivered orders to review yet.' },
-  { key: 'returns', label: 'Returns', match: (o) => o.returned, empty: 'No returns or refunds.' },
+  { key: 'returns', label: 'Returns', match: (o) => o.returned, empty: 'No returns yet. Cancellation refunds are tracked under Returns & Cancellations in your account.' },
   { key: 'cancelled', label: 'Cancelled', match: (o) => o.status === 'cancelled', empty: 'No cancelled orders.' },
 ];
 
@@ -199,13 +199,23 @@ export default function Orders() {
   );
   const visible = useMemo(() => orders.filter(activeTab.match), [orders, activeTab]);
 
+  // An order that was already paid for online comes back with a refund reference: the cancel
+  // itself went through either way, but the money now has to be approved and sent, so saying only
+  // "cancelled" would leave the customer wondering where their payment went.
   const submitCancel = async (reason) => {
     const order = cancelTarget;
-    await api.put(`/orders/${order.id}/cancel`, { reason });
+    const { refund } = await api.put(`/orders/${order.id}/cancel`, { reason });
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'cancelled', cancel_reason: reason } : o));
     setSelectedOrder(prev => prev && prev.id === order.id ? { ...prev, status: 'cancelled', cancel_reason: reason } : prev);
     setCancelTarget(null);
-    showToast({ icon: XCircle, iconClass: 'bg-red-100 text-red-600', title: 'Order cancelled', description: `Order #${order.id.slice(0, 8).toUpperCase()}` });
+    showToast(refund
+      ? {
+        icon: Banknote,
+        iconClass: 'bg-amber-100 text-amber-700',
+        title: 'Cancelled — refund on the way',
+        description: `${refund.ref} · we’ll email you once it’s approved`,
+      }
+      : { icon: XCircle, iconClass: 'bg-red-100 text-red-600', title: 'Order cancelled', description: `Order #${order.id.slice(0, 8).toUpperCase()}` });
   };
 
   return (
@@ -312,10 +322,16 @@ export default function Orders() {
         }}
       />
 
+      {/* What happens to the money is the one thing a customer wants to know before confirming,
+          and it differs entirely by how they paid — so the copy says which of the two it is
+          rather than making them find out afterwards. payment_status, not payment_method: an
+          unverified bank transfer has taken nothing yet and cancels like a COD order. */}
       <CancelReasonModal
         open={!!cancelTarget}
         title="Cancel this order?"
-        message="This can't be undone once submitted. Let us know why you're cancelling."
+        message={cancelTarget?.payment_status === 'paid'
+          ? `This can't be undone. You've already paid ${formatPrice(cancelTarget.total)} by ${paymentMethodLabel(cancelTarget.payment_method)} — we'll review the refund and send it back to you. Let us know why you're cancelling.`
+          : "This can't be undone once submitted. Nothing has been charged, so there's no refund to process. Let us know why you're cancelling."}
         onSubmit={submitCancel}
         onCancel={() => setCancelTarget(null)}
       />

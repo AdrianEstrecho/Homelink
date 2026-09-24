@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { PackageCheck, Image as ImageIcon } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
+import { paymentMethodLabel } from '../../constants/paymentMethods';
 import SafeImage from '../SafeImage';
 import {
-  returnRef, orderRef, RETURN_STATUS_STYLE, RETURN_STATUS_LABEL, RETURN_STATUS_HINT,
-  REFUND_STATUS_LABEL,
+  caseRef, orderRef, isCancellation, KIND_LABEL, KIND_STYLE,
+  RETURN_STATUS_STYLE, statusLabel, statusHint, refundStatusLabel,
 } from '../../utils/returns';
 
 // Photos are deliberately left out of GET /returns/my — they're base64 and would make the list
@@ -46,9 +47,10 @@ export default function ReturnsTab() {
 
   return (
     <div>
-      <h2 className="font-display font-bold text-lg text-brand-ink mb-1">Returns &amp; Refunds</h2>
+      <h2 className="font-display font-bold text-lg text-brand-ink mb-1">Returns &amp; Cancellations</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Requests you&apos;ve made to send items back. Start one from a delivered order in My Orders.
+        Items you&apos;ve asked to send back, and refunds for orders you cancelled after paying.
+        Start a return from a delivered order in My Orders.
       </p>
 
       {returns === null ? (
@@ -56,56 +58,76 @@ export default function ReturnsTab() {
       ) : returns.length === 0 ? (
         <div className="text-center py-10">
           <PackageCheck className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">You haven&apos;t requested any returns yet.</p>
+          <p className="text-gray-500 text-sm">You haven&apos;t requested any returns or refunds yet.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {returns.map((r) => (
-            <div key={r.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-xs font-semibold text-brand-navy bg-brand-navy/10 rounded px-1.5 py-0.5">{returnRef(r.id)}</span>
-                  <p className="text-sm font-semibold text-gray-800">Order {orderRef(r.order_id)}</p>
-                </div>
-                <span className={`badge ${RETURN_STATUS_STYLE[r.status]}`}>{RETURN_STATUS_LABEL[r.status]}</span>
-              </div>
-
-              <p className="text-xs text-gray-500 mt-2">{RETURN_STATUS_HINT[r.status]}</p>
-
-              <div className="mt-3 space-y-1.5">
-                {r.items.map((i, idx) => (
-                  <div key={idx} className="flex items-center gap-2.5">
-                    <SafeImage src={i.image} alt={i.name} className="w-9 h-9 rounded-lg object-cover bg-gray-100 shrink-0" iconClassName="w-4 h-4" />
-                    <p className="text-sm text-gray-700 min-w-0 truncate">
-                      {i.name} <span className="text-gray-400">&times;{i.quantity}</span>
-                    </p>
+          {returns.map((r) => {
+            const cancellation = isCancellation(r);
+            return (
+              <div key={r.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-semibold text-brand-navy bg-brand-navy/10 rounded px-1.5 py-0.5">{caseRef(r.id, r.kind)}</span>
+                    <span className={`badge ${KIND_STYLE[r.kind] || KIND_STYLE.return}`}>{KIND_LABEL[r.kind] || KIND_LABEL.return}</span>
+                    <p className="text-sm font-semibold text-gray-800">Order {orderRef(r.order_id)}</p>
                   </div>
-                ))}
+                  <span className={`badge ${RETURN_STATUS_STYLE[r.status]}`}>{statusLabel(r.kind, r.status)}</span>
+                </div>
+
+                <p className="text-xs text-gray-500 mt-2">{statusHint(r.kind, r.status)}</p>
+
+                {/* On a cancellation the items are what the refund covers, not something to pack
+                    up, so they're labelled rather than left to look like a return slip. */}
+                {cancellation && (
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mt-3">Refund covers</p>
+                )}
+
+                <div className="mt-3 space-y-1.5">
+                  {r.items.map((i, idx) => (
+                    <div key={idx} className="flex items-center gap-2.5">
+                      <SafeImage src={i.image} alt={i.name} className="w-9 h-9 rounded-lg object-cover bg-gray-100 shrink-0" iconClassName="w-4 h-4" />
+                      <p className="text-sm text-gray-700 min-w-0 truncate">
+                        {i.name} <span className="text-gray-400">&times;{i.quantity}</span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-sm text-gray-600 mt-3">
+                  <span className="text-gray-400">{cancellation ? 'Why you cancelled:' : 'Your reason:'}</span> {r.reason}
+                </p>
+
+                {cancellation && r.payment_method && (
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Going back to your {paymentMethodLabel(r.payment_method)}
+                    {r.refund_status === 'refunded' ? '.' : ' once approved.'}
+                  </p>
+                )}
+
+                {r.review_note && (
+                  <p className="text-sm text-gray-700 mt-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                    <span className="text-xs font-semibold text-brand-navy block mb-0.5">Note from HomeLink</span>
+                    {r.review_note}
+                  </p>
+                )}
+
+                {r.photo_count > 0 && <PhotoStrip returnId={r.id} />}
+
+                <div className="flex items-center justify-between gap-2 flex-wrap mt-3 pt-3 border-t border-gray-200">
+                  <p className="text-xs text-gray-400">
+                    {cancellation ? 'Cancelled' : 'Requested'} {new Date(r.created_at).toLocaleDateString()}
+                    {r.received_at ? ` \u00b7 Received ${new Date(r.received_at).toLocaleDateString()}` : ''}
+                    {r.refunded_at ? ` \u00b7 Refunded ${new Date(r.refunded_at).toLocaleDateString()}` : ''}
+                  </p>
+                  <p className="text-sm">
+                    <span className="text-gray-400 text-xs mr-1.5">{refundStatusLabel(r.kind, r.refund_status)}</span>
+                    <span className="font-semibold text-brand-navy">{formatPrice(r.refund_amount)}</span>
+                  </p>
+                </div>
               </div>
-
-              <p className="text-sm text-gray-600 mt-3"><span className="text-gray-400">Your reason:</span> {r.reason}</p>
-
-              {r.review_note && (
-                <p className="text-sm text-gray-700 mt-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-                  <span className="text-xs font-semibold text-brand-navy block mb-0.5">Note from HomeLink</span>
-                  {r.review_note}
-                </p>
-              )}
-
-              {r.photo_count > 0 && <PhotoStrip returnId={r.id} />}
-
-              <div className="flex items-center justify-between gap-2 flex-wrap mt-3 pt-3 border-t border-gray-200">
-                <p className="text-xs text-gray-400">
-                  Requested {new Date(r.created_at).toLocaleDateString()}
-                  {r.received_at ? ` · Received ${new Date(r.received_at).toLocaleDateString()}` : ''}
-                </p>
-                <p className="text-sm">
-                  <span className="text-gray-400 text-xs mr-1.5">{REFUND_STATUS_LABEL[r.refund_status]}</span>
-                  <span className="font-semibold text-brand-navy">{formatPrice(r.refund_amount)}</span>
-                </p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

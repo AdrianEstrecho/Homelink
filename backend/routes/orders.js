@@ -1,12 +1,17 @@
 import { Router } from 'express';
+import { v4 as uuid } from 'uuid';
 import db, { withTransaction } from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
 import { releaseOrderStock } from '../utils/orderStock.js';
-import { getReturnableTotals, getReturnCounts, canReturnOrder, returnWindowClosesAt } from '../utils/returns.js';
+import {
+  getReturnableTotals, getReturnCounts, canReturnOrder, returnWindowClosesAt,
+  cancellationNeedsRefund, caseRef,
+} from '../utils/returns.js';
 import { logActivity } from '../utils/audit.js';
-import { orderStatusEmail } from '../utils/email.js';
+import { notifyUser } from '../utils/notify.js';
+import { orderStatusEmail, cancellationRefundEmail } from '../utils/email.js';
 import { ORDER_STEPS, ORIGIN, getOrderTimeline, getOrderDestination, haversineKm, estimateShippingDays } from '../utils/tracking.js';
 
 const router = Router();
@@ -120,6 +125,12 @@ router.get('/:id/tracking', authenticate, async (req, res) => {
 // Only cancellable while still 'pending' — once it moves into processing/shipped/delivered
 // it's already been confirmed and fulfillment may be underway, so self-service cancellation
 // stops there (same rule as bookings, whose 'confirmed' status this maps onto).
+//
+// The cancellation itself always goes through — it is never held pending a review. What depends
+// on how the order was paid is whether money has to travel back afterwards: a card, GCash, QR Ph
+// or verified bank-transfer order was charged before this point, so it raises a cancellation
+// refund for a clerk to approve and pay out, while a COD or unverified-bank order took no money
+// and simply ends here. See cancellationNeedsRefund() for why payment_status is the whole test.
 router.put('/:id/cancel', authenticate, async (req, res) => {
   const order = await db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -131,25 +142,88 @@ router.put('/:id/cancel', authenticate, async (req, res) => {
 
   // The units were taken off the shelf at checkout, so cancelling puts them straight back —
   // in the same transaction as the status change, so stock can never be credited for an order
-  // that failed to cancel (or a cancelled order whose stock silently stayed reserved).
-  const { units } = await withTransaction(async (tx) => {
-    await tx.prepare('UPDATE orders SET status = ?, cancel_reason = ? WHERE id = ?').run('cancelled', reason, order.id);
-    return releaseOrderStock(order.id, tx);
+  // that failed to cancel (or a cancelled order whose stock silently stayed reserved). The
+  // refund request rides along too: a cancelled paid order that failed to file one would leave
+  // the customer out of pocket with nothing in any queue to catch it.
+  const { units, refund, alreadyCancelled } = await withTransaction(async (tx) => {
+    // Re-read under a row lock so two tabs cancelling at once can't both pass the status check
+    // above and then file two refund requests for the same money.
+    const locked = await tx.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ? FOR UPDATE').get(order.id, req.user.id);
+    if (locked.status !== 'pending') return { alreadyCancelled: true };
+
+    await tx.prepare('UPDATE orders SET status = ?, cancel_reason = ? WHERE id = ?').run('cancelled', reason, locked.id);
+    const released = await releaseOrderStock(locked.id, tx);
+    if (!cancellationNeedsRefund(locked)) return { units: released.units, refund: null };
+
+    // Nothing was shipped, so the whole order total goes back — no pro-rating, which only exists
+    // for partial returns of individual lines. 'unpaid' until a clerk actually moves the money.
+    const refundId = uuid();
+    await tx.prepare(`
+      INSERT INTO return_requests (id, order_id, user_id, kind, reason, refund_amount, refund_status)
+      VALUES (?,?,?,'cancellation',?,?,'unpaid')
+    `).run(refundId, locked.id, req.user.id, reason, locked.total);
+
+    // Mirrored onto return_items so the clerk sees what they are refunding without a second
+    // query, exactly as a return does. These rows hold no claim on returnable stock — every
+    // quantity query in utils/returns.js filters on kind = 'return'.
+    const lines = await tx.prepare('SELECT id, product_id, quantity, price FROM order_items WHERE order_id = ?').all(locked.id);
+    const insertItem = tx.prepare(
+      'INSERT INTO return_items (id, return_id, order_item_id, product_id, quantity, unit_price) VALUES (?,?,?,?,?,?)'
+    );
+    for (const l of lines) await insertItem.run(uuid(), refundId, l.id, l.product_id, l.quantity, l.price);
+
+    return { units: released.units, refund: { id: refundId, amount: locked.total } };
   });
+
+  if (alreadyCancelled) return res.status(409).json({ error: 'This order has already been cancelled' });
 
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   await logActivity(req, 'order.cancel', 'order', order.id, {
     customerName: `${user.first_name} ${user.last_name}`,
     reason,
     unitsReturned: units,
+    refundRef: refund ? caseRef(refund.id, 'cancellation') : null,
+    refundAmount: refund ? refund.amount : null,
   });
+
+  if (refund) {
+    await logActivity(req, 'return.create', 'return', refund.id, {
+      kind: 'cancellation',
+      customerName: `${user.first_name} ${user.last_name}`,
+      orderRef: order.id.slice(0, 8).toUpperCase(),
+      returnRef: caseRef(refund.id, 'cancellation'),
+      itemCount: units,
+      refundAmount: refund.amount,
+      reason,
+    });
+
+    // Same recipients as a return request — the clerks who work that queue. No notify-by-role
+    // helper exists; the house idiom is an explicit query and a loop.
+    const clerks = await db.prepare("SELECT id FROM users WHERE role = 'employee' AND position = 'inventory_clerk'").all();
+    for (const clerk of clerks) {
+      await notifyUser(
+        clerk.id, 'return.created', 'Cancellation Refund to Approve',
+        `${user.first_name} ${user.last_name} cancelled paid order #${order.id.slice(0, 8).toUpperCase()} — a refund needs approving.`,
+        '/admin/returns',
+      );
+    }
+  }
+
   if (user?.notify_orders) {
-    orderStatusEmail(order, user, 'cancelled').catch((emailErr) => {
+    // One email, not two: the refund notice already says the order was cancelled, and sending
+    // the generic status email alongside it would read as two contradictory half-stories.
+    const email = refund
+      ? cancellationRefundEmail({ id: refund.id, reason, refund_amount: refund.amount }, order, user)
+      : orderStatusEmail(order, user, 'cancelled');
+    email.catch((emailErr) => {
       console.error(`Failed to send order cancelled email for order ${order.id}:`, emailErr.message);
     });
   }
 
-  res.json({ message: 'Order cancelled' });
+  res.json({
+    message: 'Order cancelled',
+    refund: refund ? { ref: caseRef(refund.id, 'cancellation'), amount: refund.amount } : null,
+  });
 });
 
 export default router;

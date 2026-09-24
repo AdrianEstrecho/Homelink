@@ -6,7 +6,7 @@ import { logActivity } from '../utils/audit.js';
 import { notifyUser } from '../utils/notify.js';
 import { returnSubmittedEmail } from '../utils/email.js';
 import {
-  getReturnableLines, returnEligibility, returnWindowClosesAt, prorateRefund, returnRef,
+  getReturnableLines, returnEligibility, returnWindowClosesAt, prorateRefund, returnRef, caseRef,
   RETURN_WINDOW_DAYS,
 } from '../utils/returns.js';
 
@@ -30,11 +30,13 @@ function dataUrlBytes(dataUrl) {
   return Math.floor((b64.length * 3) / 4) - padding;
 }
 
+// kind = 'return' only: this drives the "you've already asked to return these" history inside the
+// request modal, and a cancellation refund on the same order is a different story entirely.
 async function existingReturnsFor(orderId) {
   const rows = await db.prepare(`
     SELECT rr.id, rr.status, rr.created_at,
            (SELECT COALESCE(SUM(ri.quantity), 0) FROM return_items ri WHERE ri.return_id = rr.id) AS item_count
-    FROM return_requests rr WHERE rr.order_id = ? ORDER BY rr.created_at DESC
+    FROM return_requests rr WHERE rr.order_id = ? AND rr.kind = 'return' ORDER BY rr.created_at DESC
   `).all(orderId);
   return rows.map((r) => ({ ...r, ref: returnRef(r.id) }));
 }
@@ -63,11 +65,17 @@ router.get('/eligibility/:orderId', authenticate, async (req, res) => {
 router.get('/my', authenticate, async (req, res) => {
   // Explicit columns, never SELECT * — photos live in their own table, and keeping the habit
   // means a column added later can't start shipping blobs to the list view by accident.
+  // Cancellation refunds file here alongside returns — same review and payout trail, so the
+  // customer has one place to watch their money rather than two. payment_method comes along
+  // because a refund's copy has to name where the money is going back to.
   const rows = await db.prepare(`
-    SELECT rr.id, rr.order_id, rr.reason, rr.status, rr.refund_amount, rr.refund_status,
-           rr.review_note, rr.created_at, rr.reviewed_at, rr.received_at,
+    SELECT rr.id, rr.order_id, rr.kind, rr.reason, rr.status, rr.refund_amount, rr.refund_status,
+           rr.review_note, rr.created_at, rr.reviewed_at, rr.received_at, rr.refunded_at,
+           o.payment_method,
            (SELECT COUNT(*) FROM return_photos rp WHERE rp.return_id = rr.id) AS photo_count
-    FROM return_requests rr WHERE rr.user_id = ? ORDER BY rr.created_at DESC
+    FROM return_requests rr
+    JOIN orders o ON o.id = rr.order_id
+    WHERE rr.user_id = ? ORDER BY rr.created_at DESC
   `).all(req.user.id);
   if (rows.length === 0) return res.json(rows);
 
@@ -81,7 +89,7 @@ router.get('/my', authenticate, async (req, res) => {
   const byReturn = {};
   for (const i of items) (byReturn[i.return_id] ||= []).push(i);
 
-  res.json(rows.map((r) => ({ ...r, ref: returnRef(r.id), items: byReturn[r.id] || [] })));
+  res.json(rows.map((r) => ({ ...r, ref: caseRef(r.id, r.kind), items: byReturn[r.id] || [] })));
 });
 
 // The only customer route that emits image data — fetched on demand when a card is expanded, so
@@ -164,8 +172,8 @@ router.post('/', authenticate, async (req, res) => {
     // is no payout to chase — the clerk shouldn't be left hunting for one.
     const refundStatus = order.payment_status === 'paid' ? 'unpaid' : 'not_applicable';
     await tx.prepare(`
-      INSERT INTO return_requests (id, order_id, user_id, reason, refund_amount, refund_status)
-      VALUES (?,?,?,?,?,?)
+      INSERT INTO return_requests (id, order_id, user_id, kind, reason, refund_amount, refund_status)
+      VALUES (?,?,?,'return',?,?,?)
     `).run(id, order.id, req.user.id, reason, prorateRefund(selected, order), refundStatus);
 
     const insertItem = tx.prepare(

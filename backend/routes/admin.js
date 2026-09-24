@@ -10,8 +10,8 @@ import { notifyUser } from '../utils/notify.js';
 import { createChangeRequest } from '../utils/changeRequests.js';
 import { formatTicketNo } from '../utils/ticketNumber.js';
 import { generateVerificationCode, hashVerificationCode, STAFF_RESET_CODE_TTL_MS } from '../utils/verificationCode.js';
-import { orderStatusEmail, bookingConfirmedEmail, bookingStatusEmail, returnDecisionEmail, returnReceivedEmail } from '../utils/email.js';
-import { returnRef } from '../utils/returns.js';
+import { orderStatusEmail, bookingConfirmedEmail, bookingStatusEmail, returnDecisionEmail, returnReceivedEmail, cancellationRefundPaidEmail } from '../utils/email.js';
+import { returnRef, caseRef, RETURN_KINDS } from '../utils/returns.js';
 import { shapeProduct, shapeService, normalizeSpecifications, normalizeStringList } from '../utils/catalogShape.js';
 
 const router = Router();
@@ -634,20 +634,23 @@ router.put('/orders/:id/payment-status', authorizeAdminOr('general_staff', 'inve
   res.json({ message: 'Payment status updated' });
 });
 
-// Returns — clerk-only, matching "admin or inventory clerk". general_staff is deliberately left
-// out even though it can touch orders: approving a return moves stock and money.
+// Returns & cancellations — clerk-only, matching "admin or inventory clerk". general_staff is
+// deliberately left out even though it can touch orders: approving either one moves money, and
+// approving a return also moves stock.
 const RETURN_STATUSES = ['pending', 'approved', 'rejected', 'received', 'cancelled'];
 
 router.get('/returns', authorizeAdminOr('inventory_clerk'), async (req, res) => {
   const status = RETURN_STATUSES.includes(req.query.status) ? req.query.status : 'all';
+  const kind = RETURN_KINDS.includes(req.query.kind) ? req.query.kind : 'all';
 
   // NEVER add rp.image to this list — base64 photos would make every page load of the returns
   // queue multi-megabyte. They're fetched one return at a time from /returns/:id/photos.
   const rows = await db.prepare(`
-    SELECT rr.id, rr.order_id, rr.user_id, rr.reason, rr.status, rr.refund_amount,
+    SELECT rr.id, rr.order_id, rr.user_id, rr.kind, rr.reason, rr.status, rr.refund_amount,
            rr.refund_status, rr.review_note, rr.created_at, rr.reviewed_at, rr.received_at,
            u.first_name, u.last_name, u.email, u.phone,
            o.total AS order_total, o.payment_status, o.payment_method, o.delivered_at,
+           o.cancel_reason,
            rev.first_name AS reviewer_first, rev.last_name AS reviewer_last,
            (SELECT COUNT(*) FROM return_photos rp WHERE rp.return_id = rr.id) AS photo_count
     FROM return_requests rr
@@ -655,11 +658,18 @@ router.get('/returns', authorizeAdminOr('inventory_clerk'), async (req, res) => 
     JOIN orders o ON o.id = rr.order_id
     LEFT JOIN users rev ON rev.id = rr.reviewed_by
     WHERE (? = 'all' OR rr.status = ?)
+      AND (? = 'all' OR rr.kind = ?)
     ORDER BY rr.created_at DESC
-  `).all(status, status);
+  `).all(status, status, kind, kind);
 
-  const counts = await db.prepare('SELECT status, COUNT(*) as count FROM return_requests GROUP BY status').all();
-  if (rows.length === 0) return res.json({ returns: [], counts });
+  // The status badges have to follow the kind filter, or switching to Cancellations leaves tab
+  // counts describing a list that is no longer on screen. kindCounts drives the kind selector
+  // itself and so is never filtered by kind.
+  const counts = await db.prepare(
+    "SELECT status, COUNT(*) as count FROM return_requests WHERE (? = 'all' OR kind = ?) GROUP BY status"
+  ).all(kind, kind);
+  const kindCounts = await db.prepare('SELECT kind, COUNT(*) as count FROM return_requests GROUP BY kind').all();
+  if (rows.length === 0) return res.json({ returns: [], counts, kindCounts });
 
   const ids = rows.map((r) => r.id);
   const items = await db.prepare(`
@@ -671,7 +681,11 @@ router.get('/returns', authorizeAdminOr('inventory_clerk'), async (req, res) => 
   const byReturn = {};
   for (const i of items) (byReturn[i.return_id] ||= []).push(i);
 
-  res.json({ returns: rows.map((r) => ({ ...r, items: byReturn[r.id] || [] })), counts });
+  res.json({
+    returns: rows.map((r) => ({ ...r, ref: caseRef(r.id, r.kind), items: byReturn[r.id] || [] })),
+    counts,
+    kindCounts,
+  });
 });
 
 router.get('/returns/:id/photos', authorizeAdminOr('inventory_clerk'), async (req, res) => {
@@ -693,9 +707,10 @@ async function reviewReturn(req, res, decision, note) {
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(ret.user_id);
 
   await logActivity(req, decision === 'approved' ? 'return.approve' : 'return.reject', 'return', ret.id, {
+    kind: ret.kind,
     customerName: `${user.first_name} ${user.last_name}`,
     orderRef: order.id.slice(0, 8).toUpperCase(),
-    returnRef: returnRef(ret.id),
+    returnRef: caseRef(ret.id, ret.kind),
     refundAmount: ret.refund_amount,
     note: note || null,
   });
@@ -706,7 +721,7 @@ async function reviewReturn(req, res, decision, note) {
     });
   }
 
-  res.json({ message: `Return ${decision}` });
+  res.json({ message: `${ret.kind === 'cancellation' ? 'Refund' : 'Return'} ${decision}` });
 }
 
 router.put('/returns/:id/approve', authorizeAdminOr('inventory_clerk'), async (req, res) => {
@@ -729,6 +744,9 @@ router.put('/returns/:id/receive', authorizeAdminOr('inventory_clerk'), async (r
     // the second pass sees 'received' and restocks nothing.
     const ret = await tx.prepare('SELECT * FROM return_requests WHERE id = ? FOR UPDATE').get(req.params.id);
     if (!ret) return { notFound: true };
+    // A cancelled order never shipped, and its units went back on the shelf at cancel time.
+    // Receiving one would credit the same stock twice, so this step simply doesn't exist for it.
+    if (ret.kind === 'cancellation') return { notReceivable: true };
     if (ret.status === 'received') return { alreadyReceived: true };
     if (ret.status !== 'approved') return { badState: ret.status };
 
@@ -785,6 +803,7 @@ router.put('/returns/:id/receive', authorizeAdminOr('inventory_clerk'), async (r
   });
 
   if (result.notFound) return res.status(404).json({ error: 'Return request not found' });
+  if (result.notReceivable) return res.status(409).json({ error: 'A cancelled order has nothing to receive — its stock went back when it was cancelled. Mark the refund paid instead.' });
   if (result.alreadyReceived) return res.status(409).json({ error: 'These items have already been received.' });
   if (result.badState) return res.status(409).json({ error: 'Only an approved return can be marked received.' });
   if (result.missingProduct) return res.status(409).json({ error: 'A product on this return no longer exists in the catalog.' });
@@ -824,23 +843,59 @@ router.put('/returns/:id/receive', authorizeAdminOr('inventory_clerk'), async (r
 });
 
 // Bookkeeping only — nothing here moves money. PayMongo has no refund call wired up, so a clerk
-// pays the customer back by hand and then records it here.
+// pays the customer back by hand (GCash, QR Ph, bank transfer, or back onto the card) and then
+// records it here. For a cancellation this is also the step that closes the order's own books:
+// the whole total went back, so the order stops counting as revenue.
 router.put('/returns/:id/refund-status', authorizeAdminOr('inventory_clerk'), async (req, res) => {
   const { refundStatus } = req.body;
   if (!['unpaid', 'refunded', 'not_applicable'].includes(refundStatus)) {
     return res.status(400).json({ error: 'Invalid refund status' });
   }
-  const ret = await db.prepare('SELECT refund_status, order_id FROM return_requests WHERE id = ?').get(req.params.id);
+  const ret = await db.prepare('SELECT id, kind, status, refund_status, order_id, user_id, refund_amount FROM return_requests WHERE id = ?').get(req.params.id);
   if (!ret) return res.status(404).json({ error: 'Return request not found' });
 
-  await db.prepare('UPDATE return_requests SET refund_status = ?, refunded_at = ? WHERE id = ?')
-    .run(refundStatus, refundStatus === 'refunded' ? new Date() : null, req.params.id);
-  await logActivity(req, 'return.refund_mark', 'return', req.params.id, {
-    returnRef: returnRef(req.params.id),
+  // Paying out a cancellation nobody approved would send real money on one click, with no second
+  // pair of eyes — the approval step is the control, so it has to come first. Returns reach this
+  // point via 'received', which already implies approval.
+  if (refundStatus === 'refunded' && ret.kind === 'cancellation' && ret.status !== 'approved') {
+    return res.status(409).json({
+      error: ret.status === 'pending'
+        ? 'Approve this cancellation refund before marking it paid.'
+        : 'Only an approved cancellation refund can be marked paid.',
+    });
+  }
+
+  let paymentStatusTo = null;
+  await withTransaction(async (tx) => {
+    await tx.prepare('UPDATE return_requests SET refund_status = ?, refunded_at = ? WHERE id = ?')
+      .run(refundStatus, refundStatus === 'refunded' ? new Date() : null, ret.id);
+
+    // A cancellation refunds the order in full, so unlike a partial return there's no risk of
+    // dropping unreturned revenue — the order is cancelled and the money is gone.
+    if (refundStatus === 'refunded' && ret.kind === 'cancellation') {
+      const { changes } = await tx.prepare("UPDATE orders SET payment_status = 'refunded' WHERE id = ? AND payment_status = 'paid'").run(ret.order_id);
+      if (changes) paymentStatusTo = 'refunded';
+    }
+  });
+
+  await logActivity(req, 'return.refund_mark', 'return', ret.id, {
+    kind: ret.kind,
+    returnRef: caseRef(ret.id, ret.kind),
     orderRef: ret.order_id.slice(0, 8).toUpperCase(),
     from: ret.refund_status,
     to: refundStatus,
+    paymentStatusTo,
   });
+
+  if (refundStatus === 'refunded' && ret.kind === 'cancellation') {
+    const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(ret.order_id);
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(ret.user_id);
+    if (user?.notify_orders) {
+      cancellationRefundPaidEmail(ret, order, user).catch((emailErr) => {
+        console.error(`Failed to send refund paid email for cancellation ${ret.id}:`, emailErr.message);
+      });
+    }
+  }
 
   res.json({ message: 'Refund status updated' });
 });

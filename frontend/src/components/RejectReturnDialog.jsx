@@ -5,7 +5,11 @@ import { X } from 'lucide-react';
 // Same shape as CancelReasonModal — portaled, with its own submitting/error state — rather than
 // PromptDialog, which isn't portaled and so can't sit above a card's own stacking context. The
 // note is required here: it's the only explanation the customer ever gets for a rejection.
-export default function RejectReturnDialog({ open, customer, onSubmit, onCancel }) {
+export default function RejectReturnDialog({ open, customer, kind = 'return', onSubmit, onCancel }) {
+  // Rejecting the two kinds refuses different things, and the difference matters: refusing a
+  // return leaves the customer holding goods they still own, while refusing a cancellation refund
+  // leaves them out of pocket on an order that stays cancelled either way.
+  const cancellation = kind === 'cancellation';
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -37,20 +41,23 @@ export default function RejectReturnDialog({ open, customer, onSubmit, onCancel 
         <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-red-100 text-red-600">
           <X className="w-6 h-6" />
         </div>
-        <h2 className="font-display text-lg font-bold text-brand-navy">Reject this return?</h2>
+        <h2 className="font-display text-lg font-bold text-brand-navy">
+          {cancellation ? 'Decline this refund?' : 'Reject this return?'}
+        </h2>
         <p className="text-sm text-gray-600 mt-1.5">
-          {customer ? `${customer} will be emailed this note. ` : ''}Stock is not affected.
+          {customer ? `${customer} will be emailed this note. ` : ''}
+          {cancellation ? 'The order stays cancelled — only the refund is refused.' : 'Stock is not affected.'}
         </p>
 
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mt-4 mb-1.5">
-          Reason for rejection
+          {cancellation ? 'Reason for declining' : 'Reason for rejection'}
         </label>
         <textarea
           autoFocus
           rows={3}
           value={note}
           onChange={(e) => { setNote(e.target.value); if (error) setError(''); }}
-          placeholder="Explain why this return can't be accepted..."
+          placeholder={cancellation ? "Explain why this refund can't be sent..." : "Explain why this return can't be accepted..."}
           disabled={submitting}
           className="input-field resize-none disabled:opacity-60"
         />
@@ -61,7 +68,7 @@ export default function RejectReturnDialog({ open, customer, onSubmit, onCancel 
             Keep Pending
           </button>
           <button type="submit" disabled={submitting} className="flex-1 rounded-lg py-2.5 font-semibold text-sm text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50">
-            {submitting ? 'Rejecting...' : 'Reject'}
+            {submitting ? (cancellation ? 'Declining...' : 'Rejecting...') : (cancellation ? 'Decline' : 'Reject')}
           </button>
         </div>
       </form>

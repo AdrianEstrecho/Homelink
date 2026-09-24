@@ -601,6 +601,16 @@ await db.exec(`
   CREATE INDEX IF NOT EXISTS idx_return_requests_user ON return_requests(user_id);
   CREATE INDEX IF NOT EXISTS idx_return_requests_status ON return_requests(status);
 
+  -- Two different things now file through this table. A 'return' is the original flow: delivered
+  -- goods come back, so approval is only permission to ship and 'received' is what credits stock.
+  -- A 'cancellation' is raised when a customer cancels an order they had already paid for online
+  -- — nothing was ever shipped, the units went back on the shelf at cancel time, so there is no
+  -- 'received' step and approval is purely the authorisation to send the money back. COD and
+  -- unverified bank orders never get one: no money was collected, so the cancel just stands.
+  ALTER TABLE return_requests ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'return'
+    CHECK(kind IN ('return','cancellation'));
+  CREATE INDEX IF NOT EXISTS idx_return_requests_kind ON return_requests(kind);
+
   -- Anchored on order_item_id rather than (order_id, product_id): validateAndPriceCart doesn't
   -- dedupe the incoming cart, so one order can legitimately carry the same product on two separate
   -- lines. product_id is denormalised alongside it so the restock loop needs no join, and

@@ -19,7 +19,7 @@ const NAV_SECTIONS = [
       { to: '/admin/products', icon: Package, label: 'Product' },
       { to: '/admin/services', icon: Wrench, label: 'Service' },
       { to: '/admin/orders', icon: ShoppingCart, label: 'Order' },
-      { to: '/admin/returns', icon: PackageCheck, label: 'Returns' },
+      { to: '/admin/returns', icon: PackageCheck, label: 'Returns & Cancellations' },
       { to: '/admin/bookings', icon: Calendar, label: 'Booking' },
       { to: '/admin/users', icon: Users, label: 'User' },
       { to: '/admin/vouchers', icon: Ticket, label: 'Voucher' },

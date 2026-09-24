@@ -29,7 +29,7 @@ const TABS = [
   { key: 'notifications', label: 'Notifications', icon: Bell, Component: NotificationsTab },
   { key: 'security', label: 'Security', icon: Lock, Component: SecurityTab },
   { key: 'reviews', label: 'Reviews', icon: Star, Component: ReviewsTab },
-  { key: 'returns', label: 'Returns', icon: PackageCheck, Component: ReturnsTab },
+  { key: 'returns', label: 'Returns & Cancellations', icon: PackageCheck, Component: ReturnsTab },
   { key: 'support', label: 'Support', icon: LifeBuoy, Component: SupportTab },
 ];
 

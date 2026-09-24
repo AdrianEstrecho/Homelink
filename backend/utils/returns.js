@@ -13,10 +13,26 @@ export const COMMITTED_RETURN_STATUSES = ['pending', 'approved', 'received'];
 // source of truth without shifting every following parameter's position. Fixed literals, ours.
 const COMMITTED_SQL = COMMITTED_RETURN_STATUSES.map((s) => `'${s}'`).join(', ');
 
+// The two things return_requests holds. A cancellation refund reuses this table for its review
+// and payout trail, but skips the 'received' step entirely — see the schema comment on kind.
+export const RETURN_KINDS = ['return', 'cancellation'];
+
 // Same short-uuid convention orders use everywhere (Orders.jsx, OrderDetailsModal, every email)
 // rather than a sequential counter — support.js's COALESCE(MAX(n),0)+1 races and has no unique
 // index to catch a collision. This is a display label, never a key, so a clash is harmless.
-export const returnRef = (id) => `RET-${String(id).slice(0, 8).toUpperCase()}`;
+// Cancellations carry their own prefix so a clerk reading a reference knows which queue it came
+// from before opening anything.
+export const caseRef = (id, kind = 'return') =>
+  `${kind === 'cancellation' ? 'CAN' : 'RET'}-${String(id).slice(0, 8).toUpperCase()}`;
+export const returnRef = (id) => caseRef(id, 'return');
+
+// Money actually reached us only once the order is 'paid'. Cancellation is allowed while the
+// order is still 'pending', and at that point a COD order hasn't met a rider and a bank transfer
+// hasn't been verified — so both sit at payment_status 'pending' and simply cancel outright.
+// Card, GCash and QR Ph are charged by PayMongo before the order exists, so they always land here.
+export function cancellationNeedsRefund(order) {
+  return order.payment_status === 'paid';
+}
 
 // One row per order line, with how many units are still returnable. Takes an executor so the same
 // query serves the read-only eligibility check (on the pool) and the validation inside the POST
@@ -39,6 +55,7 @@ export async function getReturnableLines(executor = db, orderId) {
         FROM return_items ri
         JOIN return_requests rr ON rr.id = ri.return_id
         WHERE ri.order_item_id = oi.id
+          AND rr.kind = 'return'
           AND rr.status IN (${COMMITTED_SQL})
       ), 0) AS committed_qty
     FROM order_items oi
@@ -113,6 +130,7 @@ export async function getReturnableTotals(executor = db, userId) {
       FROM return_items ri
       JOIN return_requests rr ON rr.id = ri.return_id
       WHERE ri.order_item_id = oi.id
+        AND rr.kind = 'return'
         AND rr.status IN (${COMMITTED_SQL})
     ) c ON TRUE
     WHERE o.user_id = ?
@@ -140,7 +158,7 @@ export function canReturnOrder(order, returnableUnits) {
 export async function getReturnCounts(executor = db, userId) {
   const rows = await executor.prepare(`
     SELECT order_id, COUNT(*) AS n FROM return_requests
-    WHERE user_id = ? AND status IN (${COMMITTED_SQL})
+    WHERE user_id = ? AND kind = 'return' AND status IN (${COMMITTED_SQL})
     GROUP BY order_id
   `).all(userId);
   return new Map(rows.map((r) => [r.order_id, Number(r.n)]));

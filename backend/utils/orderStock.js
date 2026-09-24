@@ -25,7 +25,7 @@ const OUTSTANDING_ITEMS_SQL = `
     SELECT SUM(ri.quantity) AS returned
     FROM return_items ri
     JOIN return_requests rr ON rr.id = ri.return_id
-    WHERE ri.order_item_id = oi.id AND rr.status = 'received'
+    WHERE ri.order_item_id = oi.id AND rr.kind = 'return' AND rr.status = 'received'
   ) r ON TRUE
   WHERE oi.order_id = ?
 `;

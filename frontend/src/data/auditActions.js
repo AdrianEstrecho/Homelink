@@ -45,11 +45,20 @@ export const ACTION_META = {
   'order.stock_reserved': { category: 'update', entity: 'Order', describe: d => `Took ${d.units || 0} unit${d.units === 1 ? '' : 's'} back out of stock after the cancelled order was reinstated` },
   // Older entries, from before paid orders carried their own needs_review flag.
   'order.oversold_after_payment': { category: 'update', entity: 'Order', describe: () => 'An item sold out while the customer was paying — needs review' },
-  'return.create': { category: 'create', entity: 'Return', describe: d => `${d.customerName || 'A customer'} requested a return on order #${d.orderRef} — ${d.itemCount} item${d.itemCount === 1 ? '' : 's'}${d.reason ? ` ("${d.reason}")` : ''}` },
-  'return.approve': { category: 'update', entity: 'Return', describe: d => `Approved ${d.returnRef} for ${d.customerName || 'a customer'} on order #${d.orderRef} — awaiting the items` },
-  'return.reject': { category: 'update', entity: 'Return', describe: d => `Rejected ${d.returnRef} for ${d.customerName || 'a customer'}${d.note ? ` — "${d.note}"` : ''}` },
+  // d.kind is 'cancellation' for a refund raised by a customer cancelling an order they had
+  // already paid for. Entries written before that existed carry no kind and read as returns,
+  // which is what they were.
+  'return.create': { category: 'create', entity: 'Return', describe: d => (d.kind === 'cancellation'
+    ? `${d.customerName || 'A customer'} cancelled paid order #${d.orderRef} — refund of ${d.refundAmount != null ? `₱${Number(d.refundAmount).toLocaleString('en-PH')}` : 'the order total'} awaiting approval${d.reason ? ` ("${d.reason}")` : ''}`
+    : `${d.customerName || 'A customer'} requested a return on order #${d.orderRef} — ${d.itemCount} item${d.itemCount === 1 ? '' : 's'}${d.reason ? ` ("${d.reason}")` : ''}`) },
+  'return.approve': { category: 'update', entity: 'Return', describe: d => (d.kind === 'cancellation'
+    ? `Approved refund ${d.returnRef} for ${d.customerName || 'a customer'} on cancelled order #${d.orderRef} — awaiting payout`
+    : `Approved ${d.returnRef} for ${d.customerName || 'a customer'} on order #${d.orderRef} — awaiting the items`) },
+  'return.reject': { category: 'update', entity: 'Return', describe: d => (d.kind === 'cancellation'
+    ? `Declined refund ${d.returnRef} for ${d.customerName || 'a customer'}${d.note ? ` — "${d.note}"` : ''}`
+    : `Rejected ${d.returnRef} for ${d.customerName || 'a customer'}${d.note ? ` — "${d.note}"` : ''}`) },
   'return.received': { category: 'update', entity: 'Return', describe: d => `Received ${d.itemCount} unit${d.itemCount === 1 ? '' : 's'} back for ${d.returnRef} and added them to stock${d.paymentStatusTo === 'refunded' ? ' — order marked refunded' : ''}` },
-  'return.refund_mark': { category: 'update', entity: 'Return', describe: d => `Marked ${d.returnRef} as ${d.to === 'refunded' ? 'refunded' : d.to.replace('_', ' ')} (was ${String(d.from || '').replace('_', ' ')})` },
+  'return.refund_mark': { category: 'update', entity: 'Return', describe: d => `Marked ${d.returnRef} as ${d.to === 'refunded' ? 'refunded' : d.to.replace('_', ' ')} (was ${String(d.from || '').replace('_', ' ')})${d.paymentStatusTo === 'refunded' ? ' — order marked refunded' : ''}` },
   'support.create': { category: 'create', entity: 'Support', describe: d => `${d.customerName || 'A customer'} sent a ${d.type || 'support'} message${d.ticketNumber ? ` (${formatTicketNo(d.ticketNumber)})` : ''}: "${d.subject}"` },
   'support.reply': { category: 'update', entity: 'Support', describe: d => `Replied to ${d.ticketNumber ? formatTicketNo(d.ticketNumber) : `"${d.subject}"`}${d.preview ? `: "${d.preview}"` : ''}` },
   'support.request_resolve': { category: 'update', entity: 'Support', describe: d => `Requested resolution approval for ${d.ticketNumber ? formatTicketNo(d.ticketNumber) : `"${d.subject}"`}` },
