@@ -29,19 +29,33 @@ router.get('/categories', async (req, res) => {
 });
 
 router.get('/', async (req, res) => {
-  const { category, search, featured, sort, limit = 50, offset = 0 } = req.query;
-  let sql = `SELECT p.*, c.name as category_name, c.slug as category_slug, ${RATING_COLUMNS} FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE (p.archived IS NULL OR p.archived = 0) AND (p.status IS NULL OR p.status = 'active')`;
+  const { category, search, featured, sort, meta } = req.query;
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+  // The filters are shared by the page query and by the count behind it, so the WHERE
+  // clause is built once and spliced into both statements.
+  let where = `WHERE (p.archived IS NULL OR p.archived = 0) AND (p.status IS NULL OR p.status = 'active')`;
   const params = [];
 
-  if (category) { sql += ' AND p.category_id IN (SELECT id FROM categories WHERE slug = ? OR parent_id = (SELECT id FROM categories WHERE slug = ?))'; params.push(category, category); }
-  if (search) { sql += ' AND (p.name ILIKE ? OR p.description ILIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
-  if (featured === 'true') { sql += ' AND p.featured = 1'; }
+  if (category) { where += ' AND p.category_id IN (SELECT id FROM categories WHERE slug = ? OR parent_id = (SELECT id FROM categories WHERE slug = ?))'; params.push(category, category); }
+  if (search) { where += ' AND (p.name ILIKE ? OR p.description ILIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+  if (featured === 'true') { where += ' AND p.featured = 1'; }
 
-  sql += ` ORDER BY ${SORT_COLUMNS[sort] || SORT_COLUMNS.featured} LIMIT ? OFFSET ?`;
-  params.push(Number(limit), Number(offset));
+  const products = await db.prepare(`
+    SELECT p.*, c.name as category_name, c.slug as category_slug, ${RATING_COLUMNS}
+    FROM products p LEFT JOIN categories c ON p.category_id = c.id
+    ${where} ORDER BY ${SORT_COLUMNS[sort] || SORT_COLUMNS.featured} LIMIT ? OFFSET ?
+  `).all(...params, limit, offset);
+  const shaped = products.map(shapeProduct);
 
-  const products = await db.prepare(sql).all(...params);
-  res.json(products.map(shapeProduct));
+  // Callers that just render a fixed slice (the homepage strip, related products) keep the
+  // plain array they already expect; ?meta=1 opts into the envelope a pager needs, since the
+  // page count can't be derived from a truncated array.
+  if (meta !== '1' && meta !== 'true') return res.json(shaped);
+
+  const row = await db.prepare(`SELECT COUNT(*) as total FROM products p ${where}`).get(...params);
+  res.json({ products: shaped, total: Number(row.total), limit, offset });
 });
 
 router.get('/:slug', async (req, res) => {
