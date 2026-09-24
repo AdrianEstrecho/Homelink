@@ -137,6 +137,16 @@ const zipFor = (province, place) => {
   return MANUAL_ZIP[key] || cityZipByScoped.get(key) || zipByScopedPlace.get(key) || '';
 };
 
+// Nine places are called "San Jose" and a search cannot tell them apart on the name alone.
+// Chartered cities and provincial capitals are where the overwhelming majority of deliveries go,
+// so the PSGC's own flags ride along as a rank and break that tie in the customer's favour.
+//
+// A deliberate score rather than a bitmask: being a chartered city counts for more than being a
+// provincial capital, so San Jose City in Nueva Ecija sorts above San Jose, the capital of
+// Antique, and a place that is both sorts above either.
+const CITY_WEIGHT = 2;
+const CAPITAL_WEIGHT = 1;
+
 const cityRows = [];
 const cityIdxByCode = new Map();
 for (const c of cities) {
@@ -144,8 +154,9 @@ for (const c of cities) {
   if (province === undefined || !provinceIdx.has(province)) {
     throw new Error(`No province mapping for ${c.name} (${c.code}, region ${c.regionCode})`);
   }
+  const rank = (c.isCity ? CITY_WEIGHT : 0) + (c.isCapital ? CAPITAL_WEIGHT : 0);
   cityIdxByCode.set(c.code, cityRows.length);
-  cityRows.push([c.name, provinceIdx.get(province), zipFor(province, c.name)]);
+  cityRows.push([c.name, provinceIdx.get(province), zipFor(province, c.name), rank]);
 }
 
 // A barangay hangs off whichever parent the PSGC filled in: municipalities use municipalityCode,
@@ -167,7 +178,8 @@ const out = { p: provinceNames, c: cityRows, b: barangayRows };
 writeFileSync(OUT, JSON.stringify(out));
 
 const withZip = (rows) => rows.filter(r => r[2]).length;
+const chartered = cityRows.filter(r => r[3] >= CITY_WEIGHT).length;
 console.log(`provinces ${provinceNames.length}`);
-console.log(`cities    ${cityRows.length} (${withZip(cityRows)} with postal code)`);
+console.log(`cities    ${cityRows.length} (${withZip(cityRows)} with postal code, ${chartered} chartered cities)`);
 console.log(`barangays ${barangayRows.length} (${withZip(barangayRows)} with own postal code, ${orphanBarangays} skipped)`);
 console.log(`wrote     ${OUT} (${(JSON.stringify(out).length / 1e6).toFixed(2)} MB)`);

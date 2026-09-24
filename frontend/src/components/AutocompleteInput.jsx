@@ -1,6 +1,19 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
+// How long to sit on a keystroke before asking. Long enough that typing a whole word costs one
+// request, short enough that a pause feels answered immediately. Fields that cross the network
+// raise it (see the street field): when the answer itself takes over a second, waiting a little
+// longer to ask costs nothing perceptible and spares a run of requests nobody waits for.
+const DEBOUNCE_MS = 180;
+
+// A spinner is only honest once there is a real wait. Province, city and barangay come out of an
+// in-memory index in a few milliseconds, so showing one on every keystroke is pure flicker: the
+// indicator appears and vanishes faster than it can be read, and makes an instant field look
+// busy. It waits this long before admitting to being slow, which in practice means it only ever
+// appears for the street lookup, which crosses the network to a geocoder.
+const SPINNER_DELAY_MS = 400;
+
 // A text input that offers suggestions without ever insisting on one.
 //
 // Every address field in the Philippines has entries no register spells the same way —
@@ -14,11 +27,22 @@ export default function AutocompleteInput({
   getLabel = (item) => item.name,
   getDescription = () => '',
   getKey = (item, i) => item.id ?? i,
-  minChars = 1, placeholder, id, inputMode, autoComplete = 'off', className = 'input-field',
+  minChars = 1, debounceMs = DEBOUNCE_MS,
+  placeholder, id, inputMode, autoComplete = 'off', className = 'input-field',
+  emptyMessage = 'No matches. You can type it in yourself.',
+  // Shown when the lookup itself failed rather than came back empty. Defaults to the same words,
+  // since for most fields the distinction is invisible and the remedy is identical.
+  errorMessage = emptyMessage,
 }) {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [spinner, setSpinner] = useState(false);
+  // Distinct from `spinner`: this says a query finished and found nothing, which is what the
+  // empty message is allowed to depend on. Without it the message would flash "no matches"
+  // during the first keystrokes of every successful search.
+  const [searched, setSearched] = useState(false);
+  // The last lookup threw rather than returning nothing, which is a different thing to say.
+  const [failed, setFailed] = useState(false);
   const [active, setActive] = useState(-1);
 
   const wrapRef = useRef(null);
@@ -33,30 +57,41 @@ export default function AutocompleteInput({
     // Choosing a barangay also rewrites the city and province fields. Only the field actually in
     // use should go looking, or those two would each fire a request nobody asked for.
     if (!open) return;
+
     const query = (value || '').trim();
-    if (query.length < minChars) { setItems([]); setLoading(false); return; }
+    if (query.length < minChars) {
+      setItems([]); setSpinner(false); setSearched(false); setFailed(false);
+      return;
+    }
 
     // Typing is faster than the round trip, so wait for a pause before asking. `cancelled` drops
     // the reply of any request the next keystroke has already made obsolete — without it a slow
     // response can land after a faster later one and show results for a stale query.
     let cancelled = false;
-    setLoading(true);
+    let spinnerTimer;
+
     const timer = setTimeout(async () => {
+      spinnerTimer = setTimeout(() => { if (!cancelled) setSpinner(true); }, SPINNER_DELAY_MS);
       try {
         const results = await fetchSuggestions(query);
-        if (!cancelled) { setItems(results || []); setActive(-1); }
+        if (!cancelled) { setItems(results || []); setActive(-1); setSearched(true); setFailed(false); }
       } catch {
-        if (!cancelled) setItems([]);
+        if (!cancelled) { setItems([]); setSearched(true); setFailed(true); }
       } finally {
-        if (!cancelled) setLoading(false);
+        clearTimeout(spinnerTimer);
+        if (!cancelled) setSpinner(false);
       }
-    }, 200);
+    }, debounceMs);
 
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      clearTimeout(spinnerTimer);
+    };
     // fetchSuggestions is rebuilt on every render by callers that close over sibling field
     // values; depending on it here would restart the search on each keystroke elsewhere.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, open, minChars]);
+  }, [value, open, minChars, debounceMs]);
 
   useEffect(() => {
     const onPointerDown = (e) => {
@@ -76,6 +111,8 @@ export default function AutocompleteInput({
     onSelect?.(item);
     setOpen(false);
     setItems([]);
+    setSearched(false);
+    setFailed(false);
     setActive(-1);
     inputRef.current?.focus();
   };
@@ -102,7 +139,9 @@ export default function AutocompleteInput({
     }
   };
 
-  const showList = open && (items.length > 0 || loading);
+  const longEnough = (value || '').trim().length >= minChars;
+  const showEmpty = open && longEnough && searched && !items.length;
+  const showList = open && (items.length > 0 || showEmpty);
 
   return (
     <div ref={wrapRef} className="relative">
@@ -116,7 +155,9 @@ export default function AutocompleteInput({
         placeholder={placeholder}
         inputMode={inputMode}
         autoComplete={autoComplete}
-        className={className}
+        // Extra right padding only while the spinner is there, so it never sits on top of a long
+        // city name; without the shift the text would slide under it mid-type.
+        className={`${className}${spinner ? ' pr-10' : ''}`}
         role="combobox"
         aria-expanded={showList}
         aria-controls={listId}
@@ -124,8 +165,12 @@ export default function AutocompleteInput({
         aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
       />
 
-      {loading && (
-        <Loader2 className="w-4 h-4 text-gray-400 animate-spin absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      {spinner && (
+        <Loader2
+          className="w-4 h-4 text-gray-400 animate-spin absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+          role="status"
+          aria-label="Searching"
+        />
       )}
 
       {showList && (
@@ -151,8 +196,11 @@ export default function AutocompleteInput({
               )}
             </li>
           ))}
-          {loading && !items.length && (
-            <li className="px-3 py-2 text-sm text-gray-400">Searching...</li>
+
+          {/* Says so out loud rather than letting the list vanish, which reads as a broken field
+              when it is really just an address the register does not carry. */}
+          {showEmpty && (
+            <li className="px-3 py-2 text-sm text-gray-500">{failed ? errorMessage : emptyMessage}</li>
           )}
         </ul>
       )}

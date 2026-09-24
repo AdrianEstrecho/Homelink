@@ -10,7 +10,10 @@ import { normalize } from './psgc.js';
 const PHOTON_URL = process.env.PHOTON_URL || 'https://photon.komoot.io/api/';
 // Roughly the Philippine archipelago — keeps a query like "Rizal Street" from returning Spain.
 const PH_BBOX = '116.87,4.59,126.60,21.12';
-const TIMEOUT_MS = 3500;
+// The public instance answers in ~1.6s on average and has been seen to take 2.4s. The ceiling
+// sits well clear of that so an ordinary slow reply still arrives, while still bounding how long
+// checkout can be left waiting on a service that owes us nothing.
+const TIMEOUT_MS = 4500;
 
 // A public shared instance is a courtesy, and checkout re-queries the same few cities constantly,
 // so repeated lookups are served from memory. Small and short-lived: addresses are typed in
@@ -49,12 +52,14 @@ export async function searchStreets(query, { city, province } = {}) {
       headers: { 'User-Agent': 'HomeLink-academic-project/1.0' },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (!res.ok) return [];
+    if (!res.ok) return null;
     features = (await res.json())?.features || [];
   } catch {
-    // A geocoder that is slow, down or rate-limiting must not block checkout: the field is free
-    // text, so an empty suggestion list just means the customer types the street themselves.
-    return [];
+    // Slow, down or rate-limiting. null rather than an empty list, because the two mean opposite
+    // things to the person typing: "OpenStreetMap has no such street here, write it yourself" is
+    // a fact about the address, while this is the lookup failing and says nothing about it.
+    // Either way checkout is never blocked — the field is free text.
+    return null;
   }
 
   const results = [];

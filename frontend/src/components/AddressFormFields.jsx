@@ -27,7 +27,10 @@ export default function AddressFormFields({ form, onChange }) {
     onChange(next);
   };
 
-  const search = (path, params) => api.get(`/geo/${path}?${qs(params)}`).catch(() => []);
+  // Errors are deliberately left to propagate: AutocompleteInput tells a failed lookup apart
+  // from one that legitimately found nothing, and says something different about each. Swallowing
+  // them here would report every outage as "no such address".
+  const search = (path, params) => api.get(`/geo/${path}?${qs(params)}`);
 
   return (
     <>
@@ -50,6 +53,10 @@ export default function AddressFormFields({ form, onChange }) {
             // Scoped to the city already chosen, since a street name repeats in a hundred
             // municipalities. Three characters is the geocoder's own floor for a useful query.
             minChars={3}
+            // The only field that leaves the building. The public geocoder answers in about a
+            // second and a half, so a longer pause before asking is free in felt speed and saves
+            // a string of requests that would be thrown away mid-word anyway.
+            debounceMs={400}
             fetchSuggestions={q => search('streets', { q, city: form.city, province: form.province })}
             getLabel={s => s.street}
             getDescription={s => [s.village, s.city, s.province].filter(Boolean).join(', ')}
@@ -65,6 +72,12 @@ export default function AddressFormFields({ form, onChange }) {
               ...(s.postalCode ? { postalCode: s.postalCode } : {}),
             })}
             placeholder="Rizal Street"
+            // Not the same situation as a name the register does not carry: the street almost
+            // certainly exists, OpenStreetMap just has not mapped it yet in that municipality.
+            emptyMessage="No street found here — type it in as you write it."
+            // The geocoder is a free shared service that is sometimes slow enough to time out.
+            // Saying "not found" then would be a claim about the address that we cannot make.
+            errorMessage="Street lookup unavailable right now — type it in as you write it."
           />
         </div>
       </div>
@@ -80,6 +93,9 @@ export default function AddressFormFields({ form, onChange }) {
             getDescription={b => `${b.city}, ${b.province}`}
             onSelect={b => fillFrom({ village: b.name, city: b.city, province: b.province, postalCode: b.postalCode })}
             placeholder="Barangay San Isidro"
+            // Subdivisions, phases, sitios and purok numbers are not barangays and will never be
+            // in the register, so an empty list here is expected rather than a dead end.
+            emptyMessage="Not a registered barangay — type your village or subdivision."
           />
         </div>
         <div>
