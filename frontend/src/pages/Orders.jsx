@@ -11,6 +11,7 @@ import CancelReasonModal from '../components/CancelReasonModal';
 import TrackingModal from '../components/TrackingModal';
 import ReturnRequestModal from '../components/ReturnRequestModal';
 import OrderReviewModal from '../components/OrderReviewModal';
+import StarRating from '../components/account/StarRating';
 
 // A card lists its first few products in full — brand, name, what each one cost — and folds
 // the rest into a "+N more" line, so a ten-item order can't push the totals off the screen.
@@ -51,7 +52,7 @@ const TABS = [
 
 const DEFAULT_TAB = TABS[0].key;
 
-function OrderCard({ order, onOpen, canReview, onReview }) {
+function OrderCard({ order, onOpen, reviews, canReview, onReview }) {
   const items = order.items || [];
   const shown = items.slice(0, ITEMS_SHOWN);
   const hidden = items.length - shown.length;
@@ -101,6 +102,19 @@ function OrderCard({ order, onOpen, canReview, onReview }) {
               )}
               <p className="font-semibold text-sm text-brand-ink truncate">{i.name}</p>
               <p className="text-xs text-gray-500 mt-0.5">Qty {i.quantity} × {formatPrice(i.price)}</p>
+              {/* A review belongs to the product, not to one order of it, so it shows on any
+                  delivered order carrying that product — the same rule that stops the customer
+                  being offered a second review of something they have already rated. */}
+              {order.status === 'delivered' && reviews?.get(i.product_id) && (
+                <div className="flex items-center gap-2 mt-1.5 min-w-0">
+                  <StarRating value={reviews.get(i.product_id).rating} readOnly size="w-3.5 h-3.5" />
+                  {reviews.get(i.product_id).comment ? (
+                    <p className="text-xs text-gray-500 italic truncate">“{reviews.get(i.product_id).comment}”</p>
+                  ) : (
+                    <span className="text-xs text-gray-400">Your rating</span>
+                  )}
+                </div>
+              )}
             </div>
             <p className="shrink-0 text-sm font-bold text-brand-navy">{formatPrice(i.price * i.quantity)}</p>
           </div>
@@ -144,7 +158,10 @@ export default function Orders() {
   const [cancelTarget, setCancelTarget] = useState(null);
   const [returnTarget, setReturnTarget] = useState(null);
   const [reviewTarget, setReviewTarget] = useState(null);
-  const [reviewedIds, setReviewedIds] = useState(null);
+  // product id -> the customer's review of it. A Map rather than a set of ids because the cards
+  // show the rating back, not just whether one exists. Still answers .has(), which is all the
+  // review modal asks of it.
+  const [myReviews, setMyReviews] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -168,12 +185,12 @@ export default function Orders() {
   // whether a delivered order still has anything to review. Fetched once for the whole list
   // rather than per card, and refreshed after posting.
   const loadReviewed = () => api.get('/reviews/my')
-    .then(rows => setReviewedIds(new Set(rows.map(r => r.product_id))))
-    .catch(() => setReviewedIds(new Set()));
+    .then(rows => setMyReviews(new Map(rows.map(r => [r.product_id, r]))))
+    .catch(() => setMyReviews(new Map()));
   useEffect(() => { loadOrders(); loadReviewed(); }, []);
 
   const reviewableCount = (order) => (order.items || [])
-    .filter(i => !reviewedIds?.has(i.product_id))
+    .filter(i => !myReviews?.has(i.product_id))
     .length;
 
   const counts = useMemo(
@@ -234,6 +251,7 @@ export default function Orders() {
               key={o.id}
               order={o}
               onOpen={() => setSelectedOrder(o)}
+              reviews={myReviews}
               canReview={o.status === 'delivered' && !o.returned && reviewableCount(o) > 0}
               onReview={() => setReviewTarget(o)}
             />
@@ -280,7 +298,7 @@ export default function Orders() {
 
       <OrderReviewModal
         order={reviewTarget}
-        reviewed={reviewedIds}
+        reviewed={myReviews}
         onClose={() => setReviewTarget(null)}
         onSubmitted={(n) => {
           setReviewTarget(null);
