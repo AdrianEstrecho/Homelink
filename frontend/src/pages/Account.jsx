@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
-  User, Package, Calendar, LogOut, ShieldCheck, ArrowLeft, ArrowRight,
+  User, Package, Calendar, LogOut, ShieldCheck, ArrowRight,
   MapPinned, CreditCard, Bell, Lock, Star, LayoutDashboard, LifeBuoy, Clock, PackageCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -51,7 +51,6 @@ function greeting() {
 
 export default function Account() {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
   // The tab lives in the URL (same arrangement as My Orders) so the "View this return" button in
   // a return email can deep-link to ?tab=returns instead of dropping the customer on Profile.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -86,10 +85,6 @@ export default function Account() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-brand-navy transition mb-4">
-        <ArrowLeft className="w-4 h-4" /> Back
-      </button>
-
       {/* Header */}
       <Reveal className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-navy via-brand-blue to-brand-navy text-white p-6 sm:p-8 pb-14 sm:pb-16 shadow-lg shadow-brand-navy/10">
         <div className="absolute inset-0 opacity-10 pointer-events-none">
