@@ -241,6 +241,11 @@ await db.exec(`
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS needs_review INTEGER DEFAULT 0;
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS review_reason TEXT;
 
+  -- Whether this order's units are currently back on the shelf. Checkout deducts stock, so a
+  -- cancellation has to add it back — this flag records that it happened, so cancelling an
+  -- already-cancelled order (or two requests racing) can't credit the same units twice.
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS stock_restored INTEGER DEFAULT 0;
+
   CREATE TABLE IF NOT EXISTS order_items (
     id TEXT PRIMARY KEY,
     order_id TEXT REFERENCES orders(id) ON DELETE CASCADE,
@@ -564,7 +569,94 @@ await db.exec(`
     sort_order INTEGER DEFAULT 0,
     active INTEGER DEFAULT 1
   );
+
+  -- A customer's request to send delivered items back, honouring the 7-day window the seeded
+  -- Refund Policy promises. Deliberately two-step: 'approved' only tells the customer to ship it,
+  -- and 'received' is the state that actually adds stock — so inventory never counts units that
+  -- are still in transit. The specific products and quantities live in return_items.
+  CREATE TABLE IF NOT EXISTS return_requests (
+    id TEXT PRIMARY KEY,
+    order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+      CHECK(status IN ('pending','approved','rejected','received','cancelled')),
+    -- Pro-rated share of the order's discount already deducted (orders.discount is order-level
+    -- and never apportioned to lines, so a raw qty * price would over-refund anyone who used a
+    -- voucher). An estimate — staff confirm the real figure before paying out.
+    refund_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+    -- Whether the money has actually been moved. Kept separate from orders.payment_status, which
+    -- is order-level and can't express a partial return.
+    refund_status TEXT NOT NULL DEFAULT 'unpaid'
+      CHECK(refund_status IN ('unpaid','refunded','not_applicable')),
+    review_note TEXT,
+    reviewed_by TEXT REFERENCES users(id),
+    reviewed_at TIMESTAMPTZ,
+    received_by TEXT REFERENCES users(id),
+    received_at TIMESTAMPTZ,
+    refunded_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS idx_return_requests_order ON return_requests(order_id);
+  CREATE INDEX IF NOT EXISTS idx_return_requests_user ON return_requests(user_id);
+  CREATE INDEX IF NOT EXISTS idx_return_requests_status ON return_requests(status);
+
+  -- Anchored on order_item_id rather than (order_id, product_id): validateAndPriceCart doesn't
+  -- dedupe the incoming cart, so one order can legitimately carry the same product on two separate
+  -- lines. product_id is denormalised alongside it so the restock loop needs no join, and
+  -- unit_price is snapshotted so a later price change can't move an already-filed refund.
+  CREATE TABLE IF NOT EXISTS return_items (
+    id TEXT PRIMARY KEY,
+    return_id TEXT NOT NULL REFERENCES return_requests(id) ON DELETE CASCADE,
+    order_item_id TEXT NOT NULL REFERENCES order_items(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES products(id),
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    unit_price DOUBLE PRECISION NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_return_items_return ON return_items(return_id);
+  CREATE INDEX IF NOT EXISTS idx_return_items_order_item ON return_items(order_item_id);
+
+  -- Photo evidence, as base64 data URLs — the same way product/service/gallery images are stored,
+  -- since there's no upload pipeline and Render's disk is ephemeral. Its own table rather than a
+  -- column so that no SELECT on a returns list can drag megabytes of image data along with it.
+  CREATE TABLE IF NOT EXISTS return_photos (
+    id TEXT PRIMARY KEY,
+    return_id TEXT NOT NULL REFERENCES return_requests(id) ON DELETE CASCADE,
+    image TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_return_photos_return ON return_photos(return_id);
+
+  -- Every returnable-lines query filters order_items by order_id, as do the existing per-order
+  -- loops in GET /orders/my and GET /admin/orders. There has never been an index for it.
+  CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+
+  -- When the order was actually handed over — the start of the 7-day return window. Until now
+  -- this was only recoverable from audit_logs, the way getOrderTimeline() derives it at read time.
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
 `);
+
+// Ports what getOrderTimeline() has always had to derive at read time: audit_logs is the only
+// existing record of when an order was marked delivered. Guarded on there being anything to fix,
+// like the content seeds below, so a warm database skips the audit_logs scan entirely on later
+// boots. MIN() picks the first transition — PUT /admin/orders/:id/status logs unconditionally, so
+// an order re-saved as 'delivered' three times has three rows and only the earliest is the real
+// one. details is TEXT holding JSON.stringify output (no spaces), so LIKE matches exactly and
+// avoids a ::json cast that would throw on a malformed row.
+if (await db.prepare("SELECT 1 FROM orders WHERE status = 'delivered' AND delivered_at IS NULL LIMIT 1").get()) {
+  await db.prepare(`
+    UPDATE orders o SET delivered_at = src.at
+    FROM (
+      SELECT a.entity_id, MIN(a.created_at) AS at
+      FROM audit_logs a
+      WHERE a.action = 'order.status_update'
+        AND a.entity_type = 'order'
+        AND a.details LIKE '%"to":"delivered"%'
+      GROUP BY a.entity_id
+    ) src
+    WHERE o.id = src.entity_id AND o.status = 'delivered' AND o.delivered_at IS NULL
+  `).run();
+}
 
 // One-time content seed for the two tables above, guarded on an empty table so it only ever
 // runs once per environment — ports the copy that used to be hardcoded in FAQ.jsx/Policies.jsx

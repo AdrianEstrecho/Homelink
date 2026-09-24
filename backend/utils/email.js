@@ -342,3 +342,98 @@ export function bookingStatusEmail(booking, service, user, status) {
     `),
   });
 }
+
+const RETURN_STATUS_META = {
+  pending: { bg: '#fef3c7', fg: '#92400e', label: 'Pending Review', message: "we've received your return request and a member of our team will review it shortly." },
+  approved: { bg: '#dbeafe', fg: '#1e40af', label: 'Approved', message: 'your return has been approved. Please send the items back to us so we can complete your refund.' },
+  rejected: { bg: '#fee2e2', fg: '#991b1b', label: 'Not Approved', message: "we've reviewed your return request and weren't able to approve it this time." },
+  received: { bg: '#dcfce7', fg: '#166534', label: 'Received', message: "we've received your returned items. Your refund is now being processed." },
+};
+
+// Returned items, laid out like the ITEMS block on an order confirmation so a return reads as a
+// mirror of the receipt it came from.
+function returnItemRows(items) {
+  return items.map((i) => `
+    <tr>
+      <td style="padding:7px 0;border-bottom:1px dashed #dfe3e8;font-family:${MONO};font-size:12px;color:#14181f;vertical-align:top">
+        ${i.name}<br><span style="color:#9ca3af;font-size:11px">Qty ${i.quantity}</span>
+      </td>
+    </tr>`).join('');
+}
+
+const returnRefOf = (id) => `RET-${String(id).slice(0, 8).toUpperCase()}`;
+const orderRefOf = (id) => `#${String(id).slice(0, 8).toUpperCase()}`;
+
+// Sent the moment a customer files a return, so they have the reference number in writing —
+// they have no in-app notification feed, so email is the only channel that reaches them.
+export function returnSubmittedEmail(ret, order, items, user) {
+  const meta = RETURN_STATUS_META.pending;
+  return sendEmail({
+    to: user.email,
+    subject: `Return request ${returnRefOf(ret.id)} received`,
+    html: emailShell(`
+      <h2 style="margin:0 0 6px;text-align:center">Return Request Received</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, ${meta.message}</p>
+      <div style="text-align:center;margin:14px 0">${statusBadge(meta)}</div>
+      ${receiptMeta(returnRefOf(ret.id), `Order ${orderRefOf(order.id)}`)}
+      ${sectionLabel('ITEMS TO RETURN')}
+      <table style="width:100%;border-collapse:collapse">${returnItemRows(items)}</table>
+      <p style="margin:16px 0 0;font-family:${MONO};font-size:12px"><strong>Your reason:</strong> ${ret.reason}</p>
+      <p style="margin:14px 0 0;color:#6b7280;font-size:12px">Please hold on to the items until we confirm your return is approved. We'll email you as soon as it's been reviewed.</p>
+      ${ctaButton('Track this return', `${frontendUrl()}/account?tab=returns`)}
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this return? Reply to this email or reach us from your HomeLink account.</p>
+    `),
+  });
+}
+
+// decision is 'approved' or 'rejected'. The approval copy carries the ship-back instructions;
+// the rejection copy carries the clerk's note, which is the only explanation the customer gets.
+export function returnDecisionEmail(ret, order, user, decision, note) {
+  const meta = RETURN_STATUS_META[decision] || RETURN_STATUS_META.pending;
+  const body = decision === 'approved'
+    ? `<p style="margin:16px 0 0;color:#4b5563;font-size:13px">Please send the items back to us at the address below. Once they arrive we'll confirm your refund of <strong>${money(ret.refund_amount)}</strong>, which takes 5-10 business days to reach your original payment method.</p>
+       <p style="margin:10px 0 0;font-family:${MONO};font-size:12px">${process.env.COMPANY_ADDRESS || 'HomeLink'}</p>`
+    : '';
+  const noteBlock = note
+    ? `<p style="margin:16px 0 0;font-family:${MONO};font-size:12px;background:#fafbfc;border:1px dashed #c7cad1;padding:12px"><strong>Note from our team:</strong><br>${note}</p>`
+    : '';
+
+  return sendEmail({
+    to: user.email,
+    subject: `Return ${returnRefOf(ret.id)} has been ${decision === 'approved' ? 'approved' : 'reviewed'}`,
+    html: emailShell(`
+      <h2 style="margin:0 0 6px;text-align:center">Return ${decision === 'approved' ? 'Approved' : 'Reviewed'}</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, ${meta.message}</p>
+      <div style="text-align:center;margin:14px 0">${statusBadge(meta)}</div>
+      ${receiptMeta(returnRefOf(ret.id), `Order ${orderRefOf(order.id)}`)}
+      ${noteBlock}
+      ${body}
+      ${ctaButton('View this return', `${frontendUrl()}/account?tab=returns`)}
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this return? Reply to this email or reach us from your HomeLink account.</p>
+    `),
+  });
+}
+
+// Sent once the goods are physically back and stock has been credited — the point at which the
+// refund actually becomes payable.
+export function returnReceivedEmail(ret, order, user, items) {
+  const meta = RETURN_STATUS_META.received;
+  return sendEmail({
+    to: user.email,
+    subject: `We've received your return ${returnRefOf(ret.id)}`,
+    html: emailShell(`
+      <h2 style="margin:0 0 6px;text-align:center">Return Received</h2>
+      <p style="text-align:center;color:#4b5563">Hi ${user.first_name}, ${meta.message}</p>
+      <div style="text-align:center;margin:14px 0">${statusBadge(meta)}</div>
+      ${receiptMeta(returnRefOf(ret.id), `Order ${orderRefOf(order.id)}`)}
+      ${sectionLabel('ITEMS RECEIVED')}
+      <table style="width:100%;border-collapse:collapse">${returnItemRows(items)}</table>
+      <table style="width:100%;border-collapse:collapse;margin-top:8px">
+        ${detailRow('Refund', money(ret.refund_amount), true)}
+      </table>
+      <p style="margin:14px 0 0;color:#6b7280;font-size:12px">Refunds are processed within 5-10 business days to your original payment method.</p>
+      ${ctaButton('View this return', `${frontendUrl()}/account?tab=returns`)}
+      <p style="color:#9ca3af;font-size:12px;text-align:center;margin-top:24px">Questions about this return? Reply to this email or reach us from your HomeLink account.</p>
+    `),
+  });
+}

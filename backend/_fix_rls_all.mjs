@@ -13,7 +13,7 @@ const tables = [
   'pending_checkouts', 'bookings', 'pending_bookings', 'vouchers',
   'announcements', 'gallery', 'addresses', 'payment_methods', 'reviews',
   'wishlists', 'support_messages', 'support_replies', 'audit_logs',
-  'change_requests', 'suppliers', 'notifications', 'staff_messages',
+  'change_requests', 'suppliers', 'notifications', 'staff_messages', 'return_requests', 'return_items', 'return_photos',
 ];
 
 await client.connect();

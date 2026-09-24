@@ -11,11 +11,13 @@ import authRoutes from './routes/auth.js';
 import productRoutes from './routes/products.js';
 import serviceRoutes from './routes/services.js';
 import orderRoutes from './routes/orders.js';
+import returnRoutes from './routes/returns.js';
 import bookingRoutes from './routes/bookings.js';
 import promoRoutes from './routes/promos.js';
 import adminRoutes from './routes/admin.js';
 import employeeRoutes from './routes/employee.js';
 import addressRoutes from './routes/addresses.js';
+import geoRoutes from './routes/geo.js';
 import paymentMethodRoutes from './routes/paymentMethods.js';
 import reviewRoutes from './routes/reviews.js';
 import supportRoutes from './routes/support.js';
@@ -76,10 +78,12 @@ app.get('/api/policies', async (req, res) => {
   res.json(await db.prepare('SELECT * FROM policies WHERE active = 1 ORDER BY sort_order').all());
 });
 
+app.use('/api/geo', geoRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/returns', returnRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/promos', promoRoutes);
 app.use('/api/admin', adminRoutes);

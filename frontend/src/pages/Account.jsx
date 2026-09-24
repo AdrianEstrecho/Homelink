@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User, Package, Calendar, LogOut, ShieldCheck, ArrowLeft, ArrowRight,
-  MapPinned, CreditCard, Bell, Lock, Star, LayoutDashboard, LifeBuoy, Clock,
+  MapPinned, CreditCard, Bell, Lock, Star, LayoutDashboard, LifeBuoy, Clock, PackageCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -16,6 +16,7 @@ import PaymentTab from '../components/account/PaymentTab';
 import NotificationsTab from '../components/account/NotificationsTab';
 import SecurityTab from '../components/account/SecurityTab';
 import ReviewsTab from '../components/account/ReviewsTab';
+import ReturnsTab from '../components/account/ReturnsTab';
 import SupportTab from '../components/account/SupportTab';
 
 const AVATAR_COLORS = ['bg-brand-navy', 'bg-brand-blue', 'bg-[#00806f]', 'bg-[#c8461a]'];
@@ -28,6 +29,7 @@ const TABS = [
   { key: 'notifications', label: 'Notifications', icon: Bell, Component: NotificationsTab },
   { key: 'security', label: 'Security', icon: Lock, Component: SecurityTab },
   { key: 'reviews', label: 'Reviews', icon: Star, Component: ReviewsTab },
+  { key: 'returns', label: 'Returns', icon: PackageCheck, Component: ReturnsTab },
   { key: 'support', label: 'Support', icon: LifeBuoy, Component: SupportTab },
 ];
 
@@ -50,7 +52,17 @@ function greeting() {
 export default function Account() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [tab, setTab] = useState('profile');
+  // The tab lives in the URL (same arrangement as My Orders) so the "View this return" button in
+  // a return email can deep-link to ?tab=returns instead of dropping the customer on Profile.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const tab = TABS.some(t => t.key === requestedTab) ? requestedTab : 'profile';
+  const setTab = (key) => {
+    const next = new URLSearchParams(searchParams);
+    if (key === 'profile') next.delete('tab');
+    else next.set('tab', key);
+    setSearchParams(next, { replace: true });
+  };
   const [counts, setCounts] = useState({ orders: null, bookings: null });
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);

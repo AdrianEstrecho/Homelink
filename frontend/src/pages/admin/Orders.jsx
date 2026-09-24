@@ -19,13 +19,23 @@ export default function AdminOrders() {
   const [editingId, setEditingId] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [confirmStatus, setConfirmStatus] = useState(null);
+  const [pageError, setPageError] = useState('');
 
   const load = () => api.get('/admin/orders').then(setOrders).catch(() => {});
   useEffect(() => { load(); }, []);
 
+  // Cancelling returns the order's units to stock and reinstating one takes them back out, so
+  // the server can refuse the change when those units have since been sold — show why.
   const updateStatus = async (id, status) => {
-    await api.put(`/admin/orders/${id}/status`, { status });
-    setEditingId(null);
+    setPageError('');
+    try {
+      await api.put(`/admin/orders/${id}/status`, { status });
+    } catch (err) {
+      setPageError(err.message);
+      return;
+    } finally {
+      setEditingId(null);
+    }
     load();
   };
 
@@ -59,6 +69,8 @@ export default function AdminOrders() {
         onConfirm={confirmStatusChange}
         onCancel={() => setConfirmStatus(null)}
       />
+
+      {pageError && <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pageError}</p>}
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <TabButton active={tab === 'all'} onClick={() => setTab('all')}>All ({counts.all})</TabButton>

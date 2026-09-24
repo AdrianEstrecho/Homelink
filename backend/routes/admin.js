@@ -4,12 +4,14 @@ import { v4 as uuid } from 'uuid';
 import db, { withTransaction } from '../db/database.js';
 import { authenticate, authorize, authorizeAdminOr } from '../middleware/auth.js';
 import { logActivity } from '../utils/audit.js';
+import { releaseOrderStock, reclaimOrderStock } from '../utils/orderStock.js';
 import { generateStaffCode } from '../utils/staffCode.js';
 import { notifyUser } from '../utils/notify.js';
 import { createChangeRequest } from '../utils/changeRequests.js';
 import { formatTicketNo } from '../utils/ticketNumber.js';
 import { generateVerificationCode, hashVerificationCode, STAFF_RESET_CODE_TTL_MS } from '../utils/verificationCode.js';
-import { orderStatusEmail, bookingConfirmedEmail, bookingStatusEmail } from '../utils/email.js';
+import { orderStatusEmail, bookingConfirmedEmail, bookingStatusEmail, returnDecisionEmail, returnReceivedEmail } from '../utils/email.js';
+import { returnRef } from '../utils/returns.js';
 import { shapeProduct, shapeService, normalizeSpecifications, normalizeStringList } from '../utils/catalogShape.js';
 
 const router = Router();
@@ -565,8 +567,36 @@ router.get('/orders/stats', authorizeAdminOr('general_staff'), async (req, res) 
 
 router.put('/orders/:id/status', authorizeAdminOr('general_staff', 'inventory_clerk'), async (req, res) => {
   const order = await db.prepare('SELECT status, payment_method, payment_status FROM orders WHERE id = ?').get(req.params.id);
-  await db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(req.body.status, req.params.id);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  // Checkout reserved this order's units by deducting them, so cancelling has to put them back
+  // — and reinstating a cancelled order has to take them off the shelf again, or staff could
+  // mint stock by toggling a status. Each stock move rides in the same transaction as the
+  // status change it belongs to, so the two can never drift apart.
+  const cancelling = req.body.status === 'cancelled' && order.status !== 'cancelled';
+  const reinstating = order.status === 'cancelled' && req.body.status !== 'cancelled';
+  let stockUnits = 0;
+  try {
+    await withTransaction(async (tx) => {
+      if (reinstating) ({ units: stockUnits } = await reclaimOrderStock(req.params.id, tx));
+      await tx.prepare('UPDATE orders SET status = ? WHERE id = ?').run(req.body.status, req.params.id);
+      if (cancelling) ({ units: stockUnits } = await releaseOrderStock(req.params.id, tx));
+    });
+  } catch (err) {
+    if (err.status === 409) return res.status(409).json({ error: err.message });
+    throw err;
+  }
   await logActivity(req, 'order.status_update', 'order', req.params.id, { from: order?.status, to: req.body.status });
+  if (cancelling || reinstating) {
+    await logActivity(req, cancelling ? 'order.stock_returned' : 'order.stock_reserved', 'order', req.params.id, { units: stockUnits });
+  }
+
+  // The 7-day return window runs from here. Guarded on delivered_at IS NULL because this route
+  // writes on every save, not only on a real transition — re-saving an already-delivered order
+  // must not restart the customer's clock.
+  if (req.body.status === 'delivered') {
+    await db.prepare('UPDATE orders SET delivered_at = now() WHERE id = ? AND delivered_at IS NULL').run(req.params.id);
+  }
 
   // Cash on delivery collects the money at the door, so "delivered" *is* the payment event —
   // settle it here rather than leaving staff to remember a second click on every COD order.
@@ -602,6 +632,217 @@ router.put('/orders/:id/payment-status', authorizeAdminOr('general_staff', 'inve
   await db.prepare('UPDATE orders SET payment_status = ? WHERE id = ?').run(paymentStatus, req.params.id);
   await logActivity(req, 'order.payment_status_update', 'order', req.params.id, { from: order.payment_status, to: paymentStatus });
   res.json({ message: 'Payment status updated' });
+});
+
+// Returns — clerk-only, matching "admin or inventory clerk". general_staff is deliberately left
+// out even though it can touch orders: approving a return moves stock and money.
+const RETURN_STATUSES = ['pending', 'approved', 'rejected', 'received', 'cancelled'];
+
+router.get('/returns', authorizeAdminOr('inventory_clerk'), async (req, res) => {
+  const status = RETURN_STATUSES.includes(req.query.status) ? req.query.status : 'all';
+
+  // NEVER add rp.image to this list — base64 photos would make every page load of the returns
+  // queue multi-megabyte. They're fetched one return at a time from /returns/:id/photos.
+  const rows = await db.prepare(`
+    SELECT rr.id, rr.order_id, rr.user_id, rr.reason, rr.status, rr.refund_amount,
+           rr.refund_status, rr.review_note, rr.created_at, rr.reviewed_at, rr.received_at,
+           u.first_name, u.last_name, u.email, u.phone,
+           o.total AS order_total, o.payment_status, o.payment_method, o.delivered_at,
+           rev.first_name AS reviewer_first, rev.last_name AS reviewer_last,
+           (SELECT COUNT(*) FROM return_photos rp WHERE rp.return_id = rr.id) AS photo_count
+    FROM return_requests rr
+    JOIN users u ON u.id = rr.user_id
+    JOIN orders o ON o.id = rr.order_id
+    LEFT JOIN users rev ON rev.id = rr.reviewed_by
+    WHERE (? = 'all' OR rr.status = ?)
+    ORDER BY rr.created_at DESC
+  `).all(status, status);
+
+  const counts = await db.prepare('SELECT status, COUNT(*) as count FROM return_requests GROUP BY status').all();
+  if (rows.length === 0) return res.json({ returns: [], counts });
+
+  const ids = rows.map((r) => r.id);
+  const items = await db.prepare(`
+    SELECT ri.return_id, ri.quantity, ri.unit_price, ri.product_id, p.name, p.archived
+    FROM return_items ri JOIN products p ON p.id = ri.product_id
+    WHERE ri.return_id IN (${ids.map(() => '?').join(',')})
+  `).all(...ids);
+
+  const byReturn = {};
+  for (const i of items) (byReturn[i.return_id] ||= []).push(i);
+
+  res.json({ returns: rows.map((r) => ({ ...r, items: byReturn[r.id] || [] })), counts });
+});
+
+router.get('/returns/:id/photos', authorizeAdminOr('inventory_clerk'), async (req, res) => {
+  res.json(await db.prepare('SELECT id, image FROM return_photos WHERE return_id = ? ORDER BY sort_order').all(req.params.id));
+});
+
+// Approve and reject share a shape: a conditional UPDATE that only fires from 'pending', so two
+// clerks acting on the same return at once can't both win. changes === 0 is the failure signal,
+// the same idiom checkout uses for stock.
+async function reviewReturn(req, res, decision, note) {
+  const { changes } = await db.prepare(`
+    UPDATE return_requests SET status = ?, reviewed_by = ?, reviewed_at = now(), review_note = ?
+    WHERE id = ? AND status = 'pending'
+  `).run(decision, req.user.id, note || null, req.params.id);
+  if (!changes) return res.status(409).json({ error: 'This return has already been reviewed.' });
+
+  const ret = await db.prepare('SELECT * FROM return_requests WHERE id = ?').get(req.params.id);
+  const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(ret.order_id);
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(ret.user_id);
+
+  await logActivity(req, decision === 'approved' ? 'return.approve' : 'return.reject', 'return', ret.id, {
+    customerName: `${user.first_name} ${user.last_name}`,
+    orderRef: order.id.slice(0, 8).toUpperCase(),
+    returnRef: returnRef(ret.id),
+    refundAmount: ret.refund_amount,
+    note: note || null,
+  });
+
+  if (user?.notify_orders) {
+    returnDecisionEmail(ret, order, user, decision, note).catch((emailErr) => {
+      console.error(`Failed to send return ${decision} email for return ${ret.id}:`, emailErr.message);
+    });
+  }
+
+  res.json({ message: `Return ${decision}` });
+}
+
+router.put('/returns/:id/approve', authorizeAdminOr('inventory_clerk'), async (req, res) => {
+  await reviewReturn(req, res, 'approved', (req.body?.note || '').trim());
+});
+
+router.put('/returns/:id/reject', authorizeAdminOr('inventory_clerk'), async (req, res) => {
+  const note = (req.body?.note || '').trim();
+  if (note.length < 5) return res.status(400).json({ error: 'Please give the customer a reason for the rejection.' });
+  await reviewReturn(req, res, 'rejected', note);
+});
+
+// The only irreversible write in the feature: this is where returned units actually go back on
+// the shelf. Deliberately separate from approval, so inventory never counts stock that is still
+// in transit. Does NOT re-check the order's status — by now the goods are physically here, and a
+// clerk moving the order around must not strand them.
+router.put('/returns/:id/receive', authorizeAdminOr('inventory_clerk'), async (req, res) => {
+  const result = await withTransaction(async (tx) => {
+    // Locking the return first is the idempotency gate: a double-clicked button blocks here, and
+    // the second pass sees 'received' and restocks nothing.
+    const ret = await tx.prepare('SELECT * FROM return_requests WHERE id = ? FOR UPDATE').get(req.params.id);
+    if (!ret) return { notFound: true };
+    if (ret.status === 'received') return { alreadyReceived: true };
+    if (ret.status !== 'approved') return { badState: ret.status };
+
+    // Taken before the product locks even though it isn't written until the end, so this
+    // transaction and a concurrent order cancellation always take their locks the same way round.
+    const order = await tx.prepare('SELECT * FROM orders WHERE id = ? FOR UPDATE').get(ret.order_id);
+
+    // One order can carry the same product on two lines (validateAndPriceCart doesn't dedupe the
+    // cart), so aggregate before touching products — otherwise the loop locks one row twice and
+    // the deterministic ordering below stops meaning anything.
+    const lines = await tx.prepare('SELECT product_id, quantity FROM return_items WHERE return_id = ?').all(ret.id);
+    const byProduct = new Map();
+    for (const l of lines) byProduct.set(l.product_id, (byProduct.get(l.product_id) || 0) + l.quantity);
+
+    // Same localeCompare ordering fulfillOrder and orderStock use, so a return being received and
+    // an order being placed over the same products wait on each other instead of deadlocking.
+    const ordered = [...byProduct.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+    // Fused add, never a read-then-write: two clerks receiving returns for the same product at
+    // once can't clobber each other's delta the way applyProductUpdate's addStock can.
+    const restock = tx.prepare('UPDATE products SET stock = stock + ? WHERE id = ?');
+    const restocked = [];
+    for (const [productId, quantity] of ordered) {
+      const { changes } = await restock.run(quantity, productId);
+      if (!changes) return { missingProduct: true };
+      // Already locked by our own UPDATE, so this read costs nothing and gives the post-value
+      // for the audit entry.
+      const p = await tx.prepare('SELECT name, stock FROM products WHERE id = ?').get(productId);
+      restocked.push({ productId, name: p.name, quantity, from: p.stock - quantity, to: p.stock });
+    }
+
+    await tx.prepare("UPDATE return_requests SET status = 'received', received_by = ?, received_at = now() WHERE id = ?")
+      .run(req.user.id, ret.id);
+
+    // Only a genuinely paid order is touched, and only once every unit on it has come back. A
+    // partial return leaves payment_status alone: every revenue query sums WHERE
+    // payment_status='paid', so flipping it would drop the whole order total from reported
+    // revenue rather than just the returned share. Runs after the status write above so the
+    // subquery can see this return as received.
+    const { remaining } = await tx.prepare(`
+      SELECT (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi WHERE oi.order_id = ?)
+           - (SELECT COALESCE(SUM(ri.quantity), 0) FROM return_items ri
+              JOIN return_requests rr ON rr.id = ri.return_id
+              WHERE rr.order_id = ? AND rr.status = 'received') AS remaining
+    `).get(ret.order_id, ret.order_id);
+
+    let paymentStatusTo = null;
+    if (order.payment_status === 'paid' && Number(remaining) <= 0) {
+      await tx.prepare("UPDATE orders SET payment_status = 'refunded' WHERE id = ?").run(order.id);
+      paymentStatusTo = 'refunded';
+    }
+
+    return { ret, order, restocked, paymentStatusTo };
+  });
+
+  if (result.notFound) return res.status(404).json({ error: 'Return request not found' });
+  if (result.alreadyReceived) return res.status(409).json({ error: 'These items have already been received.' });
+  if (result.badState) return res.status(409).json({ error: 'Only an approved return can be marked received.' });
+  if (result.missingProduct) return res.status(409).json({ error: 'A product on this return no longer exists in the catalog.' });
+
+  const { ret, order, restocked, paymentStatusTo } = result;
+  const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(ret.user_id);
+  const actor = await db.prepare('SELECT first_name, last_name, staff_code FROM users WHERE id = ?').get(req.user.id);
+  const units = restocked.reduce((n, r) => n + r.quantity, 0);
+
+  await logActivity(req, 'return.received', 'return', ret.id, {
+    customerName: `${user.first_name} ${user.last_name}`,
+    orderRef: order.id.slice(0, 8).toUpperCase(),
+    returnRef: returnRef(ret.id),
+    itemCount: units,
+    refundAmount: ret.refund_amount,
+    paymentStatusTo,
+  });
+
+  // A second entry per product, against the product itself, reusing the existing
+  // 'product.restock' action so a clerk reading a product's history sees returned units in the
+  // same feed as manual restocks. Its describer needs all six of these keys.
+  for (const r of restocked) {
+    await logActivity(req, 'product.restock', 'product', r.productId, {
+      name: r.name, quantity: r.quantity, from: r.from, to: r.to,
+      clerkCode: actor.staff_code, clerkName: `${actor.first_name} ${actor.last_name}`,
+      source: 'return',
+    });
+  }
+
+  if (user?.notify_orders) {
+    returnReceivedEmail(ret, order, user, restocked).catch((emailErr) => {
+      console.error(`Failed to send return received email for return ${ret.id}:`, emailErr.message);
+    });
+  }
+
+  res.json({ message: 'Return received', restocked, units });
+});
+
+// Bookkeeping only — nothing here moves money. PayMongo has no refund call wired up, so a clerk
+// pays the customer back by hand and then records it here.
+router.put('/returns/:id/refund-status', authorizeAdminOr('inventory_clerk'), async (req, res) => {
+  const { refundStatus } = req.body;
+  if (!['unpaid', 'refunded', 'not_applicable'].includes(refundStatus)) {
+    return res.status(400).json({ error: 'Invalid refund status' });
+  }
+  const ret = await db.prepare('SELECT refund_status, order_id FROM return_requests WHERE id = ?').get(req.params.id);
+  if (!ret) return res.status(404).json({ error: 'Return request not found' });
+
+  await db.prepare('UPDATE return_requests SET refund_status = ?, refunded_at = ? WHERE id = ?')
+    .run(refundStatus, refundStatus === 'refunded' ? new Date() : null, req.params.id);
+  await logActivity(req, 'return.refund_mark', 'return', req.params.id, {
+    returnRef: returnRef(req.params.id),
+    orderRef: ret.order_id.slice(0, 8).toUpperCase(),
+    from: ret.refund_status,
+    to: refundStatus,
+  });
+
+  res.json({ message: 'Refund status updated' });
 });
 
 // Bookings — booking coordinators (and general staff, inventory clerks) assign technicians and update status alongside admins.

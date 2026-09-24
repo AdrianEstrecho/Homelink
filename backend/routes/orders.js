@@ -1,8 +1,10 @@
 import { Router } from 'express';
-import db from '../db/database.js';
+import db, { withTransaction } from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
+import { releaseOrderStock } from '../utils/orderStock.js';
+import { getReturnableTotals, getReturnCounts, canReturnOrder, returnWindowClosesAt } from '../utils/returns.js';
 import { logActivity } from '../utils/audit.js';
 import { orderStatusEmail } from '../utils/email.js';
 import { ORDER_STEPS, ORIGIN, getOrderTimeline, getOrderDestination, haversineKm, estimateShippingDays } from '../utils/tracking.js';
@@ -49,13 +51,21 @@ router.post('/', authenticate, async (req, res) => {
 
 router.get('/my', authenticate, async (req, res) => {
   const orders = await db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
+  // One query for every order, not one per order — this loop is already N+1 on items.
+  const returnable = await getReturnableTotals(db, req.user.id);
+  const returnCounts = await getReturnCounts(db, req.user.id);
   const result = [];
   for (const o of orders) {
     const items = await db.prepare(`
       SELECT oi.*, p.name, p.image, p.slug FROM order_items oi
       JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?
     `).all(o.id);
-    result.push({ ...o, items });
+    result.push({
+      ...o,
+      items,
+      canReturn: canReturnOrder(o, returnable.get(o.id) ?? 0),
+      returnCount: returnCounts.get(o.id) ?? 0,
+    });
   }
   res.json(result);
 });
@@ -67,7 +77,13 @@ router.get('/:id', authenticate, async (req, res) => {
     SELECT oi.*, p.name, p.image, p.slug FROM order_items oi
     JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?
   `).all(order.id);
-  res.json({ ...order, items });
+  const returnable = await getReturnableTotals(db, req.user.id);
+  res.json({
+    ...order,
+    items,
+    canReturn: canReturnOrder(order, returnable.get(order.id) ?? 0),
+    returnWindowClosesAt: order.status === 'delivered' ? returnWindowClosesAt(order) : null,
+  });
 });
 
 router.get('/:id/tracking', authenticate, async (req, res) => {
@@ -108,12 +124,19 @@ router.put('/:id/cancel', authenticate, async (req, res) => {
   const reason = (req.body?.reason || '').trim();
   if (!reason) return res.status(400).json({ error: 'A cancellation reason is required' });
 
-  await db.prepare('UPDATE orders SET status = ?, cancel_reason = ? WHERE id = ?').run('cancelled', reason, order.id);
+  // The units were taken off the shelf at checkout, so cancelling puts them straight back —
+  // in the same transaction as the status change, so stock can never be credited for an order
+  // that failed to cancel (or a cancelled order whose stock silently stayed reserved).
+  const { units } = await withTransaction(async (tx) => {
+    await tx.prepare('UPDATE orders SET status = ?, cancel_reason = ? WHERE id = ?').run('cancelled', reason, order.id);
+    return releaseOrderStock(order.id, tx);
+  });
 
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   await logActivity(req, 'order.cancel', 'order', order.id, {
     customerName: `${user.first_name} ${user.last_name}`,
     reason,
+    unitsReturned: units,
   });
   if (user?.notify_orders) {
     orderStatusEmail(order, user, 'cancelled').catch((emailErr) => {

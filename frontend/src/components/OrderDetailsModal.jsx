@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, MapPin, CreditCard, Printer, Download, CheckCircle2, Truck } from 'lucide-react';
+import { X, MapPin, CreditCard, Printer, Download, CheckCircle2, Truck, RotateCcw } from 'lucide-react';
 import { formatPrice, statusColor } from '../api/client';
 import { downloadReceiptPdf } from '../utils/receiptPdf';
 import SafeImage from './SafeImage';
 import { paymentMethodLabel } from '../constants/paymentMethods';
 
 export default function OrderDetailsModal({
-  order, onClose, onDismiss, person, personLabel = 'Customer', onCancelOrder, onTrackOrder, justConfirmed = false,
+  order, onClose, onDismiss, person, personLabel = 'Customer', onCancelOrder, onTrackOrder, onReturnOrder, justConfirmed = false,
   previewing = false, onConfirm, confirmLoading = false, error,
 }) {
   // On the just-confirmed screen, X/backdrop ("I'm done here") and "Continue to My Orders"
@@ -204,6 +204,17 @@ export default function OrderDetailsModal({
               className="no-print w-full border border-red-200 text-red-600 rounded-lg py-2.5 font-semibold text-sm hover:bg-red-50 transition"
             >
               Cancel Order
+            </button>
+          )}
+
+          {/* canReturn comes from the server (delivered, inside the 7-day window, and with units
+              not already spoken for) — the modal never works it out from the order itself. */}
+          {onReturnOrder && order.canReturn && (
+            <button
+              onClick={() => onReturnOrder(order)}
+              className="no-print w-full border border-gray-300 text-brand-navy rounded-lg py-2.5 font-semibold text-sm hover:bg-gray-50 transition flex items-center justify-center gap-2"
+            >
+              <RotateCcw className="w-4 h-4" /> Return or Refund
             </button>
           )}
         </div>
