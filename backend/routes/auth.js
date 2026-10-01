@@ -22,6 +22,7 @@ function signAuthToken(user) {
 function toUserResponse(user) {
   return {
     id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, phone: user.phone, address: user.address, role: user.role, position: user.position, createdAt: user.created_at,
+    avatar: user.avatar || null,
     notifyOrders: !!user.notify_orders, notifyBookings: !!user.notify_bookings, notifyPromotions: !!user.notify_promotions, twoFactorEnabled: !!user.two_factor_enabled,
   };
 }
@@ -332,6 +333,29 @@ router.put('/profile', authenticate, async (req, res) => {
   await db.prepare('UPDATE users SET first_name=?, last_name=?, phone=?, address=? WHERE id=?')
     .run(firstName, lastName, phone || '', address || '', req.user.id);
   res.json({ message: 'Profile updated' });
+});
+
+// Profile photo, stored as a base64 data URL like product and gallery images. The client crops
+// it to a small square JPEG first (~50KB), so the cap here is only a backstop. null removes it.
+const AVATAR_PATTERN = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/]+=*$/;
+const MAX_AVATAR_CHARS = 1_000_000;
+
+router.put('/avatar', authenticate, async (req, res) => {
+  try {
+    const { avatar } = req.body;
+    if (avatar !== null) {
+      if (typeof avatar === 'string' && avatar.length > MAX_AVATAR_CHARS) {
+        return res.status(400).json({ error: 'That photo is too large. Please choose a smaller image.' });
+      }
+      if (typeof avatar !== 'string' || !AVATAR_PATTERN.test(avatar)) {
+        return res.status(400).json({ error: 'Please upload a JPG, PNG, WebP, or GIF image.' });
+      }
+    }
+    await db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, req.user.id);
+    res.json({ avatar });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.put('/notifications', authenticate, async (req, res) => {

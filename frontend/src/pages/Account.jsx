@@ -10,6 +10,7 @@ import Reveal from '../components/Reveal';
 import CountUp from '../components/CountUp';
 import ConfirmDialog from '../components/ConfirmDialog';
 import PageTransitionOverlay from '../components/PageTransitionOverlay';
+import EditableAvatar from '../components/account/EditableAvatar';
 import ProfileTab from '../components/account/ProfileTab';
 import AddressesTab from '../components/account/AddressesTab';
 import PaymentTab from '../components/account/PaymentTab';
@@ -103,9 +104,9 @@ export default function Account() {
         <div aria-hidden="true" className="float-blob-delayed absolute -bottom-40 right-[10%] w-[28rem] h-[28rem] bg-brand-teal/20 rounded-full blur-3xl pointer-events-none" />
         <Reveal className={`${CONTAINER} relative pt-10 sm:pt-12 pb-24 sm:pb-28`}>
           <div className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-7">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white text-brand-navy flex items-center justify-center text-2xl sm:text-3xl font-display font-extrabold ring-4 ring-white/15 shadow-xl shadow-black/20 shrink-0">
+            <EditableAvatar className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white text-brand-navy flex items-center justify-center text-2xl sm:text-3xl font-display font-extrabold ring-4 ring-white/15 shadow-xl shadow-black/20">
               {initials(user?.firstName, user?.lastName)}
-            </div>
+            </EditableAvatar>
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-orange mb-2">{greeting()}</p>
               <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight [overflow-wrap:anywhere]">

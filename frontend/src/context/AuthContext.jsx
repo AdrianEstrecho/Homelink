@@ -62,6 +62,12 @@ export function AuthProvider({ children }) {
     setUser(prev => ({ ...prev, ...form }));
   };
 
+  // A data URL to set the photo, or null to remove it.
+  const updateAvatar = async (avatar) => {
+    const data = await api.put('/auth/avatar', { avatar });
+    setUser(prev => ({ ...prev, avatar: data.avatar }));
+  };
+
   const refreshUser = async () => {
     const data = await api.get('/auth/me');
     setUser(data);
@@ -69,7 +75,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, verifyTwoFactor, register, loginWithGoogle, logout, updateProfile, refreshUser, setTwoFactorEnabled, sendTwoFactorSetupCode }}>
+    <AuthContext.Provider value={{ user, loading, login, verifyTwoFactor, register, loginWithGoogle, logout, updateProfile, updateAvatar, refreshUser, setTwoFactorEnabled, sendTwoFactorSetupCode }}>
       {children}
     </AuthContext.Provider>
   );

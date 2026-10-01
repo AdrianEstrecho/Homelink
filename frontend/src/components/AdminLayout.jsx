@@ -323,8 +323,8 @@ export default function AdminLayout({ children, title, subtitle }) {
         </nav>
         <div className="p-3 border-t border-white/10 shrink-0">
           <Link to={isAdmin ? '/admin/profile' : '/employee/profile'} className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/5 transition">
-            <div className={`w-8 h-8 rounded-lg ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold shrink-0`}>
-              {initials(user?.firstName, user?.lastName)}
+            <div className={`w-8 h-8 rounded-lg ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden`}>
+              {user?.avatar ? <img src={user.avatar} alt="" className="w-full h-full object-cover" /> : initials(user?.firstName, user?.lastName)}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium truncate">{user?.firstName} {user?.lastName}</p>
@@ -416,8 +416,8 @@ export default function AdminLayout({ children, title, subtitle }) {
               )}
             </div>
             <div className="relative">
-              <button onClick={() => setProfileOpen(o => !o)} className={`w-9 h-9 rounded-full ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold text-white shrink-0`}>
-                {initials(user?.firstName, user?.lastName)}
+              <button onClick={() => setProfileOpen(o => !o)} className={`w-9 h-9 rounded-full ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden`}>
+                {user?.avatar ? <img src={user.avatar} alt="" className="w-full h-full object-cover" /> : initials(user?.firstName, user?.lastName)}
               </button>
               {profileOpen && (
                 <>

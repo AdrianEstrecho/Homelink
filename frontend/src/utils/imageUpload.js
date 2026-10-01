@@ -62,3 +62,28 @@ export function validateImageFile(file, maxMb = MAX_IMAGE_MB) {
   if (file.size > maxMb * 1024 * 1024) return `Image must be smaller than ${maxMb}MB.`;
   return '';
 }
+
+// Profile photos only ever render as a small circle or rounded square, so crop to a centred
+// square and shrink to 400px — roughly 30-60KB as JPEG, cheap enough to ride along on every
+// /auth/me. The white fill stops a transparent PNG from flattening to a black background.
+export async function squareAvatar(file, { size = 400, quality = 0.85 } = {}) {
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error('That image could not be read. Please choose a JPG or PNG.');
+  }
+
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = Math.min(size, side);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+  if (!blob) throw new Error('That image could not be read. Please choose a JPG or PNG.');
+  return readAsDataUrl(blob);
+}

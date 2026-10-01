@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Mail, Phone, MapPin, CalendarDays } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
+import EditableAvatar from './EditableAvatar';
 import ProfileTab from './ProfileTab';
 import SecurityTab from './SecurityTab';
 
@@ -50,9 +51,9 @@ export default function StaffProfileCard() {
     <div>
       <div className="card p-6 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-          <div className={`w-20 h-20 rounded-2xl ${avatarColor(user?.id)} flex items-center justify-center text-2xl font-display font-bold text-white shrink-0`}>
+          <EditableAvatar className={`w-20 h-20 rounded-2xl ${avatarColor(user?.id)} flex items-center justify-center text-2xl font-display font-bold text-white`}>
             {initials(user?.firstName, user?.lastName)}
-          </div>
+          </EditableAvatar>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-display text-xl font-bold text-gray-800">{user?.firstName} {user?.lastName}</h2>

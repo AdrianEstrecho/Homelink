@@ -112,6 +112,7 @@ await db.exec(`
     two_factor_enabled INTEGER DEFAULT 0,
     two_factor_code TEXT,
     two_factor_code_expires TEXT,
+    avatar TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_staff_code ON users(staff_code) WHERE staff_code IS NOT NULL;
@@ -121,6 +122,7 @@ await db.exec(`
   ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled INTEGER DEFAULT 0;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_code TEXT;
   ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_code_expires TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
 
   -- Widen payment_method to allow 'qrph' (QR Ph, via PayMongo's hosted Checkout Session) on
   -- databases created before it was added to the CHECK above.
