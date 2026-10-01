@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  User, Package, Calendar, LogOut, ShieldCheck, ArrowRight,
-  MapPinned, CreditCard, Bell, Lock, Star, LayoutDashboard, LifeBuoy, Clock, PackageCheck,
+  User, Package, Calendar, LogOut, ShieldCheck, ArrowRight, ArrowUpRight, Mail,
+  MapPinned, CreditCard, Bell, Lock, Star, LayoutDashboard, LifeBuoy, PackageCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
@@ -10,6 +10,7 @@ import Reveal from '../components/Reveal';
 import CountUp from '../components/CountUp';
 import ConfirmDialog from '../components/ConfirmDialog';
 import PageTransitionOverlay from '../components/PageTransitionOverlay';
+import BlueprintHouse from '../components/account/BlueprintHouse';
 import ProfileTab from '../components/account/ProfileTab';
 import AddressesTab from '../components/account/AddressesTab';
 import PaymentTab from '../components/account/PaymentTab';
@@ -19,7 +20,6 @@ import ReviewsTab from '../components/account/ReviewsTab';
 import ReturnsTab from '../components/account/ReturnsTab';
 import SupportTab from '../components/account/SupportTab';
 
-const AVATAR_COLORS = ['bg-brand-navy', 'bg-brand-blue', 'bg-[#00806f]', 'bg-[#c8461a]'];
 const ROLE_LABEL = { customer: 'Customer', employee: 'Employee', admin: 'Administrator' };
 
 const TABS = [
@@ -32,11 +32,6 @@ const TABS = [
   { key: 'returns', label: 'Returns & Cancellations', icon: PackageCheck, Component: ReturnsTab },
   { key: 'support', label: 'Support', icon: LifeBuoy, Component: SupportTab },
 ];
-
-function avatarColor(seed) {
-  const sum = [...(seed || 'H')].reduce((a, c) => a + c.charCodeAt(0), 0);
-  return AVATAR_COLORS[sum % AVATAR_COLORS.length];
-}
 
 function initials(first, last) {
   return `${first?.[0] || ''}${last?.[0] || ''}`.toUpperCase() || 'H';
@@ -62,13 +57,16 @@ export default function Account() {
     else next.set('tab', key);
     setSearchParams(next, { replace: true });
   };
-  const [counts, setCounts] = useState({ orders: null, bookings: null });
+  // Kept whole (not just counted) so the Profile tab can show the next visit and latest order
+  // without fetching both lists a second time. null until loaded.
+  const [orders, setOrders] = useState(null);
+  const [bookings, setBookings] = useState(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    api.get('/orders/my').then(d => setCounts(c => ({ ...c, orders: d.length }))).catch(() => setCounts(c => ({ ...c, orders: 0 })));
-    api.get('/bookings/my').then(d => setCounts(c => ({ ...c, bookings: d.length }))).catch(() => setCounts(c => ({ ...c, bookings: 0 })));
+    api.get('/orders/my').then(setOrders).catch(() => setOrders([]));
+    api.get('/bookings/my').then(setBookings).catch(() => setBookings([]));
   }, []);
 
   const handleLogout = () => {
@@ -81,39 +79,46 @@ export default function Account() {
     ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     : '—';
 
+  // The drawing title under the header's house: "Estrecho Residence", the way a plan is named
+  // after the family it was drawn for.
+  const residence = `${user?.lastName || user?.firstName || 'Your'} Residence`;
+
   const ActiveTab = TABS.find(t => t.key === tab)?.Component || ProfileTab;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      {/* Header */}
-      <Reveal className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-navy via-brand-blue to-brand-navy text-white p-6 sm:p-8 pb-14 sm:pb-16 shadow-lg shadow-brand-navy/10">
-        <div className="absolute inset-0 opacity-10 pointer-events-none">
-          <div className="float-blob absolute -top-10 -left-10 w-56 h-56 bg-brand-orange rounded-full blur-3xl" />
-          <div className="float-blob-delayed absolute -bottom-16 -right-10 w-64 h-64 bg-brand-teal rounded-full blur-3xl" />
-        </div>
-        <div className="relative flex flex-col sm:flex-row sm:items-center gap-6">
-          <div className={`relative w-20 h-20 rounded-full ${avatarColor(user?.id || user?.email)} flex items-center justify-center text-2xl font-display font-bold ring-4 ring-white/20 shadow-xl shrink-0`}>
-            {initials(user?.firstName, user?.lastName)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50 mb-1.5">{greeting()}</p>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight truncate">{user?.firstName} {user?.lastName}</h1>
-              <span className="badge bg-white/15 backdrop-blur-sm text-white flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" /> {ROLE_LABEL[user?.role] || 'Customer'}
-              </span>
+      {/* Header — a blueprint sheet: who you are on the left, your house drafted on the right,
+          and the account's numbers in a title block along the bottom edge. */}
+      <Reveal className="blueprint-sheet relative overflow-hidden rounded-2xl text-white shadow-xl shadow-brand-navy/15 mb-6">
+        <div className="flex items-center gap-6 px-6 sm:px-8 pt-7 sm:pt-8 pb-6 md:py-5">
+          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-7">
+            <div className="w-20 h-20 rounded-full bg-white text-brand-navy flex items-center justify-center text-2xl font-display font-extrabold [font-stretch:112%] shadow-xl shadow-black/25 shrink-0 outline-dashed outline-1 outline-white/45 outline-offset-[6px]">
+              {initials(user?.firstName, user?.lastName)}
             </div>
-            <p className="text-gray-300 text-sm mt-1 truncate">{user?.email}</p>
+            <div className="min-w-0">
+              <p className="drafting-label text-brand-orange mb-2">{greeting()}</p>
+              <h1 className="font-display text-[1.75rem] sm:text-[2.1rem] font-bold leading-[1.05] tracking-tight [font-stretch:112%] [overflow-wrap:anywhere]">
+                {user?.firstName} {user?.lastName}
+              </h1>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white/65">
+                <span className="drafting-label inline-flex items-center gap-1.5 rounded-full border border-white/25 px-2.5 py-1 text-white/85">
+                  <ShieldCheck className="w-3 h-3" /> {ROLE_LABEL[user?.role] || 'Customer'}
+                </span>
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <Mail className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{user?.email}</span>
+                </span>
+              </div>
+            </div>
           </div>
+          <BlueprintHouse title={residence} className="hidden md:block shrink-0" />
         </div>
-      </Reveal>
 
-      {/* Stats — floated as their own cards, overlapping the header's bottom edge */}
-      <Reveal delay={40} className="relative z-10 -mt-9 sm:-mt-10 mb-6">
-        <div className="grid grid-cols-3 gap-3 sm:gap-4">
-          <FloatingStat icon={Package} label="Orders" value={counts.orders} accent="navy" />
-          <FloatingStat icon={Calendar} label="Bookings" value={counts.bookings} accent="teal" />
-          <FloatingStat icon={Clock} label="Member Since" value={memberSince} text accent="orange" />
+        {/* Title block */}
+        <div className="grid grid-cols-3 divide-x divide-white/15 border-t border-white/15 bg-[#081a3d]/50">
+          <TitleCell label="Orders" to="/orders" value={orders ? orders.length : null} count />
+          <TitleCell label="Bookings" to="/bookings" value={bookings ? bookings.length : null} count />
+          <TitleCell label="Member since" value={memberSince} />
         </div>
       </Reveal>
 
@@ -140,48 +145,48 @@ export default function Account() {
         </Reveal>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6">
-        {/* Sidebar */}
-        <Reveal as="nav" delay={130} className="card p-2 flex md:flex-col gap-1 overflow-x-auto md:overflow-visible h-fit">
+      <div className="grid grid-cols-1 md:grid-cols-[236px_1fr] gap-6">
+        {/* Sidebar — a horizontal strip on phones, a grouped list from md up */}
+        <Reveal as="nav" delay={130} aria-label="Account" className="card p-2 md:p-3 flex md:flex-col gap-1 overflow-x-auto md:overflow-visible no-scrollbar h-fit">
           {(user?.role === 'admin' || user?.role === 'employee') && (
             <Link
               to={user.role === 'admin' ? '/admin' : '/employee'}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition whitespace-nowrap text-brand-orange font-semibold hover:bg-orange-50 md:mb-1 md:pb-3 md:border-b md:border-gray-100"
+              className={`${NAV_ITEM} text-brand-orange font-semibold hover:bg-orange-50 md:mb-2`}
             >
-              <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-brand-orange/10 text-brand-orange shrink-0">
-                <LayoutDashboard className="w-3.5 h-3.5" />
-              </span>
+              <LayoutDashboard className="w-4 h-4 shrink-0" />
               {user.role === 'admin' ? 'Admin Portal' : 'Employee Portal'}
             </Link>
           )}
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`group flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all whitespace-nowrap text-left ${tab === t.key ? 'bg-brand-navy/8 text-brand-navy font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-brand-navy'}`}
-            >
-              <span className={`flex items-center justify-center w-7 h-7 rounded-lg transition-colors shrink-0 ${tab === t.key ? 'bg-brand-navy text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-brand-navy/10 group-hover:text-brand-navy'}`}>
-                <t.icon className="w-3.5 h-3.5" />
-              </span>
-              {t.label}
-            </button>
-          ))}
-          <Link to="/orders" className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-brand-navy text-sm transition-all whitespace-nowrap md:mt-1 md:pt-3 md:border-t md:border-gray-100">
-            <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-100 text-gray-400 group-hover:bg-brand-navy/10 group-hover:text-brand-navy transition-colors shrink-0">
-              <Package className="w-3.5 h-3.5" />
-            </span>
+          <p className="hidden md:block drafting-label text-gray-400 px-3 pt-1 pb-2">Settings</p>
+          {TABS.map(t => {
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                aria-current={active ? 'page' : undefined}
+                className={`${NAV_ITEM} text-left ${active ? 'bg-brand-navy text-white font-semibold shadow-sm shadow-brand-navy/20' : 'text-gray-600 hover:bg-brand-navy/[0.05] hover:text-brand-navy'}`}
+              >
+                <t.icon className={`w-4 h-4 shrink-0 transition-colors ${active ? 'text-brand-orange' : 'text-gray-400 group-hover:text-brand-navy'}`} />
+                {t.label}
+              </button>
+            );
+          })}
+          <div className="hidden md:block mx-3 my-2 border-t border-dashed border-gray-200" />
+          <p className="hidden md:block drafting-label text-gray-400 px-3 pt-1 pb-2">Activity</p>
+          <Link to="/orders" className={`${NAV_ITEM} text-gray-600 hover:bg-brand-navy/[0.05] hover:text-brand-navy`}>
+            <Package className="w-4 h-4 shrink-0 text-gray-400 group-hover:text-brand-navy transition-colors" />
             My Orders
+            <ArrowUpRight className="hidden md:block w-3.5 h-3.5 ml-auto text-gray-300 group-hover:text-brand-orange transition-colors" />
           </Link>
-          <Link to="/bookings" className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-gray-50 text-gray-600 hover:text-brand-navy text-sm transition-all whitespace-nowrap">
-            <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-100 text-gray-400 group-hover:bg-brand-navy/10 group-hover:text-brand-navy transition-colors shrink-0">
-              <Calendar className="w-3.5 h-3.5" />
-            </span>
+          <Link to="/bookings" className={`${NAV_ITEM} text-gray-600 hover:bg-brand-navy/[0.05] hover:text-brand-navy`}>
+            <Calendar className="w-4 h-4 shrink-0 text-gray-400 group-hover:text-brand-navy transition-colors" />
             My Bookings
+            <ArrowUpRight className="hidden md:block w-3.5 h-3.5 ml-auto text-gray-300 group-hover:text-brand-orange transition-colors" />
           </Link>
-          <button onClick={() => setConfirmLogout(true)} className="group flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-red-50 text-red-600 text-sm transition-all whitespace-nowrap md:mt-2 md:border-t md:pt-3">
-            <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-red-50 text-red-500 group-hover:bg-red-100 transition-colors shrink-0">
-              <LogOut className="w-3.5 h-3.5" />
-            </span>
+          <div className="hidden md:block mx-3 my-2 border-t border-dashed border-gray-200" />
+          <button onClick={() => setConfirmLogout(true)} className={`${NAV_ITEM} text-red-600 hover:bg-red-50`}>
+            <LogOut className="w-4 h-4 shrink-0" />
             Log Out
           </button>
         </Reveal>
@@ -198,37 +203,32 @@ export default function Account() {
         {loggingOut && <PageTransitionOverlay phase="in" />}
 
         {/* Active tab content */}
-        <Reveal delay={180} className="card p-6">
-          <ActiveTab />
+        <Reveal delay={180} className="card p-6 sm:p-8">
+          <ActiveTab orders={orders} bookings={bookings} />
         </Reveal>
       </div>
     </div>
   );
 }
 
-const STAT_ACCENTS = {
-  navy: { bg: 'bg-brand-navy/10', text: 'text-brand-navy' },
-  teal: { bg: 'bg-brand-teal/10', text: 'text-brand-teal' },
-  orange: { bg: 'bg-brand-orange/10', text: 'text-brand-orange' },
-};
+const NAV_ITEM = 'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all whitespace-nowrap';
 
-function FloatingStat({ icon: Icon, label, value, text, accent }) {
-  const { bg, text: textColor } = STAT_ACCENTS[accent];
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-lg shadow-brand-navy/5 p-3.5 sm:p-5 flex flex-col items-center text-center sm:flex-row sm:text-left gap-2 sm:gap-3.5 hover:-translate-y-1 hover:shadow-xl transition-all">
-      <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
-        <Icon className={`w-4.5 h-4.5 sm:w-5 sm:h-5 ${textColor}`} />
-      </div>
-      <div className="min-w-0">
-        {value === null ? (
-          <p className="font-display font-bold text-lg sm:text-xl text-brand-ink leading-tight">—</p>
-        ) : text ? (
-          <p className="font-display font-bold text-lg sm:text-xl text-brand-ink leading-tight truncate">{value}</p>
-        ) : (
-          <CountUp value={String(value)} className="font-display font-bold text-lg sm:text-xl text-brand-ink leading-tight tabular-nums" />
-        )}
-        <p className="text-[10px] sm:text-[11px] uppercase tracking-wide text-gray-400 mt-0.5">{label}</p>
-      </div>
-    </div>
+// One cell of the header's title block. Orders and bookings link through to their own pages;
+// a null value is still loading.
+function TitleCell({ label, value, to, count }) {
+  const body = (
+    <>
+      <span className="drafting-label flex items-center justify-between gap-2 text-white/50">
+        {label}
+        {to && <ArrowUpRight className="w-3.5 h-3.5 text-white/30 transition group-hover:text-brand-orange group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />}
+      </span>
+      <span className="mt-2 block font-display text-lg sm:text-2xl font-bold leading-none tabular-nums whitespace-nowrap sm:[font-stretch:108%]">
+        {value === null ? <span className="text-white/35">—</span> : count ? <CountUp value={String(value)} /> : value}
+      </span>
+    </>
   );
+  const cls = 'group min-w-0 flex flex-col justify-between px-3.5 sm:px-8 py-4 sm:py-5';
+  return to
+    ? <Link to={to} className={`${cls} transition-colors hover:bg-white/[0.05]`}>{body}</Link>
+    : <div className={cls}>{body}</div>;
 }

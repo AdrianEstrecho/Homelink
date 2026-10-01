@@ -872,6 +872,59 @@
   .auth-signal[data-on="true"] path { animation: none; opacity: 1; }
 }
 
+/* Account page (pages/Account.jsx + components/account/ProfileTab.jsx). The header is
+   drawn as a sheet of blueprint paper — brand navy is already blueprint blue — with a
+   fine 24px grid under a heavier 96px one, and the customer's stats set in a title-block
+   strip along its bottom edge like the corner box on an architectural drawing. */
+.blueprint-sheet {
+  background-color: #0f2b5b;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    radial-gradient(110% 130% at 88% 0%, rgba(26, 74, 138, 0.95) 0%, rgba(26, 74, 138, 0) 62%),
+    linear-gradient(160deg, #0f2b5b 0%, #0b2250 100%);
+  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px, 100% 100%, 100% 100%;
+  background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px, 0 0, 0 0;
+}
+/* Architectural lettering: Archivo pulled to its condensed width, set in tracked caps.
+   Used for every small label on the account page so the header and the panels below it
+   read as the same drawing set. Needs the wdth axis requested in index.html. */
+.drafting-label {
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-stretch: 78%;
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+/* The front elevation in the header draws itself once on load, stroke by stroke. Every
+   path carries pathLength="1", so one dash of length 1 covers any path regardless of its
+   real length; --d staggers them so the house goes up ground → walls → roof → details. */
+.bp-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: bpDraw 0.9s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  animation-delay: var(--d, 0ms);
+}
+.bp-fade {
+  opacity: 0;
+  animation: bpFade 0.6s ease-out forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes bpDraw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes bpFade {
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bp-line { animation: none; stroke-dashoffset: 0; }
+  .bp-fade { animation: none; opacity: 1; }
+}
+
 /* Generic single-area print isolation — toggle .printing-active on <body> and mark
    the one element to print with .print-area (see OrderDetailsModal and any admin
    report's handlePrint). Everything else on the page is hidden for that print pass. */
