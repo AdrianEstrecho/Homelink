@@ -40,6 +40,7 @@ export const ACTION_META = {
   'order.create': { category: 'create', entity: 'Order', describe: d => `${d.customerName || 'A customer'} placed an order for ${d.itemCount || ''} item${d.itemCount === 1 ? '' : 's'} (₱${Number(d.total || 0).toLocaleString('en-PH')})` },
   'order.status_update': { category: 'update', entity: 'Order', describe: d => `Status changed: ${d.from || '—'} → ${d.to}` },
   'order.cancel': { category: 'update', entity: 'Order', describe: d => `${d.customerName || 'A customer'} cancelled their order${d.reason ? ` — "${d.reason}"` : ''}` },
+  'order.complete': { category: 'create', entity: 'Order', describe: d => `${d.customerName || 'A customer'} confirmed order #${d.orderRef} as completed — returns closed` },
   'order.needs_review': { category: 'update', entity: 'Order', describe: d => `Flagged ${d.customerName ? `${d.customerName}'s` : 'a'} paid order for review — ${d.reason}` },
   'order.stock_returned': { category: 'update', entity: 'Order', describe: d => `Returned ${d.units || 0} unit${d.units === 1 ? '' : 's'} to stock after the order was cancelled` },
   'order.stock_reserved': { category: 'update', entity: 'Order', describe: d => `Took ${d.units || 0} unit${d.units === 1 ? '' : 's'} back out of stock after the cancelled order was reinstated` },

@@ -7,7 +7,7 @@ import { fulfillOrder } from '../utils/orderFulfillment.js';
 import { releaseOrderStock } from '../utils/orderStock.js';
 import {
   getReturnableTotals, getReturnCounts, canReturnOrder, returnWindowClosesAt,
-  cancellationNeedsRefund, caseRef,
+  cancellationNeedsRefund, caseRef, hasLiveReturn,
 } from '../utils/returns.js';
 import { logActivity } from '../utils/audit.js';
 import { notifyUser } from '../utils/notify.js';
@@ -61,9 +61,16 @@ router.get('/my', authenticate, async (req, res) => {
   const returnCounts = await getReturnCounts(db, req.user.id);
   const result = [];
   for (const o of orders) {
+    // Products mostly hang off subcategories (Split Type under Air Conditioners). The My Orders
+    // category filter groups by the top-level shelf, so that is the name each line carries.
     const items = await db.prepare(`
-      SELECT oi.*, p.name, p.image, p.slug, p.brand FROM order_items oi
-      JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?
+      SELECT oi.*, p.name, p.image, p.slug, p.brand,
+             COALESCE(pc.name, c.name) AS category, COALESCE(pc.slug, c.slug) AS category_slug
+      FROM order_items oi
+      JOIN products p ON oi.product_id = p.id
+      LEFT JOIN categories c ON c.id = p.category_id
+      LEFT JOIN categories pc ON pc.id = c.parent_id
+      WHERE oi.order_id = ?
     `).all(o.id);
     result.push({
       ...o,
@@ -84,16 +91,57 @@ router.get('/:id', authenticate, async (req, res) => {
   const order = await db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
   const items = await db.prepare(`
-    SELECT oi.*, p.name, p.image, p.slug, p.brand FROM order_items oi
-    JOIN products p ON oi.product_id = p.id WHERE oi.order_id = ?
+    SELECT oi.*, p.name, p.image, p.slug, p.brand,
+           COALESCE(pc.name, c.name) AS category, COALESCE(pc.slug, c.slug) AS category_slug
+    FROM order_items oi
+    JOIN products p ON oi.product_id = p.id
+    LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN categories pc ON pc.id = c.parent_id
+    WHERE oi.order_id = ?
   `).all(order.id);
   const returnable = await getReturnableTotals(db, req.user.id);
   res.json({
     ...order,
     items,
     canReturn: canReturnOrder(order, returnable.get(order.id) ?? 0),
-    returnWindowClosesAt: order.status === 'delivered' ? returnWindowClosesAt(order) : null,
+    returnWindowClosesAt: order.status === 'delivered' && !order.completed_at ? returnWindowClosesAt(order) : null,
   });
+});
+
+// The customer's sign-off on a delivered order: everything arrived and they're keeping it. It is
+// one-way — completed_at is never cleared — and it closes the return window there and then (see
+// returnEligibility), which is the whole point of asking before the 7 days run out on their own.
+//
+// Refused while a return is still in flight or after the money has gone back: either way the
+// order is mid-dispute or already undone, and "completed" would contradict what staff are doing.
+router.put('/:id/complete', authenticate, async (req, res) => {
+  const result = await withTransaction(async (tx) => {
+    // Row lock so a return request filed from another tab can't slip in between the checks
+    // below and the update — POST /returns takes the same lock before its own eligibility test.
+    const order = await tx.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ? FOR UPDATE').get(req.params.id, req.user.id);
+    if (!order) return { status: 404, error: 'Order not found' };
+    if (order.completed_at) return { status: 409, error: 'This order is already marked as completed' };
+    if (order.status !== 'delivered') return { status: 400, error: 'Only delivered orders can be marked as completed' };
+    if (order.payment_status === 'refunded') return { status: 400, error: 'This order has been refunded and can no longer be completed' };
+    if (await hasLiveReturn(tx, order.id)) {
+      return { status: 400, error: 'This order has a return in progress. It can be completed once that return is closed.' };
+    }
+
+    const { completed_at: completedAt } = await tx.prepare(
+      'UPDATE orders SET completed_at = now() WHERE id = ? RETURNING completed_at'
+    ).get(order.id);
+    return { order, completedAt };
+  });
+
+  if (result.error) return res.status(result.status).json({ error: result.error });
+
+  const user = await db.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(req.user.id);
+  await logActivity(req, 'order.complete', 'order', result.order.id, {
+    customerName: `${user.first_name} ${user.last_name}`,
+    orderRef: result.order.id.slice(0, 8).toUpperCase(),
+  });
+
+  res.json({ message: 'Order completed', completed_at: result.completedAt });
 });
 
 router.get('/:id/tracking', authenticate, async (req, res) => {

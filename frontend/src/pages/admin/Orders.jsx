@@ -147,6 +147,11 @@ export default function AdminOrders() {
                   ) : (
                     <span className={`badge capitalize ${statusColor(o.status)}`}>{o.status}</span>
                   )}
+                  {/* The customer signed off on it (PUT /orders/:id/complete) — status stays
+                      'delivered', but returns are closed, which is what staff need to know. */}
+                  {o.status === 'delivered' && o.completed_at && (
+                    <span title="The customer confirmed this order. Returns are closed." className="badge ml-1.5 bg-teal-100 text-teal-800">completed</span>
+                  )}
                   {!!o.needs_review && <NeedsReviewFlag reason={o.review_reason} />}
                 </td>
                 <td className="p-3 text-right font-medium">{formatPrice(o.total)}</td>

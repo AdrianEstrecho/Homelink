@@ -644,6 +644,12 @@ await db.exec(`
   -- When the order was actually handed over — the start of the 7-day return window. Until now
   -- this was only recoverable from audit_logs, the way getOrderTimeline() derives it at read time.
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ;
+
+  -- When the customer confirmed they're happy with a delivered order (PUT /orders/:id/complete).
+  -- A timestamp rather than a sixth orders.status: the row stays 'delivered' so the admin status
+  -- dropdowns, dashboards, COD settlement and revenue all keep working untouched — the same call
+  -- GET /orders/my makes for 'returned'. Once set it closes the return window early, for good.
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 `);
 
 // Ports what getOrderTimeline() has always had to derive at read time: audit_logs is the only

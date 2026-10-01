@@ -88,10 +88,13 @@ export function returnWindowClosesAt(order) {
   return closes;
 }
 
-// reason is one of 'not_delivered' | 'window_closed' | 'fully_returned', or null when eligible.
-// Callers turn it into a message; the codes keep the wording in one place on the frontend.
+// reason is one of 'not_delivered' | 'completed' | 'window_closed' | 'fully_returned', or null
+// when eligible. Callers turn it into a message; the codes keep the wording in one place on the
+// frontend.
 export function returnEligibility(order, lines) {
   if (order.status !== 'delivered') return { eligible: false, reason: 'not_delivered', windowClosesAt: null };
+  // Marking an order completed is the customer signing off on it — the window shuts right there.
+  if (order.completed_at) return { eligible: false, reason: 'completed', windowClosesAt: null };
 
   const windowClosesAt = returnWindowClosesAt(order);
   if (Date.now() > windowClosesAt.getTime()) return { eligible: false, reason: 'window_closed', windowClosesAt };
@@ -140,10 +143,11 @@ export async function getReturnableTotals(executor = db, userId) {
   return new Map(rows.map((r) => [r.order_id, Number(r.returnable)]));
 }
 
-// Whether this order can take a NEW return request right now. Same three tests as
-// returnEligibility, minus the per-line detail, for list views that only render a button.
+// Whether this order can take a NEW return request right now. Same tests as returnEligibility,
+// minus the per-line detail, for list views that only render a button.
 export function canReturnOrder(order, returnableUnits) {
   return order.status === 'delivered'
+    && !order.completed_at
     && Date.now() <= returnWindowClosesAt(order).getTime()
     && returnableUnits > 0;
 }
@@ -162,4 +166,15 @@ export async function getReturnCounts(executor = db, userId) {
     GROUP BY order_id
   `).all(userId);
   return new Map(rows.map((r) => [r.order_id, Number(r.n)]));
+}
+
+// Single-order counterpart to getReturnCounts, for the complete endpoint: an order with a return
+// still in flight can't be signed off, or the customer would be closing a case staff are working.
+export async function hasLiveReturn(executor = db, orderId) {
+  const row = await executor.prepare(`
+    SELECT 1 FROM return_requests
+    WHERE order_id = ? AND kind = 'return' AND status IN (${COMMITTED_SQL})
+    LIMIT 1
+  `).get(orderId);
+  return !!row;
 }

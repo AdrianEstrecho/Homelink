@@ -1,13 +1,13 @@
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, MapPin, CreditCard, Printer, Download, CheckCircle2, Truck, RotateCcw } from 'lucide-react';
+import { X, MapPin, CreditCard, Printer, Download, CheckCircle2, CircleCheckBig, Truck, RotateCcw } from 'lucide-react';
 import { formatPrice, statusColor } from '../api/client';
 import { downloadReceiptPdf } from '../utils/receiptPdf';
 import SafeImage from './SafeImage';
 import { paymentMethodLabel } from '../constants/paymentMethods';
 
 export default function OrderDetailsModal({
-  order, onClose, onDismiss, person, personLabel = 'Customer', onCancelOrder, onTrackOrder, onReturnOrder, justConfirmed = false,
+  order, onClose, onDismiss, person, personLabel = 'Customer', onCancelOrder, onTrackOrder, onReturnOrder, onCompleteOrder, justConfirmed = false,
   previewing = false, onConfirm, confirmLoading = false, error,
 }) {
   // On the just-confirmed screen, X/backdrop ("I'm done here") and "Continue to My Orders"
@@ -29,6 +29,13 @@ export default function OrderDetailsModal({
 
   const showImages = order.items?.some(i => i.image);
 
+  // The customer's sign-off (completed_at) sits on top of a row that stays 'delivered' — see
+  // PUT /orders/:id/complete — so it's read here rather than from status. Teal, not the green
+  // statusColor() gives delivered, so the two can't be confused side by side.
+  const completed = order.status === 'delivered' && !!order.completed_at;
+  const shownStatus = completed ? 'completed' : order.status;
+  const shownStatusClass = completed ? 'bg-teal-100 text-teal-800' : statusColor(order.status);
+
   // Portaled to <body> — same reasoning as ConfirmDialog/PromptDialog/TermsModal: rendered
   // inline, this ended up boxed inside its position in the page (visible page content, e.g.
   // the footer, painting over the lower half of the panel) instead of sitting above everything.
@@ -44,7 +51,7 @@ export default function OrderDetailsModal({
               <p className="text-xs font-bold text-gray-700 tracking-widest uppercase">Official Receipt</p>
               <p className="text-sm font-bold text-brand-navy mt-2">Order #{order.id.slice(0, 8).toUpperCase()}</p>
               <p className="text-xs text-gray-500 mt-0.5">{new Date(order.created_at).toLocaleString()}</p>
-              <p className="text-xs text-gray-500 mt-0.5 capitalize">{order.status} &middot; {order.payment_status}</p>
+              <p className="text-xs text-gray-500 mt-0.5 capitalize">{shownStatus} &middot; {order.payment_status}</p>
             </div>
             <div className="border-t border-dashed border-gray-300 mt-3" />
           </div>
@@ -94,7 +101,7 @@ export default function OrderDetailsModal({
           {!previewing && (
             <div className="flex items-center justify-between gap-2 print:hidden">
               <div className="flex gap-2">
-                <span className={`badge capitalize ${statusColor(order.status)}`}>{order.status}</span>
+                <span className={`badge capitalize ${shownStatusClass}`}>{shownStatus}</span>
                 <span className={`badge ${statusColor(order.payment_status)}`}>{order.payment_status}</span>
               </div>
               {onTrackOrder && (
@@ -109,6 +116,16 @@ export default function OrderDetailsModal({
             <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2.5">
               <p className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-1">Cancellation Reason</p>
               <p className="text-sm text-red-800">{order.cancel_reason}</p>
+            </div>
+          )}
+
+          {completed && (
+            <div className="flex items-start gap-2.5 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2.5 print:hidden">
+              <CircleCheckBig className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-teal-800">
+                Completed on {new Date(order.completed_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}.
+                Returns and refunds are closed for this order.
+              </p>
             </div>
           )}
 
@@ -215,6 +232,17 @@ export default function OrderDetailsModal({
               className="no-print w-full border border-gray-300 text-brand-navy rounded-lg py-2.5 font-semibold text-sm hover:bg-gray-50 transition flex items-center justify-center gap-2"
             >
               <RotateCcw className="w-4 h-4" /> Return or Refund
+            </button>
+          )}
+
+          {/* The caller decides eligibility (delivered, not completed, nothing on its way back) and
+              only passes this when it holds; the server re-checks all of it under a row lock. */}
+          {onCompleteOrder && (
+            <button
+              onClick={() => onCompleteOrder(order)}
+              className="no-print w-full bg-brand-teal text-white rounded-lg py-2.5 font-semibold text-sm hover:bg-teal-600 transition flex items-center justify-center gap-2"
+            >
+              <CircleCheckBig className="w-4 h-4" /> Mark as Completed
             </button>
           )}
         </div>
