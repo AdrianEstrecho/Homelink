@@ -557,6 +557,12 @@ router.get('/orders', authorizeAdminOr('general_staff', 'inventory_clerk'), asyn
   res.json(result);
 });
 
+// Product photos are base64, so they stay out of the list above (every order, every item) and
+// are fetched one order at a time when its details are opened — same split as return photos.
+router.get('/orders/:id/item-images', authorizeAdminOr('general_staff', 'inventory_clerk'), async (req, res) => {
+  res.json(await db.prepare('SELECT oi.id, p.image FROM order_items oi JOIN products p ON oi.product_id=p.id WHERE oi.order_id=?').all(req.params.id));
+});
+
 router.get('/orders/stats', authorizeAdminOr('general_staff'), async (req, res) => {
   const totalOrders = (await db.prepare('SELECT COUNT(*) as c FROM orders').get()).c;
   const revenue = (await db.prepare("SELECT COALESCE(SUM(total),0) as t FROM orders WHERE payment_status='paid'").get()).t;

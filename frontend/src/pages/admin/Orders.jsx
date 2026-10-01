@@ -25,9 +25,23 @@ export default function AdminOrders() {
   const [confirmStatus, setConfirmStatus] = useState(null);
   const [pageError, setPageError] = useState('');
   const [page, setPage] = useState(1);
+  const [itemImages, setItemImages] = useState({});
 
   const load = () => api.get('/admin/orders').then(setOrders).catch(() => {});
   useEffect(() => { load(); }, []);
+
+  // The list leaves product photos out (they're base64), so the opened order's are fetched here.
+  // The ignore flag stops a slow response from painting one order's photos onto the next.
+  const selectedId = selectedOrder?.id;
+  useEffect(() => {
+    setItemImages({});
+    if (!selectedId) return;
+    let ignore = false;
+    api.get(`/admin/orders/${selectedId}/item-images`)
+      .then(rows => { if (!ignore) setItemImages(Object.fromEntries(rows.map(r => [r.id, r.image]))); })
+      .catch(() => {});
+    return () => { ignore = true; };
+  }, [selectedId]);
 
   // Cancelling returns the order's units to stock and reinstating one takes them back out, so
   // the server can refuse the change when those units have since been sold — show why.
@@ -172,7 +186,7 @@ export default function AdminOrders() {
 
       {selectedOrder && (
         <OrderDetailsModal
-          order={selectedOrder}
+          order={{ ...selectedOrder, items: selectedOrder.items?.map(i => ({ ...i, image: itemImages[i.id] })) }}
           onClose={() => setSelectedOrder(null)}
           person={{ name: `${selectedOrder.first_name} ${selectedOrder.last_name}`, email: selectedOrder.email }}
         />
