@@ -185,7 +185,7 @@ function orderHint(order, status) {
 const ACTION_BTN = 'inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold active:scale-[0.98] transition';
 const ACTION_ICON = 'w-4 h-4 shrink-0';
 
-function OrderCard({ order, onOpen, reviews, canReview, canComplete, canRefund, onReview, onComplete, onRefund, onViewReturn }) {
+function OrderCard({ order, onOpen, reviews, canReview, canComplete, canRefund, canTrack, onReview, onComplete, onRefund, onTrack, onViewReturn }) {
   const items = order.items || [];
   const shown = items.slice(0, ITEMS_SHOWN);
   const hidden = items.slice(ITEMS_SHOWN);
@@ -356,6 +356,16 @@ function OrderCard({ order, onOpen, reviews, canReview, canComplete, canRefund, 
                 Return or Refund
               </span>
             </span>
+          )}
+          {/* To Ship and To Receive orders: the same tracking map the order details open. */}
+          {canTrack && (
+            <button
+              type="button"
+              onClick={act(onTrack)}
+              className={`${ACTION_BTN} bg-brand-navy text-white shadow-sm shadow-brand-navy/25 hover:bg-brand-blue`}
+            >
+              <Truck className={ACTION_ICON} /> Track Order
+            </button>
           )}
           {status === 'returned' && (
             <button
@@ -611,9 +621,12 @@ export default function Orders() {
                   // to send back). An order already under Returns keeps its View Return button
                   // instead — returning the rest of it still goes through the order details.
                   canRefund={!!o.canReturn && displayStatus(o) === 'delivered'}
+                  // The To Ship and To Receive tabs' statuses: still on the way, so worth following.
+                  canTrack={['pending', 'processing', 'shipped'].includes(o.status)}
                   onReview={() => setReviewTarget(o)}
                   onComplete={() => setCompleteTarget(o)}
                   onRefund={() => setReturnTarget(o)}
+                  onTrack={() => setTrackingOrder(o)}
                   onViewReturn={() => navigate('/account?tab=returns')}
                 />
               ))
