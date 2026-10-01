@@ -181,11 +181,13 @@ function orderHint(order, status) {
   }
 }
 
-// Sized down a touch below sm so Add Review and Mark as Completed still sit side by side on a
-// 390px phone — at full size the pair overruns the footer by a few pixels and stacks.
-const ACTION_BTN = 'inline-flex items-center gap-1.5 rounded-lg px-3 sm:px-3.5 py-2 text-[13px] sm:text-sm font-semibold active:scale-[0.98] transition';
+// Sized down a touch below sm so the delivered-order actions still pair up on a 360-390px phone,
+// where a row of three can't fit: there they fill a two-column grid (see OrderCard), and their
+// icons drop out so the labels have room. Centred so a label sits right in an equal-width cell.
+const ACTION_BTN = 'inline-flex items-center justify-center gap-1.5 rounded-lg px-2 sm:px-3.5 py-2 text-[13px] sm:text-sm font-semibold active:scale-[0.98] transition';
+const ACTION_ICON = 'hidden sm:block w-4 h-4 shrink-0';
 
-function OrderCard({ order, onOpen, reviews, canReview, canComplete, onReview, onComplete, onViewReturn }) {
+function OrderCard({ order, onOpen, reviews, canReview, canComplete, canRefund, onReview, onComplete, onRefund, onViewReturn }) {
   const items = order.items || [];
   const shown = items.slice(0, ITEMS_SHOWN);
   const hidden = items.slice(ITEMS_SHOWN);
@@ -199,6 +201,14 @@ function OrderCard({ order, onOpen, reviews, canReview, canComplete, onReview, o
 
   // The card underneath opens the order details; every footer action is its own errand.
   const act = (fn) => (e) => { e.stopPropagation(); fn(); };
+
+  // A delivered order can carry up to three actions. On a phone two or more fill a two-column
+  // grid so Return or Refund and Mark as Completed always share a row; with all three, Add
+  // Review takes the full row above them. From sm up they're one row, right-aligned.
+  const actionCount = [canReview, canRefund, canComplete].filter(Boolean).length;
+  const actionsClass = actionCount >= 2
+    ? 'grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:items-center sm:ml-auto'
+    : 'flex flex-wrap items-center gap-2 ml-auto';
 
   // A div rather than a button, because the card carries its own action buttons and a button
   // inside a button is neither valid nor reachable by keyboard. Same role/tabIndex/key handling
@@ -308,14 +318,25 @@ function OrderCard({ order, onOpen, reviews, canReview, canComplete, onReview, o
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 ml-auto">
+        <div className={actionsClass}>
           {canReview && (
             <button
               type="button"
               onClick={act(onReview)}
-              className={`${ACTION_BTN} border border-brand-orange/30 bg-brand-orange/5 text-brand-orange hover:bg-brand-orange/10`}
+              className={`${ACTION_BTN} ${actionCount === 3 ? 'col-span-2' : ''} border border-brand-orange/30 bg-brand-orange/5 text-brand-orange hover:bg-brand-orange/10`}
             >
-              <Star className="w-4 h-4" /> Add Review
+              <Star className={ACTION_ICON} /> Add Review
+            </button>
+          )}
+          {/* Same label as the button in the order details, and the same modal behind it. Kept
+              beside Mark as Completed on purpose: they are the two ways to close out a delivery. */}
+          {canRefund && (
+            <button
+              type="button"
+              onClick={act(onRefund)}
+              className={`${ACTION_BTN} border border-gray-300 bg-white/70 text-brand-navy hover:bg-gray-50`}
+            >
+              <RotateCcw className={ACTION_ICON} /> Return or Refund
             </button>
           )}
           {canComplete && (
@@ -324,7 +345,7 @@ function OrderCard({ order, onOpen, reviews, canReview, canComplete, onReview, o
               onClick={act(onComplete)}
               className={`${ACTION_BTN} bg-brand-teal text-white shadow-sm shadow-brand-teal/30 hover:bg-teal-600`}
             >
-              <CircleCheckBig className="w-4 h-4" /> Mark as Completed
+              <CircleCheckBig className={ACTION_ICON} /> Mark as Completed
             </button>
           )}
           {status === 'returned' && (
@@ -577,8 +598,13 @@ export default function Orders() {
                   reviews={myReviews}
                   canReview={o.status === 'delivered' && !o.returned && reviewableCount(o) > 0}
                   canComplete={canComplete(o)}
+                  // canReturn is the server's call (delivered, inside the 7-day window, units left
+                  // to send back). An order already under Returns keeps its View Return button
+                  // instead — returning the rest of it still goes through the order details.
+                  canRefund={!!o.canReturn && displayStatus(o) === 'delivered'}
                   onReview={() => setReviewTarget(o)}
                   onComplete={() => setCompleteTarget(o)}
+                  onRefund={() => setReturnTarget(o)}
                   onViewReturn={() => navigate('/account?tab=returns')}
                 />
               ))
