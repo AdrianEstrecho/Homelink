@@ -181,11 +181,9 @@ function orderHint(order, status) {
   }
 }
 
-// Sized down a touch below sm so the delivered-order actions still pair up on a 360-390px phone,
-// where a row of three can't fit: there they fill a two-column grid (see OrderCard), and their
-// icons drop out so the labels have room. Centred so a label sits right in an equal-width cell.
-const ACTION_BTN = 'inline-flex items-center justify-center gap-1.5 rounded-lg px-2 sm:px-3.5 py-2 text-[13px] sm:text-sm font-semibold active:scale-[0.98] transition';
-const ACTION_ICON = 'hidden sm:block w-4 h-4 shrink-0';
+// Centred so a label still sits right when a phone stretches the button across the footer.
+const ACTION_BTN = 'inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold active:scale-[0.98] transition';
+const ACTION_ICON = 'w-4 h-4 shrink-0';
 
 function OrderCard({ order, onOpen, reviews, canReview, canComplete, canRefund, onReview, onComplete, onRefund, onViewReturn }) {
   const items = order.items || [];
@@ -202,12 +200,12 @@ function OrderCard({ order, onOpen, reviews, canReview, canComplete, canRefund, 
   // The card underneath opens the order details; every footer action is its own errand.
   const act = (fn) => (e) => { e.stopPropagation(); fn(); };
 
-  // A delivered order can carry up to three actions. On a phone two or more fill a two-column
-  // grid so Return or Refund and Mark as Completed always share a row; with all three, Add
-  // Review takes the full row above them. From sm up they're one row, right-aligned.
-  const actionCount = [canReview, canRefund, canComplete].filter(Boolean).length;
-  const actionsClass = actionCount >= 2
-    ? 'grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:items-center sm:ml-auto'
+  // From sm up the delivered-order actions are one right-aligned row, the refund icon last. A
+  // phone can't fit all three, so there Add Review takes its own row and Mark as Completed
+  // stretches across the one beneath, with the refund icon still at its right-hand end.
+  const closeOut = canComplete || canRefund;
+  const actionsClass = canReview || closeOut
+    ? 'flex flex-wrap items-center justify-end gap-2 w-full sm:w-auto sm:flex-nowrap sm:ml-auto'
     : 'flex flex-wrap items-center gap-2 ml-auto';
 
   // A div rather than a button, because the card carries its own action buttons and a button
@@ -323,30 +321,41 @@ function OrderCard({ order, onOpen, reviews, canReview, canComplete, canRefund, 
             <button
               type="button"
               onClick={act(onReview)}
-              className={`${ACTION_BTN} ${actionCount === 3 ? 'col-span-2' : ''} border border-brand-orange/30 bg-brand-orange/5 text-brand-orange hover:bg-brand-orange/10`}
+              className={`${ACTION_BTN} ${closeOut ? 'w-full sm:w-auto' : ''} border border-brand-orange/30 bg-brand-orange/5 text-brand-orange hover:bg-brand-orange/10`}
             >
               <Star className={ACTION_ICON} /> Add Review
-            </button>
-          )}
-          {/* Same label as the button in the order details, and the same modal behind it. Kept
-              beside Mark as Completed on purpose: they are the two ways to close out a delivery. */}
-          {canRefund && (
-            <button
-              type="button"
-              onClick={act(onRefund)}
-              className={`${ACTION_BTN} border border-gray-300 bg-white/70 text-brand-navy hover:bg-gray-50`}
-            >
-              <RotateCcw className={ACTION_ICON} /> Return or Refund
             </button>
           )}
           {canComplete && (
             <button
               type="button"
               onClick={act(onComplete)}
-              className={`${ACTION_BTN} bg-brand-teal text-white shadow-sm shadow-brand-teal/30 hover:bg-teal-600`}
+              className={`${ACTION_BTN} flex-1 sm:flex-none bg-brand-teal text-white shadow-sm shadow-brand-teal/30 hover:bg-teal-600`}
             >
               <CircleCheckBig className={ACTION_ICON} /> Mark as Completed
             </button>
+          )}
+          {/* Icon only, at the end of the row: the other way to close out a delivery, kept quieter
+              than completing. Same modal the order details open, and the name the details button
+              uses goes on the label and the tooltip. The tooltip is a named group so hovering the
+              card (itself a `group`) doesn't set it off. */}
+          {canRefund && (
+            <span className="group/refund relative shrink-0">
+              <button
+                type="button"
+                onClick={act(onRefund)}
+                aria-label="Return or Refund"
+                className="grid h-9 w-9 place-items-center rounded-lg border border-gray-300 bg-white/70 text-brand-navy hover:border-brand-navy/30 hover:bg-gray-50 active:scale-[0.96] transition"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute bottom-full right-0 mb-2 whitespace-nowrap rounded-md bg-brand-ink px-2 py-1 text-xs font-medium text-white opacity-0 translate-y-1 transition group-hover/refund:opacity-100 group-hover/refund:translate-y-0 group-focus-within/refund:opacity-100 group-focus-within/refund:translate-y-0"
+              >
+                Return or Refund
+              </span>
+            </span>
           )}
           {status === 'returned' && (
             <button
