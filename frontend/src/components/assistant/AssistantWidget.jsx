@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Send, RotateCcw, ChevronRight, AlertCircle } from 'lucide-react';
+import { X, Send, RotateCcw, ChevronRight, AlertCircle, ArrowRight } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import SafeImage from '../SafeImage';
@@ -20,6 +20,13 @@ const SUGGESTIONS = [
 // Under the sm breakpoint the panel covers the whole screen, so following a link out of it
 // should get it out of the way; on larger screens it floats beside the page and stays open.
 const isFullScreen = () => window.matchMedia('(max-width: 639px)').matches;
+
+// What the speech bubble beside the closed chat button cycles through, under "Ask HomeLink AI".
+const LAUNCHER_HINTS = [
+  'Find the best fit for your budget',
+  'Products, installation & more',
+  'Delivery, payments & promos',
+];
 
 // The assistant's mascot: the full figure is the chat button, the head is his avatar in the chat.
 const MASCOT = '/handyman.webp';
@@ -76,6 +83,7 @@ export default function AssistantWidget({ hidden = false }) {
   const [error, setError] = useState(null);
   // Counts clicks on the mascot; each new value remounts him with the jump animation.
   const [hops, setHops] = useState(0);
+  const [hint, setHint] = useState(0);
   const openTimer = useRef(null);
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
@@ -92,6 +100,13 @@ export default function AssistantWidget({ hidden = false }) {
   }, []);
 
   useEffect(() => () => clearTimeout(openTimer.current), []);
+
+  // Cycle the bubble's hint line while the chat is closed, unless the visitor prefers less motion.
+  useEffect(() => {
+    if (open || !enabled || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const timer = setInterval(() => setHint(h => (h + 1) % LAUNCHER_HINTS.length), 4500);
+    return () => clearInterval(timer);
+  }, [open, enabled]);
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -290,9 +305,25 @@ export default function AssistantWidget({ hidden = false }) {
         aria-expanded={open}
         className={`assistant-launcher group fixed z-[90] bottom-3 right-3 sm:bottom-4 sm:right-4 items-end ${open ? 'hidden sm:flex' : 'flex'}`}
       >
+        {/* A speech bubble from the mascot, level with his face, so the label reads as him talking. */}
         {!open && (
-          <span className="hidden sm:flex items-center h-11 pl-5 pr-8 -mr-6 mb-4 rounded-full bg-brand-navy text-white text-sm font-semibold shadow-[0_10px_30px_-8px_rgba(15,43,91,0.55)] group-hover:bg-brand-blue transition">
-            Ask HomeLink AI
+          <span className="assistant-bubble relative hidden sm:block mr-3 mb-5 w-[236px] text-left rounded-2xl bg-white border border-gray-100 pl-4 pr-3 py-2.5 shadow-[0_14px_34px_-12px_rgba(15,43,91,0.45)] transition-transform duration-300 group-hover:-translate-y-0.5">
+            <span aria-hidden="true" className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-brand-orange" />
+            <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-brand-orange">
+              <span className="relative flex w-2 h-2">
+                <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-75 motion-safe:animate-ping" />
+                <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+              </span>
+              AI Assistant · Online
+            </span>
+            <span className="mt-0.5 flex items-center justify-between gap-2">
+              <span className="font-display text-[15px] font-extrabold tracking-tight text-brand-navy">Ask HomeLink AI</span>
+              <span className="w-6 h-6 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:translate-x-0.5">
+                <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </span>
+            <span key={hint} className="assistant-hint block text-xs text-gray-500 truncate">{LAUNCHER_HINTS[hint]}</span>
+            <span aria-hidden="true" className="absolute -right-[7px] top-1/2 -translate-y-1/2 rotate-45 w-3.5 h-3.5 bg-white border-t border-r border-gray-100" />
           </span>
         )}
         <span key={hops} className={`relative block ${hops ? 'mascot-hop' : ''}`}>
