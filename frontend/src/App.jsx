@@ -5,6 +5,7 @@ import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageTransitionOverlay from './components/PageTransitionOverlay';
+import AssistantWidget from './components/assistant/AssistantWidget';
 import { PageTransitionProvider } from './context/PageTransitionContext';
 import NotFound from './pages/NotFound';
 import Home from './pages/Home';
@@ -198,6 +199,9 @@ export default function App() {
         </div>
       </main>
       {!hideChrome && <Footer />}
+      {/* Mounted on the auth pages too (just hidden), so a guest the assistant sends off to log in
+          comes back to the same conversation. */}
+      {!isStaffSection && <AssistantWidget hidden={isAuthSection} />}
     </div>
     </PageTransitionProvider>
   );

@@ -26,6 +26,7 @@ import messageRoutes from './routes/messages.js';
 import wishlistRoutes from './routes/wishlist.js';
 import cartRoutes from './routes/cart.js';
 import paymentRoutes, { paymongoWebhookHandler } from './routes/payments.js';
+import assistantRoutes from './routes/assistant.js';
 import db from './db/database.js';
 import { MOBILE_ORIGINS } from './utils/frontendUrl.js';
 
@@ -97,6 +98,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/assistant', assistantRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);

@@ -1,6 +1,22 @@
 import jwt from 'jsonwebtoken';
 import db from '../db/database.js';
 
+const jwtSecret = () => process.env.JWT_SECRET || 'homelink-super-secret-key-change-in-production';
+
+// For public endpoints that only personalize when someone is signed in: attaches req.user from
+// a valid token but never rejects the request — a missing or bad token just means a guest.
+export function identify(req, res, next) {
+  const header = req.headers.authorization;
+  if (header?.startsWith('Bearer ')) {
+    try {
+      req.user = jwt.verify(header.split(' ')[1], jwtSecret());
+    } catch {
+      req.user = undefined;
+    }
+  }
+  next();
+}
+
 export async function authenticate(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
@@ -8,7 +24,7 @@ export async function authenticate(req, res, next) {
   }
   try {
     const token = header.split(' ')[1];
-    req.user = jwt.verify(token, process.env.JWT_SECRET || 'homelink-super-secret-key-change-in-production');
+    req.user = jwt.verify(token, jwtSecret());
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }

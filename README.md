@@ -29,6 +29,7 @@
 - **Location API** — Google Maps integration for business location
 - **Payment Gateway** — Simulated secure payment processing
 - **Promos** — Holiday discounts, first-time service discount, voucher codes
+- **AI Assistant (Gemini)** — Storefront chat that recommends products and services for a customer's budget, answers questions about HomeLink (delivery, payments, promos, policies, contact), and looks up a signed-in customer's recent orders and bookings. Hidden until `GEMINI_API_KEY` is set
 
 ## Tech Stack
 
@@ -114,6 +115,8 @@ JWT_SECRET=your-secret-key
 FRONTEND_URL=http://localhost:5173
 RESEND_API_KEY=your-resend-api-key   # Optional for real emails
 EMAIL_FROM=HomeLink <onboarding@resend.dev>   # sandboxed until a domain is verified
+GEMINI_API_KEY=your-gemini-api-key   # Optional; enables the AI assistant (https://aistudio.google.com/apikey)
+# GEMINI_MODEL=gemini-3.8-flash       # Optional; comma-separated models to try in order (default: the free Flash models)
 ```
 
 ## License
