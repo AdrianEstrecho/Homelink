@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from './Modal';
 
 export default function PromptDialog({
   open,
@@ -14,8 +15,6 @@ export default function PromptDialog({
 
   useEffect(() => { if (open) setValue(''); }, [open]);
 
-  if (!open) return null;
-
   const submit = (e) => {
     e.preventDefault();
     const trimmed = value.trim();
@@ -24,27 +23,26 @@ export default function PromptDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="modal-scrim" onClick={onCancel} />
-      <form onSubmit={submit} className="modal-panel w-full max-w-sm p-6 fade-up">
-        <h2 className="font-display text-lg font-bold text-brand-navy">{title}</h2>
-        {message && <p className="text-sm text-gray-600 mt-1.5">{message}</p>}
+    <Modal open={open} onClose={onCancel} size="sm" as="form" onSubmit={submit} zIndex={110}>
+      <ModalHeader title={title} subtitle={message} />
+      <ModalBody>
         <input
           autoFocus
           value={value}
           onChange={e => setValue(e.target.value)}
           placeholder={placeholder}
-          className="input-field mt-4"
+          aria-label={title}
+          className="input-field"
         />
-        <div className="flex gap-3 mt-6">
-          <button type="button" onClick={onCancel} className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium text-sm text-gray-700 hover:bg-gray-50 transition">
-            {cancelLabel}
-          </button>
-          <button type="submit" className="flex-1 rounded-lg py-2.5 font-semibold text-sm text-white bg-brand-orange hover:bg-orange-600 transition">
-            {confirmLabel}
-          </button>
-        </div>
-      </form>
-    </div>
+      </ModalBody>
+      <ModalFooter>
+        <button type="button" onClick={onCancel} className={`${modalButton.base} ${modalButton.secondary}`}>
+          {cancelLabel}
+        </button>
+        <button type="submit" disabled={!value.trim()} className={`${modalButton.base} ${modalButton.primary}`}>
+          {confirmLabel}
+        </button>
+      </ModalFooter>
+    </Modal>
   );
 }

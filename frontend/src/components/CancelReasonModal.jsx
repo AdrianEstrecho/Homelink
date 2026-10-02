@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { AlertTriangle } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from './Modal';
 
-// Portaled like ConfirmDialog (see that file for why) but adds a required reason
-// field, since a plain confirm/cancel isn't enough for order & booking cancellations.
+// A confirmation with a required reason field, since a plain confirm/cancel isn't enough
+// for order & booking cancellations.
 export default function CancelReasonModal({ open, title, message, onSubmit, onCancel }) {
+  const fieldId = useId();
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -12,8 +13,6 @@ export default function CancelReasonModal({ open, title, message, onSubmit, onCa
   useEffect(() => {
     if (open) { setReason(''); setError(''); setSubmitting(false); }
   }, [open]);
-
-  if (!open) return null;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -29,49 +28,32 @@ export default function CancelReasonModal({ open, title, message, onSubmit, onCa
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="modal-scrim" onClick={submitting ? undefined : onCancel} />
-      <form onSubmit={submit} className="modal-panel w-full max-w-sm p-6 fade-up">
-        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-red-100 text-red-600">
-          <AlertTriangle className="w-6 h-6" />
-        </div>
-        <h2 className="font-display text-lg font-bold text-brand-navy">{title}</h2>
-        {message && <p className="text-sm text-gray-600 mt-1.5">{message}</p>}
-
-        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mt-4 mb-1.5">
-          Reason for cancellation
-        </label>
+  return (
+    <Modal open={open} onClose={onCancel} dismissible={!submitting} size="sm" as="form" onSubmit={submit} zIndex={110} role="alertdialog">
+      <ModalHeader icon={AlertTriangle} tone="red" title={title} subtitle={message} />
+      <ModalBody>
+        <label htmlFor={fieldId} className="block text-sm font-medium text-brand-ink mb-1.5">Reason for cancellation</label>
         <textarea
+          id={fieldId}
           autoFocus
           rows={3}
           value={reason}
           onChange={e => { setReason(e.target.value); if (error) setError(''); }}
           placeholder="Let us know what changed..."
           disabled={submitting}
+          aria-invalid={error ? true : undefined}
           className="input-field resize-none disabled:opacity-60"
         />
-        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
-
-        <div className="flex gap-3 mt-6">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={submitting}
-            className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium text-sm text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
-          >
-            Keep It
-          </button>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex-1 rounded-lg py-2.5 font-semibold text-sm text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50"
-          >
-            {submitting ? 'Submitting...' : 'Submit'}
-          </button>
-        </div>
-      </form>
-    </div>,
-    document.body
+        {error && <p role="alert" className="text-sm text-red-600 mt-2">{error}</p>}
+      </ModalBody>
+      <ModalFooter>
+        <button type="button" onClick={onCancel} disabled={submitting} className={`${modalButton.base} ${modalButton.secondary}`}>
+          Keep it
+        </button>
+        <button type="submit" disabled={submitting} className={`${modalButton.base} bg-red-600 hover:bg-red-700 text-white`}>
+          {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</> : 'Submit'}
+        </button>
+      </ModalFooter>
+    </Modal>
   );
 }

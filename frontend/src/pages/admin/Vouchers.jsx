@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, X, Ticket } from 'lucide-react';
+import { Plus, Trash2, Ticket } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
+import FormField from '../../components/FormField';
 import { useAuth } from '../../context/AuthContext';
 
 const emptyForm = { code: '', discountType: 'percent', discountValue: '', minOrder: '', maxUses: '100', validFrom: '', validUntil: '' };
@@ -124,37 +126,44 @@ export default function AdminVouchers() {
         )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={cancelForm} />
-          <form onSubmit={handleSubmit} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 grid grid-cols-1 md:grid-cols-2 gap-4 fade-up">
-            <div className="md:col-span-2 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">New Voucher</h3>
-              <button type="button" onClick={cancelForm} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
-            </div>
-
-            {error && <p className="md:col-span-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
-
-            <input placeholder="Code (e.g. SAVE20)" required value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} className="input-field md:col-span-2 font-mono" />
+      <Modal open={showForm} onClose={cancelForm} as="form" onSubmit={handleSubmit}>
+        <ModalHeader
+          icon={Ticket}
+          tone="orange"
+          title="New voucher"
+          subtitle={isGeneralStaff
+            ? "This voucher won't go live until an inventory clerk reviews and approves it."
+            : 'A discount code customers can enter at checkout.'}
+        />
+        <ModalBody className="grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
+          {error && <p role="alert" className="md:col-span-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+          <FormField label="Code" required className="md:col-span-2" hint="What customers type at checkout. Saved in capitals.">
+            <input placeholder="e.g. SAVE20" required autoFocus value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} className="input-field font-mono tracking-wide" />
+          </FormField>
+          <FormField label="Discount type">
             <Select value={form.discountType} onChange={discountType => setForm({ ...form, discountType })} options={DISCOUNT_TYPE_OPTIONS} />
-            <input placeholder={form.discountType === 'percent' ? 'Discount %' : 'Discount ₱'} type="number" min="0" required value={form.discountValue} onChange={e => setForm({ ...form, discountValue: e.target.value })} className="input-field" />
-            <input placeholder="Minimum Order (₱)" type="number" min="0" value={form.minOrder} onChange={e => setForm({ ...form, minOrder: e.target.value })} className="input-field" />
-            <input placeholder="Max Uses" type="number" min="1" value={form.maxUses} onChange={e => setForm({ ...form, maxUses: e.target.value })} className="input-field" />
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valid From</label>
-              <input type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valid Until</label>
-              <input type="date" value={form.validUntil} onChange={e => setForm({ ...form, validUntil: e.target.value })} className="input-field" />
-            </div>
-            {isGeneralStaff && (
-              <p className="md:col-span-2 text-xs text-gray-400">This voucher won't go live until an inventory clerk reviews and approves it.</p>
-            )}
-            <button type="submit" className="btn-primary md:col-span-2">{isGeneralStaff ? 'Submit for Approval' : 'Save Voucher'}</button>
-          </form>
-        </div>
-      )}
+          </FormField>
+          <FormField label={form.discountType === 'percent' ? 'Discount (%)' : 'Discount (₱)'} required>
+            <input type="number" min="0" required value={form.discountValue} onChange={e => setForm({ ...form, discountValue: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Minimum order (₱)" hint="Leave blank for no minimum.">
+            <input type="number" min="0" value={form.minOrder} onChange={e => setForm({ ...form, minOrder: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Max uses" hint="Leave blank for 100.">
+            <input type="number" min="1" value={form.maxUses} onChange={e => setForm({ ...form, maxUses: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Valid from">
+            <input type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Valid until">
+            <input type="date" value={form.validUntil} onChange={e => setForm({ ...form, validUntil: e.target.value })} className="input-field" />
+          </FormField>
+        </ModalBody>
+        <ModalFooter>
+          <button type="button" onClick={cancelForm} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
+          <button type="submit" className={`${modalButton.base} ${modalButton.primary}`}>{isGeneralStaff ? 'Submit for approval' : 'Save voucher'}</button>
+        </ModalFooter>
+      </Modal>
 
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">

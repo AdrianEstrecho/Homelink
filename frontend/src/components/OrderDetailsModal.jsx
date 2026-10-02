@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { X, MapPin, CreditCard, Printer, Download, CheckCircle2, CircleCheckBig, Truck, RotateCcw } from 'lucide-react';
+import { MapPin, CreditCard, Printer, Download, CheckCircle2, CircleCheckBig, Truck, RotateCcw, ReceiptText, ClipboardCheck, Loader2 } from 'lucide-react';
 import { formatPrice, statusColor } from '../api/client';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from './Modal';
 import { downloadReceiptPdf } from '../utils/receiptPdf';
 import SafeImage from './SafeImage';
 import { paymentMethodLabel } from '../constants/paymentMethods';
@@ -36,13 +36,13 @@ export default function OrderDetailsModal({
   const shownStatus = completed ? 'completed' : order.status;
   const shownStatusClass = completed ? 'bg-teal-100 text-teal-800' : statusColor(order.status);
 
-  // Portaled to <body> — same reasoning as ConfirmDialog/PromptDialog/TermsModal: rendered
-  // inline, this ended up boxed inside its position in the page (visible page content, e.g.
-  // the footer, painting over the lower half of the panel) instead of sitting above everything.
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm no-print" onClick={handleDismiss} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto fade-up print-area print:border print:border-dashed print:border-gray-300">
+  const showCancel = onCancelOrder && order.status === 'pending';
+  const showReturn = onReturnOrder && order.canReturn;
+  const hasFooter = justConfirmed || previewing || showCancel || showReturn || onCompleteOrder;
+
+  // The panel itself is the .print-area: printing shows just this receipt (see index.css).
+  return (
+    <Modal onClose={handleDismiss} dismissible={!confirmLoading} scrimClassName="no-print" className="print-area print:border print:border-dashed print:border-gray-300">
         {!previewing && (
           <div className="hidden print:block text-center px-6 pt-6 font-mono">
             <p className="text-xl font-bold text-brand-navy">Home<span className="text-brand-orange">Link</span></p>
@@ -57,33 +57,24 @@ export default function OrderDetailsModal({
           </div>
         )}
 
-        <div className="flex items-start justify-between p-6 pb-4 sticky top-0 bg-white border-b border-gray-100 print:hidden">
-          <div>
-            <h2 className="font-display text-lg font-bold text-brand-navy">
-              {previewing ? 'Review Your Order' : `Order #${order.id.slice(0, 8).toUpperCase()}`}
-            </h2>
-            <p className="text-sm text-gray-500">
-              {previewing ? 'Nothing is placed yet — check the details below.' : new Date(order.created_at).toLocaleString()}
-            </p>
-          </div>
-          <div className="flex items-center gap-1 no-print">
-            {!previewing && (
-              <>
-                <button onClick={handleDownload} title="Download PDF" className="p-1.5 rounded-lg hover:bg-gray-100 transition">
-                  <Download className="w-5 h-5 text-gray-500" />
-                </button>
-                <button onClick={handlePrint} title="Print receipt" className="p-1.5 rounded-lg hover:bg-gray-100 transition">
-                  <Printer className="w-5 h-5 text-gray-500" />
-                </button>
-              </>
-            )}
-            <button onClick={handleDismiss} title={previewing ? 'Back to edit' : 'Close'} className="p-1.5 rounded-lg hover:bg-gray-100 transition">
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
-          </div>
-        </div>
+        <ModalHeader
+          className="print:hidden"
+          icon={previewing ? ClipboardCheck : ReceiptText}
+          title={previewing ? 'Review your order' : `Order #${order.id.slice(0, 8).toUpperCase()}`}
+          subtitle={previewing ? 'Nothing is placed yet — check the details below.' : new Date(order.created_at).toLocaleString()}
+          actions={!previewing && (
+            <>
+              <button type="button" onClick={handleDownload} title="Download PDF" aria-label="Download PDF receipt" className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
+                <Download className="w-[18px] h-[18px]" />
+              </button>
+              <button type="button" onClick={handlePrint} title="Print receipt" aria-label="Print receipt" className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition">
+                <Printer className="w-[18px] h-[18px]" />
+              </button>
+            </>
+          )}
+        />
 
-        <div className="p-6 pt-4 space-y-5">
+        <ModalBody className="space-y-5 print:overflow-visible">
           {justConfirmed && (
             <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-xl p-4 no-print">
               <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
@@ -195,59 +186,47 @@ export default function OrderDetailsModal({
             <p className="text-xs text-gray-300 tracking-widest mt-2">* * * * * * * * * * * * *</p>
           </div>
 
-          {justConfirmed && (
-            <button onClick={onClose} className="btn-primary w-full py-3 no-print">
-              Continue to My Orders
-            </button>
-          )}
+          {previewing && error && <p role="alert" className="no-print text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+        </ModalBody>
 
-          {previewing && (
-            <div className="no-print space-y-3">
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-              <div className="flex gap-3">
-                <button onClick={onClose} disabled={confirmLoading} className="btn-secondary flex-1 py-3 disabled:opacity-50">
-                  Edit Order
+        {hasFooter && (
+          <ModalFooter className="no-print">
+            {showCancel && (
+              <button type="button" onClick={() => onCancelOrder(order)} className={`${modalButton.base} border border-red-200 bg-white text-red-600 hover:bg-red-50 sm:mr-auto`}>
+                Cancel order
+              </button>
+            )}
+            {/* canReturn comes from the server (delivered, inside the 7-day window, and with units
+                not already spoken for) — the modal never works it out from the order itself. */}
+            {showReturn && (
+              <button type="button" onClick={() => onReturnOrder(order)} className={`${modalButton.base} ${modalButton.secondary}`}>
+                <RotateCcw className="w-4 h-4" /> Return or refund
+              </button>
+            )}
+            {/* The caller decides eligibility (delivered, not completed, nothing on its way back) and
+                only passes this when it holds; the server re-checks all of it under a row lock. */}
+            {onCompleteOrder && (
+              <button type="button" onClick={() => onCompleteOrder(order)} className={`${modalButton.base} bg-brand-teal text-white hover:bg-teal-600`}>
+                <CircleCheckBig className="w-4 h-4" /> Mark as completed
+              </button>
+            )}
+            {previewing && (
+              <>
+                <button type="button" onClick={onClose} disabled={confirmLoading} className={`${modalButton.base} ${modalButton.secondary}`}>
+                  Edit order
                 </button>
-                <button onClick={onConfirm} disabled={confirmLoading} className="btn-primary flex-1 py-3 disabled:opacity-50">
-                  {confirmLoading ? 'Placing Order...' : 'Confirm & Place Order'}
+                <button type="button" onClick={onConfirm} disabled={confirmLoading} className={`${modalButton.base} ${modalButton.primary}`}>
+                  {confirmLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Placing order…</> : 'Confirm & place order'}
                 </button>
-              </div>
-            </div>
-          )}
-
-          {onCancelOrder && order.status === 'pending' && (
-            <button
-              onClick={() => onCancelOrder(order)}
-              className="no-print w-full border border-red-200 text-red-600 rounded-lg py-2.5 font-semibold text-sm hover:bg-red-50 transition"
-            >
-              Cancel Order
-            </button>
-          )}
-
-          {/* canReturn comes from the server (delivered, inside the 7-day window, and with units
-              not already spoken for) — the modal never works it out from the order itself. */}
-          {onReturnOrder && order.canReturn && (
-            <button
-              onClick={() => onReturnOrder(order)}
-              className="no-print w-full border border-gray-300 text-brand-navy rounded-lg py-2.5 font-semibold text-sm hover:bg-gray-50 transition flex items-center justify-center gap-2"
-            >
-              <RotateCcw className="w-4 h-4" /> Return or Refund
-            </button>
-          )}
-
-          {/* The caller decides eligibility (delivered, not completed, nothing on its way back) and
-              only passes this when it holds; the server re-checks all of it under a row lock. */}
-          {onCompleteOrder && (
-            <button
-              onClick={() => onCompleteOrder(order)}
-              className="no-print w-full bg-brand-teal text-white rounded-lg py-2.5 font-semibold text-sm hover:bg-teal-600 transition flex items-center justify-center gap-2"
-            >
-              <CircleCheckBig className="w-4 h-4" /> Mark as Completed
-            </button>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body
+              </>
+            )}
+            {justConfirmed && (
+              <button type="button" onClick={onClose} className={`${modalButton.base} ${modalButton.primary}`}>
+                Continue to My Orders
+              </button>
+            )}
+          </ModalFooter>
+        )}
+    </Modal>
   );
 }

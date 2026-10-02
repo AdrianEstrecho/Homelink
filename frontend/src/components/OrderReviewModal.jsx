@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Star, X, Loader2 } from 'lucide-react';
+import { Star, Loader2 } from 'lucide-react';
 import { api } from '../api/client';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from './Modal';
 import SafeImage from './SafeImage';
 import StarRating from './account/StarRating';
 
-// Portaled at z-[110] like ReturnRequestModal, so it sits above the order details modal it can
+// At z-[110] like ReturnRequestModal, so it sits above the order details modal it can
 // open from. Reviews are one per customer per product (reviews.js enforces it with a 400), so
 // this only ever offers the products of this order that the customer has not already rated —
 // `reviewed` is the set of product ids they have, passed down rather than re-fetched.
@@ -63,25 +63,10 @@ export default function OrderReviewModal({ order, reviewed, onClose, onSubmitted
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="modal-scrim" onClick={submitting ? undefined : onClose} />
-      <form onSubmit={submit} className="modal-panel w-full max-w-lg max-h-[85vh] overflow-y-auto p-6 fade-up">
-        <div className="flex items-start justify-between gap-3 mb-5">
-          <div className="flex items-center gap-2.5">
-            <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-brand-orange/10 text-brand-orange shrink-0">
-              <Star className="w-4 h-4" />
-            </span>
-            <div>
-              <h2 className="font-display text-lg font-bold text-brand-navy">Write a Review</h2>
-              <p className="text-xs text-gray-500">Order #{order.id.slice(0, 8).toUpperCase()}</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} disabled={submitting} className="text-gray-400 hover:text-gray-600 disabled:opacity-50">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+  return (
+    <Modal onClose={onClose} dismissible={!submitting} as="form" onSubmit={submit} zIndex={110}>
+      <ModalHeader icon={Star} tone="orange" title="Write a review" subtitle={`Order #${order.id.slice(0, 8).toUpperCase()}`} />
+      <ModalBody>
         {items.length === 0 ? (
           <p className="text-sm text-gray-500 py-6 text-center">
             You have already reviewed everything in this order. Thank you!
@@ -120,30 +105,19 @@ export default function OrderReviewModal({ order, reviewed, onClose, onSubmitted
           </div>
         )}
 
-        {error && <p className="text-sm text-red-600 mt-4">{error}</p>}
-
-        <div className="flex gap-3 mt-6">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium text-sm text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
-          >
-            {items.length === 0 ? 'Close' : 'Cancel'}
+        {error && <p role="alert" className="text-sm text-red-600 mt-4">{error}</p>}
+      </ModalBody>
+      <ModalFooter>
+        <button type="button" onClick={onClose} disabled={submitting} className={`${modalButton.base} ${modalButton.secondary}`}>
+          {items.length === 0 ? 'Close' : 'Cancel'}
+        </button>
+        {items.length > 0 && (
+          <button type="submit" disabled={!rated.length || submitting} className={`${modalButton.base} ${modalButton.primary}`}>
+            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {submitting ? 'Posting…' : rated.length > 1 ? `Post ${rated.length} reviews` : 'Post review'}
           </button>
-          {items.length > 0 && (
-            <button
-              type="submit"
-              disabled={!rated.length || submitting}
-              className="flex-1 btn-primary text-sm py-2.5 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {submitting ? 'Posting…' : rated.length > 1 ? `Post ${rated.length} reviews` : 'Post review'}
-            </button>
-          )}
-        </div>
-      </form>
-    </div>,
-    document.body,
+        )}
+      </ModalFooter>
+    </Modal>
   );
 }

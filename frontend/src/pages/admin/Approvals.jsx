@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Package, Wrench, Ticket, Check, X, Clock, Users, Truck, Calendar, LifeBuoy, KeyRound, Copy } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Modal, { ModalFooter, ModalTitle, modalButton } from '../../components/Modal';
 import { useAuth } from '../../context/AuthContext';
 import { DEPARTMENT_LABELS, parseUtc } from '../../data/auditActions';
 import { formatTicketNo } from '../../utils/ticketNumber';
@@ -377,20 +377,20 @@ function ResetCodeStatus({ cr }) {
 }
 
 function IssuedCodeDialog({ issued, onClose }) {
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="modal-scrim" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby="issued-code-title" className="modal-panel w-full max-w-sm p-6 fade-up">
-        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-green-100 text-green-600">
-          <KeyRound className="w-6 h-6" />
-        </div>
-        <h2 id="issued-code-title" className="font-display text-lg font-bold text-brand-navy">Password reset approved</h2>
-        <p className="text-sm text-gray-600 mt-1.5">Give this code to {issued.name}. They enter it on the staff sign-in page under <span className="font-medium">Forgot password?</span>, along with their new password.</p>
+  return (
+    <Modal onClose={onClose} size="sm">
+      <div className="px-6 pt-6 pb-5">
+        <span className="w-12 h-12 rounded-full ring-8 ring-green-50/60 flex items-center justify-center mb-4 bg-green-50 text-green-600" aria-hidden="true">
+          <KeyRound className="w-[22px] h-[22px]" />
+        </span>
+        <ModalTitle className="font-display text-lg font-bold leading-snug text-brand-ink">Password reset approved</ModalTitle>
+        <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">Give this code to {issued.name}. They enter it on the staff sign-in page under <span className="font-medium">Forgot password?</span>, along with their new password.</p>
         <div className="mt-4"><ResetCode code={issued.code} /></div>
         <p className="text-xs text-gray-400 mt-2">Works once · expires {formatExpiry(issued.expiresAt)} · also shown under Approved</p>
-        <button type="button" onClick={onClose} className="btn-secondary w-full mt-6 py-2.5">Done</button>
       </div>
-    </div>,
-    document.body
+      <ModalFooter>
+        <button type="button" onClick={onClose} autoFocus className={`${modalButton.base} ${modalButton.navy}`}>Done</button>
+      </ModalFooter>
+    </Modal>
   );
 }

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { HardHat, MessageSquare, Mail, Phone, Plus, X } from 'lucide-react';
+import { HardHat, MessageSquare, Mail, Phone, Plus, Loader2 } from 'lucide-react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
+import FormField from '../../components/FormField';
 import { useAuth } from '../../context/AuthContext';
 
 const EMPTY_FORM = { email: '', password: '', firstName: '', lastName: '', phone: '' };
@@ -52,31 +54,39 @@ export default function Technicians() {
 
   return (
     <AdminLayout title="Technicians" subtitle="Installer and technician contact info — message them directly about a job.">
-      {showForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={closeForm} />
-          <form onSubmit={handleAdd} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 grid grid-cols-1 md:grid-cols-2 gap-4 fade-up">
-            <div className="md:col-span-2 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">New Technician</h3>
-              <button type="button" onClick={closeForm} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
-            </div>
-            <input placeholder="First Name" required value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className="input-field" />
-            <input placeholder="Last Name" required value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className="input-field" />
-            <input placeholder="Email" type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" />
-            <input placeholder="Password" type="password" required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="input-field" />
-            <input placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field md:col-span-2" />
-            <p className="md:col-span-2 text-xs text-gray-400">
-              {isAdmin
-                ? 'The account is created in the Installation department and can sign in right away.'
-                : "This account won't be created until an admin reviews and approves it."}
-            </p>
-            {formError && <p className="md:col-span-2 text-sm text-red-600">{formError}</p>}
-            <button type="submit" disabled={saving} className="btn-primary md:col-span-2 disabled:opacity-50">
-              {saving ? 'Saving...' : isAdmin ? 'Add Technician' : 'Submit for Approval'}
-            </button>
-          </form>
-        </div>
-      )}
+      <Modal open={showForm} onClose={closeForm} dismissible={!saving} as="form" onSubmit={handleAdd}>
+        <ModalHeader
+          icon={HardHat}
+          title="New technician"
+          subtitle={isAdmin
+            ? 'The account is created in the Installation department and can sign in right away.'
+            : "This account won't be created until an admin reviews and approves it."}
+        />
+        <ModalBody className="grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
+          <FormField label="First name" required>
+            <input required autoFocus value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Last name" required>
+            <input required value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Email" required>
+            <input type="email" required autoComplete="off" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Temporary password" required hint="They can change it after signing in.">
+            <input type="password" required autoComplete="new-password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Phone" className="md:col-span-2">
+            <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field" />
+          </FormField>
+          {formError && <p role="alert" className="md:col-span-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>}
+        </ModalBody>
+        <ModalFooter>
+          <button type="button" onClick={closeForm} disabled={saving} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
+          <button type="submit" disabled={saving} className={`${modalButton.base} ${modalButton.primary}`}>
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : isAdmin ? 'Add technician' : 'Submit for approval'}
+          </button>
+        </ModalFooter>
+      </Modal>
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         {notice

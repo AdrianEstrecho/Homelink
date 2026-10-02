@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Pencil, X, Truck } from 'lucide-react';
+import { Plus, Trash2, Pencil, Truck } from 'lucide-react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
+import FormField from '../../components/FormField';
 import { useAuth } from '../../context/AuthContext';
 
 const emptyForm = { name: '', contactName: '', email: '', phone: '', address: '', category: '', notes: '' };
@@ -110,31 +112,43 @@ export default function Suppliers() {
         )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={cancelForm} />
-          <form onSubmit={handleSubmit} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 grid grid-cols-1 md:grid-cols-2 gap-4 fade-up">
-            <div className="md:col-span-2 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">{editingId ? 'Edit Supplier' : 'New Supplier'}</h3>
-              <button type="button" onClick={cancelForm} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
-            </div>
-
-            {error && <p className="md:col-span-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
-
-            <input placeholder="Supplier Name" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="input-field md:col-span-2" />
-            <input placeholder="Contact Person" value={form.contactName} onChange={e => setForm({ ...form, contactName: e.target.value })} className="input-field" />
-            <input placeholder="Category (e.g. Electrical)" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="input-field" />
-            <input placeholder="Email" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" />
-            <input placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field" />
-            <input placeholder="Address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="input-field md:col-span-2" />
-            <textarea placeholder="Notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="input-field md:col-span-2" rows={2} />
-            {!isAdmin && (
-              <p className="md:col-span-2 text-xs text-gray-400">This {editingId ? 'change' : 'supplier'} won't go live until an admin reviews and approves it.</p>
-            )}
-            <button type="submit" className="btn-primary md:col-span-2">{isAdmin ? 'Save Supplier' : 'Submit for Approval'}</button>
-          </form>
-        </div>
-      )}
+      <Modal open={showForm} onClose={cancelForm} as="form" onSubmit={handleSubmit}>
+        <ModalHeader
+          icon={Truck}
+          title={editingId ? 'Edit supplier' : 'New supplier'}
+          subtitle={isAdmin
+            ? 'Who supplies HomeLink, and how to reach them.'
+            : `This ${editingId ? 'change' : 'supplier'} won't go live until an admin reviews and approves it.`}
+        />
+        <ModalBody className="grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
+          {error && <p role="alert" className="md:col-span-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+          <FormField label="Supplier name" required className="md:col-span-2">
+            <input required autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Contact person">
+            <input value={form.contactName} onChange={e => setForm({ ...form, contactName: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Category">
+            <input placeholder="e.g. Electrical" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Email">
+            <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Phone">
+            <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Address" className="md:col-span-2">
+            <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Notes" className="md:col-span-2">
+            <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="input-field resize-none" rows={2} />
+          </FormField>
+        </ModalBody>
+        <ModalFooter>
+          <button type="button" onClick={cancelForm} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
+          <button type="submit" className={`${modalButton.base} ${modalButton.primary}`}>{isAdmin ? 'Save supplier' : 'Submit for approval'}</button>
+        </ModalFooter>
+      </Modal>
 
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">

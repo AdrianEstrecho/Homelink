@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Search, X, ImageOff, UploadCloud, Info, FolderTree, Tag, ListChecks, Sparkles, ClipboardList, ShieldCheck, Image as ImageIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Search, X, ImageOff, UploadCloud, Info, FolderTree, Tag, ListChecks, Sparkles, ClipboardList, ShieldCheck, Wrench, Image as ImageIcon } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
 import FilterTab from '../../components/admin/FilterTab';
 import Select from '../../components/Select';
 import PromptDialog from '../../components/PromptDialog';
@@ -350,19 +351,14 @@ export default function AdminServices() {
         )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={cancelForm} />
-          <form onSubmit={handleSubmit} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col fade-up">
-            <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-gray-100 shrink-0">
-              <div>
-                <h3 className="font-semibold text-gray-800 text-lg">{editingId ? 'Edit Service' : 'Add New Service'}</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Everything filled in here shows on the customer service page. Fields marked <span className="text-red-500">*</span> are required.</p>
-              </div>
-              <button type="button" onClick={cancelForm} aria-label="Close" className="text-gray-400 hover:text-gray-600 shrink-0"><X className="w-4 h-4" /></button>
-            </div>
+      <Modal open={showForm} onClose={cancelForm} size="xl" as="form" onSubmit={handleSubmit}>
+            <ModalHeader
+              icon={Wrench}
+              title={editingId ? 'Edit service' : 'Add a new service'}
+              subtitle={<>Everything filled in here shows on the customer service page. Fields marked <span className="text-red-500">*</span> are required.</>}
+            />
 
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            <ModalBody className="space-y-5">
               {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
 
               <Section icon={Info} title="Basic Information" description="The name and summary shown at the top of the service page.">
@@ -533,17 +529,15 @@ export default function AdminServices() {
                   {editingId ? 'This edit' : 'This service'} won't go live until an inventory clerk reviews and approves it.
                 </p>
               )}
-            </div>
+            </ModalBody>
 
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 shrink-0">
-              <button type="button" onClick={cancelForm} className="px-5 py-2.5 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition">Cancel</button>
-              <button type="submit" className="btn-primary text-sm">
-                {isGeneralStaff ? 'Submit for Approval' : editingId ? 'Save Changes' : 'Save Service'}
+            <ModalFooter>
+              <button type="button" onClick={cancelForm} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
+              <button type="submit" className={`${modalButton.base} ${modalButton.primary}`}>
+                {isGeneralStaff ? 'Submit for approval' : editingId ? 'Save changes' : 'Save service'}
               </button>
-            </div>
-          </form>
-        </div>
-      )}
+            </ModalFooter>
+      </Modal>
 
       <div className="card overflow-visible p-3 mb-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-xs">

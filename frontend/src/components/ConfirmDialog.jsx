@@ -1,15 +1,18 @@
-import { createPortal } from 'react-dom';
+import Modal, { ModalFooter, ModalTitle, modalButton } from './Modal';
 
 // Tones reuse the same category colors as the admin activity feed
 // (see CATEGORY_ICON in AdminLayout.jsx) so a confirmation's color always
 // matches how that action later shows up in the audit trail.
 const TONE_STYLES = {
-  delete: { icon: 'bg-red-100 text-red-600', confirm: 'bg-red-600 hover:bg-red-700' },
-  archive: { icon: 'bg-purple-100 text-purple-600', confirm: 'bg-purple-600 hover:bg-purple-700' },
-  update: { icon: 'bg-amber-100 text-amber-600', confirm: 'bg-amber-600 hover:bg-amber-700' },
-  login: { icon: 'bg-blue-100 text-blue-600', confirm: 'bg-blue-600 hover:bg-blue-700' },
-  create: { icon: 'bg-green-100 text-green-600', confirm: 'bg-green-600 hover:bg-green-700' },
+  delete: { icon: 'bg-red-50 text-red-600 ring-red-50/60', confirm: 'bg-red-600 hover:bg-red-700 text-white' },
+  archive: { icon: 'bg-purple-50 text-purple-600 ring-purple-50/60', confirm: 'bg-purple-600 hover:bg-purple-700 text-white' },
+  update: { icon: 'bg-amber-50 text-amber-600 ring-amber-50/60', confirm: 'bg-amber-600 hover:bg-amber-700 text-white' },
+  login: { icon: 'bg-blue-50 text-blue-600 ring-blue-50/60', confirm: 'bg-blue-600 hover:bg-blue-700 text-white' },
+  create: { icon: 'bg-green-50 text-green-600 ring-green-50/60', confirm: 'bg-green-600 hover:bg-green-700 text-white' },
 };
+
+// Tones that destroy or hide something start with focus on Cancel, so a stray Enter can't do it.
+const CAUTIOUS = new Set(['delete', 'archive']);
 
 export default function ConfirmDialog({
   open,
@@ -23,42 +26,32 @@ export default function ConfirmDialog({
   onCancel,
   zIndexClass = 'z-[100]',
 }) {
-  if (!open) return null;
   const { icon: iconClass, confirm: confirmClass } = TONE_STYLES[tone] || TONE_STYLES.delete;
+  const cautious = CAUTIOUS.has(tone);
+  // Callers stack a confirmation over another dialog by passing a higher z-[n] class.
+  const zIndex = Number(zIndexClass.match(/\d+/)?.[0]) || 100;
 
-  // Portaled to <body> so `fixed inset-0` centers on the viewport regardless of
-  // where this is invoked from — a caller nested inside anything with a transform,
-  // filter, or backdrop-filter (e.g. Navbar's blurred sticky bar) would otherwise
-  // create a containing block that boxes the dialog into that ancestor instead.
-  return createPortal(
-    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4`}>
-      <div className="modal-scrim" onClick={onCancel} />
-      <div className="modal-panel w-full max-w-sm p-6 fade-up">
+  return (
+    <Modal open={open} onClose={onCancel} size="sm" role="alertdialog" zIndex={zIndex}>
+      <div className="px-6 pt-6 pb-5 flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left gap-4">
         {Icon && (
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${iconClass}`}>
-            <Icon className="w-6 h-6" />
-          </div>
+          <span className={`w-12 h-12 rounded-full ring-8 flex items-center justify-center shrink-0 ${iconClass}`} aria-hidden="true">
+            <Icon className="w-[22px] h-[22px]" />
+          </span>
         )}
-        <h2 className="font-display text-lg font-bold text-brand-navy">{title}</h2>
-        {message && <p className="text-sm text-gray-600 mt-1.5 whitespace-pre-line">{message}</p>}
-        <div className="flex gap-3 mt-6">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium text-sm text-gray-700 hover:bg-gray-50 transition"
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className={`flex-1 rounded-lg py-2.5 font-semibold text-sm text-white transition ${confirmClass}`}
-          >
-            {confirmLabel}
-          </button>
+        <div className="min-w-0 sm:pt-1">
+          <ModalTitle className="font-display text-lg font-bold leading-snug text-brand-ink">{title}</ModalTitle>
+          {message && <p className="text-sm text-gray-600 mt-1.5 whitespace-pre-line leading-relaxed">{message}</p>}
         </div>
       </div>
-    </div>,
-    document.body
+      <ModalFooter>
+        <button type="button" onClick={onCancel} autoFocus={cautious} className={`${modalButton.base} ${modalButton.secondary}`}>
+          {cancelLabel}
+        </button>
+        <button type="button" onClick={onConfirm} autoFocus={!cautious} className={`${modalButton.base} ${confirmClass}`}>
+          {confirmLabel}
+        </button>
+      </ModalFooter>
+    </Modal>
   );
 }

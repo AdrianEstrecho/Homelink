@@ -1061,6 +1061,73 @@
   pointer-events: none;
 }
 
+/* Dialogs (components/Modal.jsx). A sheet that rises from the bottom edge on phones, a panel
+   that settles into the middle from sm up. Solid white, unlike the frosted .modal-panel the
+   toasts and assistant still use: forms and receipts read better on a flat surface. The header
+   carries the same faint drafting grid as the admin page titles, fading out before the text.
+   Entrance animations fill `backwards` only, so no transform lingers on the panel — a leftover
+   one would become the containing block for anything position:fixed inside it. */
+.dialog-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 25, 55, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: dialogFade 0.2s ease-out backwards;
+}
+.dialog-panel {
+  background: #fff;
+  border: 1px solid rgba(15, 43, 91, 0.08);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 24px 64px -16px rgba(10, 25, 55, 0.4), 0 2px 6px rgba(10, 25, 55, 0.08);
+  overflow: hidden;
+  animation: dialogSheetIn 0.34s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.dialog-foot {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+@media (min-width: 640px) {
+  .dialog-panel {
+    border-radius: 18px;
+    animation: dialogPopIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+  .dialog-foot {
+    padding-bottom: 1rem;
+  }
+}
+@keyframes dialogFade {
+  from { opacity: 0; }
+}
+@keyframes dialogSheetIn {
+  from { transform: translateY(100%); }
+}
+@keyframes dialogPopIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+}
+.dialog-head {
+  position: relative;
+  isolation: isolate;
+}
+.dialog-head::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(15, 43, 91, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 43, 91, 0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 45%, #000 100%), linear-gradient(180deg, #000 20%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent 45%, #000 100%), linear-gradient(180deg, #000 20%, transparent 100%);
+  mask-composite: intersect;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dialog-scrim,
+  .dialog-panel { animation: none; }
+}
+
 /* Account page header (pages/Account.jsx): a faint 40px grid over the navy band, masked so it
    only shows toward the right and fades out before it reaches the name and avatar. */
 .account-hero-grid {
@@ -1123,7 +1190,9 @@
   .toast-in,
   .route-fade,
   .overlay-cover-in,
-  .overlay-cover-out {
+  .overlay-cover-out,
+  .dialog-panel,
+  .dialog-scrim {
     animation: none;
   }
 }

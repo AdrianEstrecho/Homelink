@@ -138,6 +138,9 @@ export default function AutocompleteInput({
       // the form for someone typing an address the list does not contain.
       if (active >= 0) { e.preventDefault(); choose(items[active]); }
     } else if (e.key === 'Escape') {
+      // Marked handled so a surrounding dialog (Modal.jsx) leaves itself open — the first
+      // Escape closes the suggestions, a second one closes the dialog.
+      e.preventDefault();
       setOpen(false);
       setActive(-1);
     }

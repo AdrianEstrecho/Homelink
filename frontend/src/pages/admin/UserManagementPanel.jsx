@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Eye, EyeOff, ArrowUpCircle, X, Archive, ArchiveRestore } from 'lucide-react';
+import { Plus, Trash2, Eye, EyeOff, ArrowUpCircle, Archive, ArchiveRestore, UserPlus, ShieldCheck } from 'lucide-react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import FilterTab from '../../components/admin/FilterTab';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
+import FormField from '../../components/FormField';
 import Pagination from '../../components/Pagination';
 import { useAuth } from '../../context/AuthContext';
 import { DEPARTMENT_LABELS } from '../../data/auditActions';
@@ -228,28 +230,42 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
         )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={closeForm} />
-          <form onSubmit={handleAdd} className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 grid grid-cols-1 md:grid-cols-2 gap-4 fade-up">
-            <div className="md:col-span-2 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">{tab === 'admin' ? 'New Admin' : 'New Employee'}</h3>
-              <button type="button" onClick={closeForm} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
-            </div>
-            <input placeholder="Email" type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" />
-            <input placeholder="Password" type="password" required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="input-field" />
-            <input placeholder="First Name" required value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className="input-field" />
-            <input placeholder="Last Name" required value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className="input-field" />
-            <input placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field" />
-            {tab !== 'admin' && <Select value={form.position} onChange={position => setForm({ ...form, position })} placeholder="Department" options={DEPARTMENT_OPTIONS} />}
-            {isHR && tab === 'employee' && (
-              <p className="md:col-span-2 text-xs text-gray-400">This account won't be created until an admin reviews and approves it.</p>
-            )}
-            {formError && <p className="md:col-span-2 text-sm text-red-600">{formError}</p>}
-            <button type="submit" className="btn-primary md:col-span-2">{tab === 'admin' ? 'Save Admin' : isHR ? 'Submit for Approval' : 'Save User'}</button>
-          </form>
-        </div>
-      )}
+      <Modal open={showForm} onClose={closeForm} as="form" onSubmit={handleAdd}>
+        <ModalHeader
+          icon={tab === 'admin' ? ShieldCheck : UserPlus}
+          title={tab === 'admin' ? 'New admin' : 'New employee'}
+          subtitle={isHR && tab === 'employee'
+            ? "This account won't be created until an admin reviews and approves it."
+            : tab === 'admin' ? 'Administrators can reach every page of the panel.' : 'They sign in at the staff portal with this email.'}
+        />
+        <ModalBody className="grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
+          <FormField label="First name" required>
+            <input required autoFocus value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Last name" required>
+            <input required value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Email" required>
+            <input type="email" required autoComplete="off" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Temporary password" required hint="They can change it after signing in.">
+            <input type="password" required autoComplete="new-password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} className="input-field" />
+          </FormField>
+          <FormField label="Phone">
+            <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="input-field" />
+          </FormField>
+          {tab !== 'admin' && (
+            <FormField label="Department">
+              <Select value={form.position} onChange={position => setForm({ ...form, position })} placeholder="Choose a department" options={DEPARTMENT_OPTIONS} />
+            </FormField>
+          )}
+          {formError && <p role="alert" className="md:col-span-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>}
+        </ModalBody>
+        <ModalFooter>
+          <button type="button" onClick={closeForm} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
+          <button type="submit" className={`${modalButton.base} ${modalButton.primary}`}>{tab === 'admin' ? 'Save admin' : isHR ? 'Submit for approval' : 'Save user'}</button>
+        </ModalFooter>
+      </Modal>
 
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">

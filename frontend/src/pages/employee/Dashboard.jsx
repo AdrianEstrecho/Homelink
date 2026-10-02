@@ -3,6 +3,8 @@ import { Briefcase, Calendar, CheckCircle, Clock, MapPin, Navigation, PlayCircle
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import StatTile from '../../components/admin/StatTile';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
+import FormField from '../../components/FormField';
 
 // The pending-verification badge sits ahead of "Installed Completed" in the stepper: the
 // installer has submitted, but the booking coordinator hasn't verified it yet, so the
@@ -93,44 +95,34 @@ export default function EmployeeDashboard() {
         </>
       )}
 
-      {completingId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={() => !saving && setCompletingId(null)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 fade-up">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-green-100 text-green-600">
-              <CheckCircle className="w-6 h-6" />
-            </div>
-            <h2 className="font-display text-lg font-bold text-brand-navy">Confirm Installed Completed</h2>
-            <p className="text-sm text-gray-600 mt-1.5">This submits the job for booking coordinator verification — it won't be marked Installed Completed until they confirm.</p>
-            {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mt-3">{error}</p>}
+      <Modal open={!!completingId} onClose={() => setCompletingId(null)} dismissible={!saving} size="sm">
+        <ModalHeader
+          icon={CheckCircle}
+          tone="green"
+          title="Mark this job installed?"
+          subtitle="It goes to the booking coordinator to verify — it won't show as Installed Completed until they confirm."
+        />
+        <ModalBody className="space-y-3">
+          {error && <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+          <FormField label="Completion notes" hint="Optional — what was done, anything the customer should know.">
             <textarea
+              autoFocus
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="Completion notes (optional)"
               rows={3}
-              className="w-full mt-4 border border-gray-300 rounded-lg p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-orange"
+              className="input-field resize-none"
             />
-            <div className="flex gap-3 mt-6">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => setCompletingId(null)}
-                className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium text-sm text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={confirmCompleted}
-                className="flex-1 rounded-lg py-2.5 font-semibold text-sm text-white bg-green-600 hover:bg-green-700 transition disabled:opacity-50"
-              >
-                {saving ? 'Saving…' : 'Confirm'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </FormField>
+        </ModalBody>
+        <ModalFooter>
+          <button type="button" disabled={saving} onClick={() => setCompletingId(null)} className={`${modalButton.base} ${modalButton.secondary}`}>
+            Cancel
+          </button>
+          <button type="button" disabled={saving} onClick={confirmCompleted} className={`${modalButton.base} bg-green-600 hover:bg-green-700 text-white`}>
+            {saving ? 'Saving…' : 'Submit for verification'}
+          </button>
+        </ModalFooter>
+      </Modal>
     </AdminLayout>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { X, Truck, User, Phone } from 'lucide-react';
+import { Truck, User, Phone, MapPinned } from 'lucide-react';
 import { api } from '../api/client';
+import Modal, { ModalBody, ModalHeader } from './Modal';
 import { formatDateTime } from '../data/auditActions';
 import StatusStepper from './StatusStepper';
 import TrackingMap from './TrackingMap';
@@ -36,21 +36,23 @@ export default function TrackingModal({ kind, id, title, onClose }) {
   const steps = kind === 'order' ? ['pending', 'processing', 'shipped', 'delivered'] : ['pending', 'confirmed', 'in_progress', 'completed'];
   const labels = kind === 'order' ? ORDER_LABELS : BOOKING_LABELS;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-brand-navy/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto fade-up">
-        <div className="flex items-center justify-between p-6 pb-4 sticky top-0 bg-white border-b border-gray-100">
-          <h2 className="font-display text-lg font-bold text-brand-navy">{title || 'Track your order'}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
+  return (
+    <Modal onClose={onClose}>
+      <ModalHeader
+        icon={MapPinned}
+        title={title || 'Track your order'}
+        subtitle={kind === 'order' ? 'Where your delivery is now, and every step so far.' : 'Your technician, the schedule, and every step so far.'}
+      />
+      <ModalBody className="space-y-5">
+          {error && <p role="alert" className="text-sm text-red-600">Couldn't load tracking info right now. Close this and try again in a moment.</p>}
 
-        <div className="p-6 pt-4 space-y-5">
-          {error && <p className="text-sm text-red-600">Couldn't load tracking info right now.</p>}
-
-          {!error && !data && <p className="text-sm text-gray-500 py-8 text-center">Loading tracking info…</p>}
+          {!error && !data && (
+            <div className="space-y-4" role="status" aria-label="Loading tracking info">
+              <div className="skeleton h-12" />
+              <div className="skeleton h-48" />
+              <div className="skeleton h-4 w-2/3" />
+            </div>
+          )}
 
           {data && (
             <>
@@ -100,7 +102,7 @@ export default function TrackingModal({ kind, id, title, onClose }) {
               )}
 
               <div>
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">History</h3>
+                <h3 className="text-sm font-semibold text-brand-ink mb-3">History</h3>
                 <div className="space-y-3">
                   {data.timeline.map((entry, i) => (
                     <div key={i} className="flex gap-3">
@@ -118,9 +120,7 @@ export default function TrackingModal({ kind, id, title, onClose }) {
               </div>
             </>
           )}
-        </div>
-      </div>
-    </div>,
-    document.body
+      </ModalBody>
+    </Modal>
   );
 }

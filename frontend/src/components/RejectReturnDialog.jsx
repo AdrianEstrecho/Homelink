@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { Loader2, X } from 'lucide-react';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from './Modal';
 
-// Same shape as CancelReasonModal — portaled, with its own submitting/error state — rather than
-// PromptDialog, which isn't portaled and so can't sit above a card's own stacking context. The
-// note is required here: it's the only explanation the customer ever gets for a rejection.
+// Same shape as CancelReasonModal, with its own submitting/error state. The note is required
+// here: it's the only explanation the customer ever gets for a rejection.
 export default function RejectReturnDialog({ open, customer, kind = 'return', onSubmit, onCancel }) {
   // Rejecting the two kinds refuses different things, and the difference matters: refusing a
   // return leaves the customer holding goods they still own, while refusing a cancellation refund
   // leaves them out of pocket on an order that stays cancelled either way.
   const cancellation = kind === 'cancellation';
+  const fieldId = useId();
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -17,8 +17,6 @@ export default function RejectReturnDialog({ open, customer, kind = 'return', on
   useEffect(() => {
     if (open) { setNote(''); setError(''); setSubmitting(false); }
   }, [open]);
-
-  if (!open) return null;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -34,45 +32,44 @@ export default function RejectReturnDialog({ open, customer, kind = 'return', on
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="modal-scrim" onClick={submitting ? undefined : onCancel} />
-      <form onSubmit={submit} className="modal-panel w-full max-w-sm p-6 fade-up">
-        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 bg-red-100 text-red-600">
-          <X className="w-6 h-6" />
-        </div>
-        <h2 className="font-display text-lg font-bold text-brand-navy">
-          {cancellation ? 'Decline this refund?' : 'Reject this return?'}
-        </h2>
-        <p className="text-sm text-gray-600 mt-1.5">
+  return (
+    <Modal open={open} onClose={onCancel} dismissible={!submitting} size="sm" as="form" onSubmit={submit} zIndex={110} role="alertdialog">
+      <ModalHeader
+        icon={X}
+        tone="red"
+        title={cancellation ? 'Decline this refund?' : 'Reject this return?'}
+        subtitle={<>
           {customer ? `${customer} will be emailed this note. ` : ''}
           {cancellation ? 'The order stays cancelled — only the refund is refused.' : 'Stock is not affected.'}
-        </p>
-
-        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mt-4 mb-1.5">
+        </>}
+      />
+      <ModalBody>
+        <label htmlFor={fieldId} className="block text-sm font-medium text-brand-ink mb-1.5">
           {cancellation ? 'Reason for declining' : 'Reason for rejection'}
         </label>
         <textarea
+          id={fieldId}
           autoFocus
           rows={3}
           value={note}
           onChange={(e) => { setNote(e.target.value); if (error) setError(''); }}
           placeholder={cancellation ? "Explain why this refund can't be sent..." : "Explain why this return can't be accepted..."}
           disabled={submitting}
+          aria-invalid={error ? true : undefined}
           className="input-field resize-none disabled:opacity-60"
         />
-        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
-
-        <div className="flex gap-3 mt-6">
-          <button type="button" onClick={onCancel} disabled={submitting} className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium text-sm text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
-            Keep Pending
-          </button>
-          <button type="submit" disabled={submitting} className="flex-1 rounded-lg py-2.5 font-semibold text-sm text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50">
-            {submitting ? (cancellation ? 'Declining...' : 'Rejecting...') : (cancellation ? 'Decline' : 'Reject')}
-          </button>
-        </div>
-      </form>
-    </div>,
-    document.body
+        {error && <p role="alert" className="text-sm text-red-600 mt-2">{error}</p>}
+      </ModalBody>
+      <ModalFooter>
+        <button type="button" onClick={onCancel} disabled={submitting} className={`${modalButton.base} ${modalButton.secondary}`}>
+          Keep pending
+        </button>
+        <button type="submit" disabled={submitting} className={`${modalButton.base} bg-red-600 hover:bg-red-700 text-white`}>
+          {submitting
+            ? <><Loader2 className="w-4 h-4 animate-spin" /> {cancellation ? 'Declining…' : 'Rejecting…'}</>
+            : (cancellation ? 'Decline' : 'Reject')}
+        </button>
+      </ModalFooter>
+    </Modal>
   );
 }

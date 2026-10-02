@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useId, useState } from 'react';
 import { RotateCcw, X, ImagePlus, Loader2 } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
+import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from './Modal';
 import SafeImage from './SafeImage';
 import { downscaleImage, validateImageFile, dataUrlBytes } from '../utils/imageUpload';
 import { MAX_RETURN_PHOTOS, INELIGIBLE_MESSAGE, orderRef } from '../utils/returns';
@@ -11,10 +11,11 @@ const MIN_REASON = 10;
 // a real message instead of the bare "Request failed" a 413 would produce.
 const MAX_TOTAL_BYTES = 7 * 1024 * 1024;
 
-// Portaled at z-[110] like CancelReasonModal, so it sits above the order details modal it opens
+// At z-[110] like CancelReasonModal, so it sits above the order details modal it opens
 // from. Loads its own eligibility on open rather than trusting the list's canReturn flag, since
 // another tab may have used up the remaining quantity in the meantime.
 export default function ReturnRequestModal({ order, onClose, onSubmitted }) {
+  const reasonId = useId();
   const [data, setData] = useState(null);
   const [picked, setPicked] = useState({});
   const [reason, setReason] = useState('');
@@ -98,38 +99,29 @@ export default function ReturnRequestModal({ order, onClose, onSubmitted }) {
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-      <div className="modal-scrim" onClick={submitting ? undefined : onClose} />
-      <form onSubmit={submit} className="modal-panel w-full max-w-lg max-h-[85vh] overflow-y-auto p-6 fade-up">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full flex items-center justify-center bg-brand-navy/10 text-brand-navy shrink-0">
-              <RotateCcw className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="font-display text-lg font-bold text-brand-navy">Return &amp; Refund</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Order {orderRef(order.id)}</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} disabled={submitting} className="text-gray-400 hover:text-gray-600 disabled:opacity-50">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+  const eligible = data?.eligible;
 
+  return (
+    <Modal onClose={onClose} dismissible={!submitting} as="form" onSubmit={submit} zIndex={110}>
+      <ModalHeader icon={RotateCcw} title="Return & refund" subtitle={`Order ${orderRef(order.id)}`} />
+      <ModalBody>
         {data === null ? (
-          <p className="text-sm text-gray-400 mt-6">Loading your order...</p>
-        ) : !data.eligible ? (
-          <p className="text-sm text-gray-600 mt-6">
+          <div className="space-y-3" role="status" aria-label="Loading your order">
+            <div className="skeleton h-4 w-3/4" />
+            <div className="skeleton h-16" />
+            <div className="skeleton h-16" />
+          </div>
+        ) : !eligible ? (
+          <p className="text-sm text-gray-600">
             {INELIGIBLE_MESSAGE[data.reason] || error || 'This order can’t be returned.'}
           </p>
         ) : (
           <>
-            <p className="text-sm text-gray-600 mt-4">
+            <p className="text-sm text-gray-600">
               Pick what you’re sending back and tell us what went wrong. A member of our team reviews every request.
             </p>
 
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mt-5 mb-2">Items to return</label>
+            <p className="text-sm font-medium text-brand-ink mt-5 mb-2">Items to return</p>
             <div className="space-y-2">
               {lines.map((l) => {
                 const qty = picked[l.orderItemId] || 0;
@@ -162,8 +154,9 @@ export default function ReturnRequestModal({ order, onClose, onSubmitted }) {
               })}
             </div>
 
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mt-5 mb-1.5">What’s wrong with it?</label>
+            <label htmlFor={reasonId} className="block text-sm font-medium text-brand-ink mt-5 mb-1.5">What’s wrong with it?</label>
             <textarea
+              id={reasonId}
               rows={3}
               value={reason}
               onChange={(e) => { setReason(e.target.value); if (error) setError(''); }}
@@ -172,9 +165,9 @@ export default function ReturnRequestModal({ order, onClose, onSubmitted }) {
               className="input-field resize-none disabled:opacity-60"
             />
 
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mt-5 mb-1.5">
-              Photos of the product <span className="text-gray-400 normal-case font-normal tracking-normal">({photos.length}/{MAX_RETURN_PHOTOS}, required)</span>
-            </label>
+            <p className="text-sm font-medium text-brand-ink mt-5 mb-1.5">
+              Photos of the product <span className="text-gray-400 font-normal">({photos.length}/{MAX_RETURN_PHOTOS}, required)</span>
+            </p>
             <div className="flex flex-wrap gap-2">
               {photos.map((src, i) => (
                 <div key={i} className="relative">
@@ -183,6 +176,7 @@ export default function ReturnRequestModal({ order, onClose, onSubmitted }) {
                     type="button"
                     onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
                     disabled={submitting}
+                    aria-label={`Remove photo ${i + 1}`}
                     className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-gray-300 text-gray-500 flex items-center justify-center hover:text-red-600 disabled:opacity-50"
                   >
                     <X className="w-3 h-3" />
@@ -190,7 +184,7 @@ export default function ReturnRequestModal({ order, onClose, onSubmitted }) {
                 </div>
               ))}
               {photos.length < MAX_RETURN_PHOTOS && (
-                <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:border-brand-navy/40 hover:text-brand-navy transition ${busy || submitting ? 'opacity-50' : 'cursor-pointer'}`}>
+                <label className={`w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 hover:border-brand-navy/40 hover:text-brand-navy focus-within:border-brand-orange focus-within:text-brand-navy transition ${busy || submitting ? 'opacity-50' : 'cursor-pointer'}`}>
                   {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImagePlus className="w-5 h-5" />}
                   <span className="text-[10px] mt-1">{busy ? 'Adding' : 'Add'}</span>
                   <input
@@ -199,7 +193,8 @@ export default function ReturnRequestModal({ order, onClose, onSubmitted }) {
                     multiple
                     disabled={busy || submitting}
                     onChange={(e) => { addPhotos(e.target.files); e.target.value = ''; }}
-                    className="hidden"
+                    aria-label="Add photos"
+                    className="sr-only"
                   />
                 </label>
               )}
@@ -215,20 +210,20 @@ export default function ReturnRequestModal({ order, onClose, onSubmitted }) {
               </div>
             )}
 
-            {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
-
-            <div className="flex gap-3 mt-6">
-              <button type="button" onClick={onClose} disabled={submitting} className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium text-sm text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
-                Cancel
-              </button>
-              <button type="submit" disabled={submitting || busy} className="flex-1 btn-primary py-2.5 text-sm disabled:opacity-50">
-                {submitting ? 'Submitting...' : 'Submit Request'}
-              </button>
-            </div>
+            {error && <p role="alert" className="text-sm text-red-600 mt-3">{error}</p>}
           </>
         )}
-      </form>
-    </div>,
-    document.body
+      </ModalBody>
+      <ModalFooter>
+        <button type="button" onClick={onClose} disabled={submitting} className={`${modalButton.base} ${modalButton.secondary}`}>
+          {eligible ? 'Cancel' : 'Close'}
+        </button>
+        {eligible && (
+          <button type="submit" disabled={submitting || busy} className={`${modalButton.base} ${modalButton.primary}`}>
+            {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</> : 'Submit request'}
+          </button>
+        )}
+      </ModalFooter>
+    </Modal>
   );
 }

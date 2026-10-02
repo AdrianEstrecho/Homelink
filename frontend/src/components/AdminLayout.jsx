@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import ConfirmDialog from './ConfirmDialog';
+import Modal, { ModalBody, ModalHeader } from './Modal';
 import { ACTION_META, timeAgo, parseUtc } from '../data/auditActions';
 import { getStaffRole } from '../constants/staffRoles';
 import { landingFor } from '../utils/staffLanding';
@@ -393,24 +394,20 @@ export default function AdminLayout({ children, title, subtitle }) {
         onCancel={() => setConfirmLogout(false)}
       />
 
-      {viewAllOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="modal-scrim" onClick={() => setViewAllOpen(false)} />
-          <div className="modal-panel w-full max-w-lg max-h-[80vh] flex flex-col fade-up">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-              <h3 className="font-display font-semibold text-lg text-brand-navy">All Notifications</h3>
-              <button onClick={() => setViewAllOpen(false)} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="overflow-y-auto flex-1">
-              {bellItems.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-10">You're all caught up.</p>
-              ) : bellItems.map(n => (
-                <NotifRow key={n.id} n={n} onClick={() => setViewAllOpen(false)} />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal open={viewAllOpen} onClose={() => setViewAllOpen(false)}>
+        <ModalHeader
+          icon={Bell}
+          title="All notifications"
+          subtitle={bellCount > 0 ? `${bellCount} unread` : "You're all caught up."}
+        />
+        <ModalBody className="!p-0">
+          {bellItems.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-10">Nothing here yet — new orders, bookings and requests will show up as they come in.</p>
+          ) : bellItems.map(n => (
+            <NotifRow key={n.id} n={n} onClick={() => setViewAllOpen(false)} />
+          ))}
+        </ModalBody>
+      </Modal>
 
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
