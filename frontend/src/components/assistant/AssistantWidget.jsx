@@ -5,7 +5,6 @@ import { api, formatPrice } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import SafeImage from '../SafeImage';
 import ChatMarkdown from './ChatMarkdown';
-import HandymanAvatar from './HandymanAvatar';
 
 // The server only ever looks at this many recent messages, so there's no point sending more.
 const HISTORY_SENT = 16;
@@ -21,6 +20,18 @@ const SUGGESTIONS = [
 // Under the sm breakpoint the panel covers the whole screen, so following a link out of it
 // should get it out of the way; on larger screens it floats beside the page and stays open.
 const isFullScreen = () => window.matchMedia('(max-width: 639px)').matches;
+
+// The assistant's mascot: the full figure is the chat button, the head is his avatar in the chat.
+const MASCOT = '/handyman.webp';
+const MASCOT_HEAD = '/handyman-head.webp';
+
+function MascotAvatar({ motion = 'mascot-pop' }) {
+  return (
+    <span className="w-7 h-7 rounded-full bg-white ring-1 ring-brand-orange/40 shadow-sm overflow-hidden shrink-0 mt-0.5">
+      <img src={MASCOT_HEAD} alt="" className={`w-full h-full object-cover ${motion}`} />
+    </span>
+  );
+}
 
 function ItemCard({ item, onNavigate }) {
   return (
@@ -44,10 +55,13 @@ function ItemCard({ item, onNavigate }) {
 
 function TypingDots() {
   return (
-    <div className="flex items-center gap-1 px-4 py-3.5 w-fit rounded-2xl rounded-bl-md bg-white border border-gray-100 shadow-sm" aria-label="Assistant is typing">
-      {[0, 150, 300].map(delay => (
-        <span key={delay} className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
-      ))}
+    <div className="flex items-start gap-2" aria-label="Assistant is typing">
+      <MascotAvatar motion="mascot-working" />
+      <div className="flex items-center gap-1 px-4 py-3.5 w-fit rounded-2xl rounded-tl-md bg-white border border-gray-100 shadow-sm">
+        {[0, 150, 300].map(delay => (
+          <span key={delay} className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -60,6 +74,9 @@ export default function AssistantWidget({ hidden = false }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Counts clicks on the mascot; each new value remounts him with the jump animation.
+  const [hops, setHops] = useState(0);
+  const openTimer = useRef(null);
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
   // Bumped by every request and by "new chat", so a reply that lands after the conversation it
@@ -73,6 +90,8 @@ export default function AssistantWidget({ hidden = false }) {
   useEffect(() => {
     api.get('/assistant/status').then(data => setEnabled(!!data.enabled)).catch(() => {});
   }, []);
+
+  useEffect(() => () => clearTimeout(openTimer.current), []);
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -134,6 +153,15 @@ export default function AssistantWidget({ hidden = false }) {
     if (isFullScreen()) setOpen(false);
   };
 
+  // Every click makes the mascot jump. On a phone the chat opens just after he takes off, since
+  // the full-screen panel would otherwise cover him before anyone sees the jump.
+  const toggleOpen = () => {
+    setHops(h => h + 1);
+    clearTimeout(openTimer.current);
+    if (open) { setOpen(false); return; }
+    openTimer.current = setTimeout(() => setOpen(true), isFullScreen() ? 380 : 0);
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -152,12 +180,12 @@ export default function AssistantWidget({ hidden = false }) {
           role="dialog"
           aria-label="HomeLink Assistant"
           onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
-          className="toast-in modal-panel fixed z-[90] inset-0 rounded-none sm:inset-auto sm:bottom-24 sm:right-5 sm:w-[400px] sm:h-[min(640px,calc(100vh-8rem))] sm:rounded-2xl flex flex-col overflow-hidden"
+          className="toast-in modal-panel fixed z-[90] inset-0 rounded-none sm:inset-auto sm:bottom-[8.5rem] sm:right-5 sm:w-[400px] sm:h-[min(620px,calc(100vh-10.5rem))] sm:rounded-2xl flex flex-col overflow-hidden"
         >
           <div className="relative flex items-center gap-3 px-4 py-3 bg-brand-navy text-white shrink-0 overflow-hidden">
             <div aria-hidden="true" className="absolute -top-10 -right-6 w-32 h-32 rounded-full bg-brand-orange/25 blur-2xl" />
-            <div className="relative w-10 h-10 rounded-full bg-white ring-2 ring-brand-orange/70 flex items-center justify-center overflow-hidden shrink-0">
-              <HandymanAvatar className="w-11 h-11 mt-1" />
+            <div className="relative w-11 h-11 rounded-full bg-white ring-2 ring-brand-orange/70 overflow-hidden shrink-0">
+              <img src={MASCOT_HEAD} alt="" className="mascot-pop w-full h-full object-cover" />
             </div>
             <div className="relative min-w-0 flex-1">
               <p className="font-display font-bold leading-tight">HomeLink Assistant</p>
@@ -174,12 +202,15 @@ export default function AssistantWidget({ hidden = false }) {
           </div>
 
           <div ref={scrollRef} aria-live="polite" className="relative flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-3 bg-brand-light/60 text-sm">
-            <div className="max-w-[90%] rounded-2xl rounded-bl-md bg-white border border-gray-100 shadow-sm px-3.5 py-2.5 text-gray-700 leading-relaxed">
-              {greeting}
+            <div className="flex items-start gap-2">
+              <MascotAvatar />
+              <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white border border-gray-100 shadow-sm px-3.5 py-2.5 text-gray-700 leading-relaxed">
+                {greeting}
+              </div>
             </div>
 
             {messages.length === 0 && (
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex flex-wrap gap-2 pt-1 pl-9">
                 {suggestions.map(s => (
                   <button
                     key={s}
@@ -197,15 +228,18 @@ export default function AssistantWidget({ hidden = false }) {
                 {m.content}
               </div>
             ) : (
-              <div key={i} data-latest-reply={i === messages.length - 1 || undefined} className="max-w-[92%] space-y-2">
-                <div className="rounded-2xl rounded-bl-md bg-white border border-gray-100 shadow-sm px-3.5 py-2.5 text-gray-700 leading-relaxed break-words">
-                  <ChatMarkdown text={m.content} onNavigate={handleNavigate} />
-                </div>
-                {m.items?.length > 0 && (
-                  <div className="space-y-2">
-                    {m.items.map(item => <ItemCard key={item.url} item={item} onNavigate={handleNavigate} />)}
+              <div key={i} data-latest-reply={i === messages.length - 1 || undefined} className="flex items-start gap-2">
+                <MascotAvatar />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="w-fit max-w-full rounded-2xl rounded-tl-md bg-white border border-gray-100 shadow-sm px-3.5 py-2.5 text-gray-700 leading-relaxed break-words">
+                    <ChatMarkdown text={m.content} onNavigate={handleNavigate} />
                   </div>
-                )}
+                  {m.items?.length > 0 && (
+                    <div className="space-y-2">
+                      {m.items.map(item => <ItemCard key={item.url} item={item} onNavigate={handleNavigate} />)}
+                    </div>
+                  )}
+                </div>
               </div>
             )))}
 
@@ -251,19 +285,30 @@ export default function AssistantWidget({ hidden = false }) {
       )}
 
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={toggleOpen}
         aria-label={open ? 'Close HomeLink Assistant' : 'Open HomeLink Assistant'}
         aria-expanded={open}
-        className={`fixed z-[90] bottom-5 right-5 h-14 min-w-14 px-2 ${open ? 'sm:px-2' : 'sm:pr-5'} rounded-full bg-brand-navy text-white shadow-[0_10px_30px_-8px_rgba(15,43,91,0.55)] hover:bg-brand-blue active:scale-95 transition-all flex items-center justify-center gap-2.5 ${open ? 'hidden sm:flex' : ''}`}
+        className={`assistant-launcher group fixed z-[90] bottom-3 right-3 sm:bottom-4 sm:right-4 items-end ${open ? 'hidden sm:flex' : 'flex'}`}
       >
-        {open ? (
-          <X className="w-5 h-5" />
-        ) : (
-          <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden shrink-0">
-            <HandymanAvatar className="w-11 h-11 mt-1" />
+        {!open && (
+          <span className="hidden sm:flex items-center h-11 pl-5 pr-8 -mr-6 mb-4 rounded-full bg-brand-navy text-white text-sm font-semibold shadow-[0_10px_30px_-8px_rgba(15,43,91,0.55)] group-hover:bg-brand-blue transition">
+            Ask HomeLink AI
           </span>
         )}
-        {!open && <span className="hidden sm:inline text-sm font-semibold">Ask HomeLink AI</span>}
+        <span key={hops} className={`relative block ${hops ? 'mascot-hop' : ''}`}>
+          <img
+            src={MASCOT}
+            alt=""
+            width="280"
+            height="360"
+            className="mascot-idle block w-14 sm:w-[76px] h-auto drop-shadow-[0_8px_10px_rgba(15,43,91,0.35)]"
+          />
+          {open && (
+            <span className="absolute top-0 -right-1 w-6 h-6 rounded-full bg-brand-navy text-white ring-2 ring-white flex items-center justify-center">
+              <X className="w-3.5 h-3.5" />
+            </span>
+          )}
+        </span>
       </button>
     </>
   );

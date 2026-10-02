@@ -1127,3 +1127,66 @@
     animation: none;
   }
 }
+
+/* Assistant mascot (components/assistant/AssistantWidget.jsx). The chat button nests two
+   elements so their transforms don't fight: the outer .mascot-hop replays the jump on every
+   click (React remounts it), the inner .mascot-idle keeps the gentle bob, swapped for a wave
+   on hover. Both pivot at his feet so he lands where he took off. */
+.mascot-idle {
+  transform-origin: 50% 100%;
+  animation: mascotIdle 3.2s ease-in-out infinite;
+}
+.assistant-launcher:hover .mascot-idle {
+  animation: mascotWave 0.9s ease-in-out infinite;
+}
+.mascot-hop {
+  transform-origin: 50% 100%;
+  animation: mascotHop 0.8s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+/* His head in the chat: pops in as each avatar appears, and shakes like he's drilling while
+   a reply is on its way. */
+.mascot-pop {
+  animation: mascotPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.mascot-working {
+  transform-origin: 50% 70%;
+  animation: mascotWorking 0.35s ease-in-out infinite;
+}
+@keyframes mascotIdle {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-5px) rotate(-2deg); }
+}
+@keyframes mascotWave {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-7deg); }
+  75% { transform: rotate(6deg); }
+}
+/* Crouch, leap with a twist, squash on landing, small rebound. */
+@keyframes mascotHop {
+  0% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+  15% { transform: translateY(0) scale(1.14, 0.84) rotate(0deg); }
+  42% { transform: translateY(-38px) scale(0.92, 1.1) rotate(-14deg); }
+  58% { transform: translateY(-44px) scale(1, 1) rotate(12deg); }
+  78% { transform: translateY(0) scale(1.1, 0.9) rotate(0deg); }
+  90% { transform: translateY(-5px) scale(0.98, 1.03) rotate(0deg); }
+  100% { transform: translateY(0) scale(1, 1) rotate(0deg); }
+}
+@keyframes mascotPop {
+  0% { transform: scale(0.3) rotate(-25deg); opacity: 0; }
+  60% { transform: scale(1.15) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes mascotWorking {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  25% { transform: rotate(-6deg) translateY(-1px); }
+  75% { transform: rotate(6deg) translateY(-1px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mascot-idle,
+  .assistant-launcher:hover .mascot-idle,
+  .mascot-hop,
+  .mascot-pop,
+  .mascot-working {
+    animation: none;
+  }
+}
