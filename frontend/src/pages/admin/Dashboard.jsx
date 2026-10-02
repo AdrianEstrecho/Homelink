@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, ShoppingCart, Calendar, Wallet, ArrowRight, Check, Plus, Pencil, Trash2, LogIn, Archive } from 'lucide-react';
+import {
+  Users, ShoppingCart, Calendar, Wallet, ArrowRight, Check, Plus, Pencil, Trash2, LogIn, Archive,
+  Clock, PackageOpen, Truck, PackageCheck, CalendarCheck, Wrench, CircleCheckBig,
+} from 'lucide-react';
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import RevenueColumns, { SERIES } from '../../components/admin/RevenueColumns';
@@ -19,11 +22,12 @@ const CATEGORY_ICON = {
 const [PRODUCTS, SERVICES] = SERIES;
 
 // Each business line's stages, in the order work moves through them; the last is "done".
-const ORDER_STAGES = [['pending', 'Pending'], ['processing', 'Processing'], ['shipped', 'Shipped'], ['delivered', 'Delivered']];
-const BOOKING_STAGES = [['pending', 'Pending'], ['confirmed', 'Confirmed'], ['in_progress', 'In progress'], ['completed', 'Completed']];
+// A stage's tile opens its list page filtered to that status (both read ?tab=).
+const ORDER_STAGES = [['pending', 'Pending', Clock], ['processing', 'Processing', PackageOpen], ['shipped', 'Shipped', Truck], ['delivered', 'Delivered', PackageCheck]];
+const BOOKING_STAGES = [['pending', 'Pending', Clock], ['confirmed', 'Confirmed', CalendarCheck], ['in_progress', 'In progress', Wrench], ['completed', 'Completed', CircleCheckBig]];
 
 const countIn = (breakdown, status) => breakdown?.find(r => r.status === status)?.count || 0;
-const toStages = (stages, breakdown) => stages.map(([key, label]) => ({ key, label, count: countIn(breakdown, key) }));
+const toStages = (stages, breakdown, page) => stages.map(([key, label, icon]) => ({ key, label, icon, count: countIn(breakdown, key), to: `${page}?tab=${key}` }));
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -58,8 +62,8 @@ export default function AdminDashboard() {
   const productsThisYear = yearToDate.reduce((sum, m) => sum + m.revenue, 0);
   const servicesThisYear = yearToDate.reduce((sum, m) => sum + (m.services || 0), 0);
 
-  const orderStages = toStages(ORDER_STAGES, orderStatusBreakdown);
-  const bookingStages = bookingStatusBreakdown && toStages(BOOKING_STAGES, bookingStatusBreakdown);
+  const orderStages = toStages(ORDER_STAGES, orderStatusBreakdown, '/admin/orders');
+  const bookingStages = bookingStatusBreakdown && toStages(BOOKING_STAGES, bookingStatusBreakdown, '/admin/bookings');
   const ordersInProgress = orderStages.slice(0, -1).reduce((sum, s) => sum + s.count, 0);
 
   // Counts the backend doesn't send (an older deploy) simply drop off the list.
@@ -120,20 +124,19 @@ export default function AdminDashboard() {
 
       <div className="card p-6 mb-6">
         <h3 className="font-semibold text-gray-900">Fulfillment</h3>
-        <p className="text-xs text-gray-400 mb-6">Where orders and bookings stand right now</p>
-        <div className={`grid gap-8 ${bookingStages ? 'xl:grid-cols-2 xl:gap-0' : ''}`}>
-          <div className={bookingStages ? 'xl:pr-8' : ''}>
-            <Pipeline
-              title="Product orders"
-              color={PRODUCTS.color}
-              stages={orderStages}
-              offTrack={{ label: 'cancelled', count: countIn(orderStatusBreakdown, 'cancelled') }}
-              to="/admin/orders"
-              linkLabel="Manage orders"
-            />
-          </div>
+        <p className="text-xs text-gray-400 mb-6">Where orders and bookings stand right now — open a stage to see what's in it</p>
+        {/* Stacked, each at full width: four stage tiles need the room to stay readable. */}
+        <div className="space-y-7">
+          <Pipeline
+            title="Product orders"
+            color={PRODUCTS.color}
+            stages={orderStages}
+            offTrack={{ label: 'cancelled', count: countIn(orderStatusBreakdown, 'cancelled') }}
+            to="/admin/orders"
+            linkLabel="Manage orders"
+          />
           {bookingStages && (
-            <div className="pt-8 border-t border-gray-100 xl:pt-0 xl:pl-8 xl:border-t-0 xl:border-l">
+            <div className="pt-7 border-t border-gray-100">
               <Pipeline
                 title="Service bookings"
                 color={SERVICES.color}
