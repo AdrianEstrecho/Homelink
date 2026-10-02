@@ -48,13 +48,29 @@ router.get('/dashboard', authorize('admin'), async (req, res) => {
     pendingBookings: (await db.prepare("SELECT COUNT(*) as c FROM bookings WHERE status='pending'").get()).c,
     lowStockCount: (await db.prepare("SELECT COUNT(*) as c FROM products WHERE stock > 0 AND stock <= 5 AND (archived IS NULL OR archived = 0)").get()).c,
     outOfStockCount: (await db.prepare("SELECT COUNT(*) as c FROM products WHERE stock = 0 AND (archived IS NULL OR archived = 0)").get()).c,
+    // The dashboard's punch list: work waiting on someone, each matching what its own page counts.
+    unassignedBookings: (await db.prepare("SELECT COUNT(*) as c FROM bookings WHERE employee_id IS NULL AND status NOT IN ('cancelled', 'completed')").get()).c,
+    pendingApprovals: (await db.prepare("SELECT COUNT(*) as c FROM change_requests WHERE status = 'pending'").get()).c,
+    pendingReturns: (await db.prepare("SELECT COUNT(*) as c FROM return_requests WHERE status = 'pending'").get()).c,
+    openSupport: (await db.prepare("SELECT COUNT(*) as c FROM support_messages WHERE status = 'open'").get()).c,
   };
   const orderStatusBreakdown = await db.prepare(`
     SELECT status, COUNT(*) as count FROM orders GROUP BY status
   `).all();
+  const bookingStatusBreakdown = await db.prepare(`
+    SELECT status, COUNT(*) as count FROM bookings GROUP BY status
+  `).all();
+  // getRevenueStats' monthly series is product orders only (Reports relies on that), so the
+  // dashboard adds paid bookings per month alongside it as `services`, counted the same way.
+  const serviceMonths = await db.prepare(`
+    SELECT to_char(created_at, 'YYYY-MM') as month, COALESCE(SUM(price),0) as revenue
+    FROM bookings WHERE payment_status='paid' GROUP BY month
+  `).all();
+  const serviceRevenueByMonth = Object.fromEntries(serviceMonths.map(r => [r.month, r.revenue]));
+  const revenueByMonth = salesByMonth.map(m => ({ ...m, services: serviceRevenueByMonth[m.month] || 0 }));
   const recentOrders = await db.prepare('SELECT o.*, u.first_name, u.last_name FROM orders o JOIN users u ON o.user_id=u.id ORDER BY o.created_at DESC LIMIT 5').all();
   const recentBookings = await db.prepare('SELECT b.*, s.name as service_name, u.first_name, u.last_name FROM bookings b JOIN services s ON b.service_id=s.id JOIN users u ON b.user_id=u.id ORDER BY b.created_at DESC LIMIT 5').all();
-  res.json({ stats, orderStatusBreakdown, salesByMonth, recentOrders, recentBookings });
+  res.json({ stats, orderStatusBreakdown, bookingStatusBreakdown, salesByMonth: revenueByMonth, recentOrders, recentBookings });
 });
 
 // Users
