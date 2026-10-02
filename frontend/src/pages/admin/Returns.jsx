@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { RotateCcw, Check, X, PackageCheck, Image as ImageIcon, Banknote, XCircle } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import FilterTab from '../../components/admin/FilterTab';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import RejectReturnDialog from '../../components/RejectReturnDialog';
 import SafeImage from '../../components/SafeImage';
@@ -144,9 +145,9 @@ export default function AdminReturns() {
 
       <div className="flex gap-2 mb-5 flex-wrap">
         {visibleTabs.map((t) => (
-          <TabButton key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>
-            {t.label} {countOf(t.key) > 0 && <span className="opacity-60">({countOf(t.key)})</span>}
-          </TabButton>
+          <FilterTab key={t.key} active={tab === t.key} onClick={() => setTab(t.key)} count={countOf(t.key) || null}>
+            {t.label}
+          </FilterTab>
         ))}
       </div>
 
@@ -303,16 +304,5 @@ export default function AdminReturns() {
         onCancel={() => setRejecting(null)}
       />
     </AdminLayout>
-  );
-}
-
-function TabButton({ active, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${active ? 'bg-brand-navy text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-    >
-      {children}
-    </button>
   );
 }

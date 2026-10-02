@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Calendar, CheckCircle, Clock, MapPin, Navigation, PlayCircle } from 'lucide-react';
+import { Briefcase, Calendar, CheckCircle, Clock, MapPin, Navigation, PlayCircle } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import StatTile from '../../components/admin/StatTile';
 
 // The pending-verification badge sits ahead of "Installed Completed" in the stepper: the
 // installer has submitted, but the booking coordinator hasn't verified it yet, so the
@@ -62,10 +63,10 @@ export default function EmployeeDashboard() {
         <div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-4 border-brand-orange border-t-transparent rounded-full" /></div>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-4 mb-8">
-            <div className="card p-4 text-center"><p className="text-2xl font-bold">{data.stats.total}</p><p className="text-sm text-gray-500">Total Jobs</p></div>
-            <div className="card p-4 text-center"><p className="text-2xl font-bold text-yellow-600">{data.stats.pending}</p><p className="text-sm text-gray-500">Active</p></div>
-            <div className="card p-4 text-center"><p className="text-2xl font-bold text-green-600">{data.stats.completed}</p><p className="text-sm text-gray-500">Completed</p></div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <StatTile label="Total jobs" value={data.stats.total} icon={Briefcase} />
+            <StatTile label="Active" value={data.stats.pending} icon={Clock} />
+            <StatTile label="Completed" value={data.stats.completed} icon={CheckCircle} />
           </div>
 
           {data.todayJobs.length > 0 && (

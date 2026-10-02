@@ -4,17 +4,12 @@ import { Users, ShoppingCart, Calendar, DollarSign, AlertTriangle, ArrowRight, P
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import RevenueChart from '../../components/admin/RevenueChart';
+import StatTile from '../../components/admin/StatTile';
+import StatusBars from '../../components/admin/StatusBars';
 import { useAuth } from '../../context/AuthContext';
 import { ACTION_META, timeAgo } from '../../data/auditActions';
 
 const STATUS_ORDER = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
-const STATUS_BAR_FILL = {
-  pending: 'bg-yellow-400',
-  processing: 'bg-blue-400',
-  shipped: 'bg-purple-400',
-  delivered: 'bg-green-400',
-  cancelled: 'bg-red-400',
-};
 
 const CATEGORY_ICON = {
   create: { Icon: Plus, className: 'bg-green-100 text-green-600' },
@@ -52,75 +47,45 @@ export default function AdminDashboard() {
   };
 
   const cards = [
-    { label: 'Total Revenue', value: formatPrice(stats.revenue), icon: DollarSign },
-    { label: 'Customers', value: stats.totalCustomers, icon: Users },
-    { label: 'Total Orders', value: stats.totalOrders, icon: ShoppingCart },
-    { label: 'Bookings', value: stats.totalBookings, icon: Calendar },
+    // Full width on phones: the peso total is the longest figure and the one that leads.
+    { label: 'Total revenue', value: formatPrice(stats.revenue), icon: DollarSign, className: 'col-span-2 md:col-span-1' },
+    { label: 'Customers', value: stats.totalCustomers.toLocaleString(), icon: Users },
+    { label: 'Total orders', value: stats.totalOrders.toLocaleString(), icon: ShoppingCart },
+    { label: 'Bookings', value: stats.totalBookings.toLocaleString(), icon: Calendar },
   ];
 
   const totalStatusCount = orderStatusBreakdown.reduce((s, r) => s + r.count, 0) || 1;
   const statusRows = STATUS_ORDER
     .map(status => ({ status, count: orderStatusBreakdown.find(r => r.status === status)?.count || 0 }))
     .filter(r => r.count > 0 || STATUS_ORDER.indexOf(r.status) < 2);
+  const revenueThisYear = salesByMonth.reduce((sum, m) => sum + m.revenue, 0);
 
   return (
     <AdminLayout title="Dashboard" subtitle={`Welcome back, ${user?.firstName || 'Admin'}. Here's what's happening with your store today.`}>
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        {cards.map(c => (
-          <div key={c.label} className="card p-4">
-            <div className="w-10 h-10 bg-brand-navy/10 rounded-lg flex items-center justify-center mb-3">
-              <c.icon className="w-5 h-5 text-brand-navy" />
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{c.value}</p>
-            <p className="text-sm text-gray-500">{c.label}</p>
-          </div>
-        ))}
-
-        <Link
-          to="/admin/products"
-          className="rounded-xl p-4 bg-gradient-to-br from-brand-navy via-brand-blue to-brand-navy text-white hover:shadow-lg transition-shadow flex flex-col justify-between"
-        >
-          <div className="w-10 h-10 bg-white/15 rounded-lg flex items-center justify-center mb-3">
-            <AlertTriangle className="w-5 h-5 text-brand-orange" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold">{stats.lowStockCount}</p>
-            <p className="text-sm text-gray-300">Low Stock Items</p>
-          </div>
-        </Link>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+        {cards.map(c => <StatTile key={c.label} label={c.label} value={c.value} icon={c.icon} className={c.className} />)}
+        <StatTile label="Low stock items" value={stats.lowStockCount} icon={AlertTriangle} tone={stats.lowStockCount > 0 ? 'alert' : 'default'} to="/admin/products" action="Review stock" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <div className="card p-6 lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
             <div>
-              <h3 className="font-semibold text-gray-900">Revenue Overview</h3>
+              <h3 className="font-semibold text-gray-900">Revenue overview</h3>
               <p className="text-xs text-gray-400">Monthly performance for the current year</p>
+            </div>
+            <div className="sm:text-right">
+              <p className="text-xs text-gray-400">This year</p>
+              <p className="text-lg font-semibold text-brand-ink">{formatPrice(revenueThisYear)}</p>
             </div>
           </div>
           <RevenueChart data={salesByMonth} />
         </div>
 
         <div className="card p-6">
-          <h3 className="font-semibold text-gray-900 mb-1">Order Status</h3>
-          <p className="text-xs text-gray-400 mb-4">Breakdown of all orders</p>
-          <div className="space-y-4">
-            {statusRows.map(r => {
-              const pct = Math.round((r.count / totalStatusCount) * 100);
-              const textClass = statusColor(r.status).split(' ')[1];
-              return (
-                <div key={r.status}>
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className={`capitalize font-medium ${textClass}`}>{r.status}</span>
-                    <span className="text-gray-500">{r.count}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                    <div className={`h-full rounded-full ${STATUS_BAR_FILL[r.status] || 'bg-gray-400'}`} style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <h3 className="font-semibold text-gray-900 mb-1">Order status</h3>
+          <p className="text-xs text-gray-400 mb-5">Breakdown of all {totalStatusCount.toLocaleString()} orders</p>
+          <StatusBars rows={statusRows} total={totalStatusCount} />
         </div>
       </div>
 
@@ -128,7 +93,7 @@ export default function AdminDashboard() {
         <div className="card p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-semibold text-gray-900">Recent Orders</h3>
+              <h3 className="font-semibold text-gray-900">Recent orders</h3>
               <p className="text-xs text-gray-400">Latest transactions from your store</p>
             </div>
             <div className="flex items-center gap-2">
@@ -215,7 +180,7 @@ export default function AdminDashboard() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-semibold text-gray-900">Recent Activity</h3>
+              <h3 className="font-semibold text-gray-900">Recent activity</h3>
               <p className="text-xs text-gray-400">Latest staff actions in your system</p>
             </div>
             <Link to="/admin/audit-log" className="text-xs font-semibold text-brand-navy hover:text-brand-orange transition flex items-center gap-1 whitespace-nowrap">
@@ -227,23 +192,25 @@ export default function AdminDashboard() {
           ) : activity.length === 0 ? (
             <p className="text-sm text-gray-400 py-6 text-center">No activity recorded yet.</p>
           ) : (
-            <div className="space-y-4">
-              {activity.map(log => {
+            <ol className="relative">
+              {activity.map((log, i) => {
                 const meta = ACTION_META[log.action];
                 const { Icon, className } = CATEGORY_ICON[meta?.category] || { Icon: Pencil, className: 'bg-gray-100 text-gray-600' };
                 return (
-                  <div key={log.id} className="flex items-start gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${className}`}>
+                  <li key={log.id} className="relative flex items-start gap-3 pb-4 last:pb-0">
+                    {/* The thread between events, stopping at the last one. */}
+                    {i < activity.length - 1 && <span className="absolute left-4 top-8 bottom-0 w-px bg-gray-200" aria-hidden="true" />}
+                    <div className={`relative w-8 h-8 rounded-full ring-4 ring-white flex items-center justify-center shrink-0 ${className}`}>
                       <Icon className="w-3.5 h-3.5" />
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-sm text-gray-800 leading-snug truncate">{meta && log.details ? meta.describe(log.details, nameOf) : log.action}</p>
-                      <p className="text-xs text-gray-400">{log.first_name ? `${log.first_name} ${log.last_name}` : 'Deleted user'} · {timeAgo(log.created_at)}</p>
+                    <div className="min-w-0 pt-0.5">
+                      <p className="text-sm text-gray-800 leading-snug line-clamp-2">{meta && log.details ? meta.describe(log.details, nameOf) : log.action}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{log.first_name ? `${log.first_name} ${log.last_name}` : 'Deleted user'} · {timeAgo(log.created_at)}</p>
                     </div>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           )}
         </div>
       </div>

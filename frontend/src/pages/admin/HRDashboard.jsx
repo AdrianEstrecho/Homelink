@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Users, UserPlus, Truck, Wrench, ArrowRight, UserCog } from 'lucide-react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import StatTile from '../../components/admin/StatTile';
 import { useAuth } from '../../context/AuthContext';
 import { DEPARTMENT_LABELS } from '../../data/auditActions';
 
@@ -25,24 +26,16 @@ export default function HRDashboard() {
   const { totalEmployees, totalCustomers, positionBreakdown, supplierStats, recentHires } = data;
   const installerCount = positionBreakdown.find(p => p.position === 'installer')?.count || 0;
   const cards = [
-    { label: 'Total Employees', value: totalEmployees, icon: Users },
-    { label: 'Customers (Onboarding Pool)', value: totalCustomers, icon: UserPlus },
-    { label: 'Active Suppliers', value: `${supplierStats.active} / ${supplierStats.total}`, icon: Truck },
+    { label: 'Total employees', value: totalEmployees, icon: Users },
+    { label: 'Customers (onboarding pool)', value: totalCustomers, icon: UserPlus },
+    { label: 'Active suppliers', value: `${supplierStats.active} / ${supplierStats.total}`, icon: Truck },
     { label: 'Installers / Technicians', value: installerCount, icon: Wrench },
   ];
 
   return (
     <AdminLayout title="Dashboard" subtitle={`Welcome back, ${user?.firstName || 'there'}. Here's your workforce and vendor overview.`}>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {cards.map(c => (
-          <div key={c.label} className="card p-4">
-            <div className="w-10 h-10 bg-brand-navy/10 rounded-lg flex items-center justify-center mb-3">
-              <c.icon className="w-5 h-5 text-brand-navy" />
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{c.value}</p>
-            <p className="text-sm text-gray-500">{c.label}</p>
-          </div>
-        ))}
+        {cards.map(c => <StatTile key={c.label} label={c.label} value={c.value} icon={c.icon} tone={c.tone} to={c.to} action={c.action} />)}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -50,7 +43,7 @@ export default function HRDashboard() {
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-teal-50 rounded-lg flex items-center justify-center"><UserCog className="w-5 h-5 text-[#00806f]" /></div>
             <div>
-              <p className="font-semibold text-gray-900">Manage Employees</p>
+              <p className="font-semibold text-gray-900">Manage employees</p>
               <p className="text-xs text-gray-400">Onboard, promote, and manage staff accounts</p>
             </div>
           </div>
@@ -60,7 +53,7 @@ export default function HRDashboard() {
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center"><Truck className="w-5 h-5 text-brand-orange" /></div>
             <div>
-              <p className="font-semibold text-gray-900">Manage Suppliers</p>
+              <p className="font-semibold text-gray-900">Manage suppliers</p>
               <p className="text-xs text-gray-400">Add, update, and review vendor accounts</p>
             </div>
           </div>
@@ -71,7 +64,7 @@ export default function HRDashboard() {
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-semibold text-gray-900">Recent Hires</h3>
+            <h3 className="font-semibold text-gray-900">Recent hires</h3>
             <p className="text-xs text-gray-400">Latest employees onboarded</p>
           </div>
           <Link to="/admin/hr/employees" className="text-xs font-semibold text-brand-navy hover:text-brand-orange transition flex items-center gap-1 whitespace-nowrap">

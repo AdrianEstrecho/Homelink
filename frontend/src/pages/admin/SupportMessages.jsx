@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { LifeBuoy, Send } from 'lucide-react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import FilterTab from '../../components/admin/FilterTab';
 import { timeAgo } from '../../data/auditActions';
 import { formatTicketNo } from '../../utils/ticketNumber';
 
@@ -74,8 +75,8 @@ export default function AdminSupportMessages() {
       {error && <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
 
       <div className="flex items-center gap-2 mb-4">
-        <TabButton active={tab === 'open'} onClick={() => setTab('open')}>Open ({openCount})</TabButton>
-        <TabButton active={tab === 'resolved'} onClick={() => setTab('resolved')}>Resolved ({resolvedCount})</TabButton>
+        <FilterTab active={tab === 'open'} onClick={() => setTab('open')} count={openCount}>Open</FilterTab>
+        <FilterTab active={tab === 'resolved'} onClick={() => setTab('resolved')} count={resolvedCount}>Resolved</FilterTab>
       </div>
 
       {filtered.length === 0 ? (
@@ -145,16 +146,5 @@ export default function AdminSupportMessages() {
         </div>
       )}
     </AdminLayout>
-  );
-}
-
-function TabButton({ active, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${active ? 'bg-brand-navy text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-    >
-      {children}
-    </button>
   );
 }

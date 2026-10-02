@@ -4,11 +4,14 @@ import {
   LayoutDashboard, Package, Wrench, ShoppingCart, Calendar, Users, Ticket, ShieldCheck, Settings,
   Search, Bell, Home, LogOut, History, LifeBuoy, X, User, ClipboardCheck, Truck, UserCog,
   HardHat, MessageSquare, CheckCircle, BarChart3, FileText, SlidersHorizontal, KeyRound, PackageCheck,
+  Menu, IdCard,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import ConfirmDialog from './ConfirmDialog';
 import { ACTION_META, timeAgo, parseUtc } from '../data/auditActions';
+import { getStaffRole } from '../constants/staffRoles';
+import { landingFor } from '../utils/staffLanding';
 
 const NAV_SECTIONS = [
   {
@@ -16,13 +19,13 @@ const NAV_SECTIONS = [
     items: [
       { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
       { to: '/admin/reports', icon: BarChart3, label: 'Reports' },
-      { to: '/admin/products', icon: Package, label: 'Product' },
-      { to: '/admin/services', icon: Wrench, label: 'Service' },
-      { to: '/admin/orders', icon: ShoppingCart, label: 'Order' },
+      { to: '/admin/products', icon: Package, label: 'Products' },
+      { to: '/admin/services', icon: Wrench, label: 'Services' },
+      { to: '/admin/orders', icon: ShoppingCart, label: 'Orders' },
       { to: '/admin/returns', icon: PackageCheck, label: 'Returns & Cancellations' },
-      { to: '/admin/bookings', icon: Calendar, label: 'Booking' },
-      { to: '/admin/users', icon: Users, label: 'User' },
-      { to: '/admin/vouchers', icon: Ticket, label: 'Voucher' },
+      { to: '/admin/bookings', icon: Calendar, label: 'Bookings' },
+      { to: '/admin/users', icon: Users, label: 'Users' },
+      { to: '/admin/vouchers', icon: Ticket, label: 'Vouchers' },
       { to: '/admin/support', icon: LifeBuoy, label: 'Support' },
     ],
   },
@@ -175,7 +178,12 @@ export default function AdminLayout({ children, title, subtitle }) {
   const [activity, setActivity] = useState([]);
   const [employeeNotifs, setEmployeeNotifs] = useState([]);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  // Below lg the sidebar is a drawer. No need to close it on navigation — every page mounts
+  // its own AdminLayout, so following a link starts the next page with it shut.
+  const [navOpen, setNavOpen] = useState(false);
   const seenKey = `homelink_notif_seen_${user?.id || 'admin'}`;
+  const workspace = getStaffRole(isAdmin ? 'admin' : user?.position);
+  const today = new Date().toLocaleDateString('en-PH', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
   const [seenAt, setSeenAt] = useState(() => localStorage.getItem(seenKey) || '');
 
   // Employees only ever see the section(s) covering their own task; global search
@@ -208,6 +216,18 @@ export default function AdminLayout({ children, title, subtitle }) {
   useLayoutEffect(() => {
     if (navRef.current) navRef.current.scrollTop = cachedSidebarScrollTop;
   }, []);
+
+  useEffect(() => {
+    if (!navOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setNavOpen(false); };
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [navOpen]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -289,29 +309,53 @@ export default function AdminLayout({ children, title, subtitle }) {
     // Normally one screen tall at minimum; while a Select dropdown hangs past the bottom of the
     // page, it publishes how tall the page needs to be so the background and sticky sidebar
     // stretch over the extra scroll room instead of leaving a bare strip below them.
-    <div className="flex bg-gray-50" style={{ minHeight: 'max(100vh, var(--select-panel-page-min-height, 0px))' }}>
-      {/* Sidebar */}
-      <aside className="w-60 shrink-0 h-screen sticky top-0 bg-brand-navy text-white flex flex-col">
-        <div className="flex items-center gap-2 px-5 h-16 border-b border-white/10 shrink-0">
-          <div className="w-8 h-8 bg-brand-orange rounded-lg flex items-center justify-center shrink-0"><Home className="w-4 h-4" /></div>
-          <span className="font-display font-bold text-lg truncate">Home<span className="text-brand-orange">Link</span></span>
+    <div className="admin-shell flex" style={{ minHeight: 'max(100vh, var(--select-panel-page-min-height, 0px))' }}>
+      {navOpen && <button type="button" aria-label="Close menu" onClick={() => setNavOpen(false)} className="fixed inset-0 z-40 bg-brand-navy/50 backdrop-blur-[2px] lg:hidden" />}
+
+      {/* Sidebar — a drawer below lg, pinned beside the page from lg up. */}
+      <aside
+        id="admin-sidebar"
+        className={`admin-sidebar w-64 shrink-0 h-screen fixed inset-y-0 left-0 z-50 text-white flex flex-col transition-transform duration-300 ease-out lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 ${navOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}
+      >
+        <div className="flex items-center gap-2.5 px-5 h-16 shrink-0">
+          <Link to={landingFor(user) || '/admin'} className="flex items-center gap-2.5 min-w-0" title="Go to your dashboard">
+            <span className="w-8 h-8 bg-brand-orange rounded-lg flex items-center justify-center shrink-0"><Home className="w-4 h-4" /></span>
+            <span className="font-display font-extrabold text-lg tracking-tight truncate">Home<span className="text-brand-orange">Link</span></span>
+          </Link>
+          <button type="button" onClick={() => setNavOpen(false)} aria-label="Close menu" className="ml-auto p-1.5 rounded-lg text-[#9db8e6] hover:text-white hover:bg-white/10 transition lg:hidden">
+            <X className="w-5 h-5" />
+          </button>
         </div>
+
+        {/* The workspace picked at sign-in — the same room the staff portal lit up. */}
+        <div className="mx-3 mb-2 flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
+          <span className="w-9 h-9 rounded-lg bg-brand-orange/15 text-[#ff8a5c] flex items-center justify-center shrink-0">
+            {workspace ? <workspace.icon className="w-[18px] h-[18px]" /> : <IdCard className="w-[18px] h-[18px]" />}
+          </span>
+          <div className="min-w-0">
+            <p className="drafting text-[10px] text-[#9db8e6]">{workspace?.room || 'Staff'}</p>
+            <p className="text-sm font-semibold truncate">{workspace?.title || 'Employee'}</p>
+          </div>
+        </div>
+
         <nav
           ref={navRef}
+          aria-label="Admin"
           onScroll={() => { cachedSidebarScrollTop = navRef.current.scrollTop; }}
-          className="flex-1 px-3 py-4 overflow-y-auto scrollbar-ghost"
+          className="flex-1 px-3 py-3 overflow-y-auto scrollbar-ghost"
         >
           {navSections.map((section, i) => (
             <div key={section.label} className={i > 0 ? 'mt-5' : ''}>
-              <p className="px-3 mb-1.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{section.label}</p>
-              <div className="space-y-1">
+              <p className="drafting px-3 mb-1.5 text-[10px] text-[#9db8e6]/70">{section.label}</p>
+              <div className="space-y-0.5">
                 {section.items.map(l => {
                   const active = isNavItemActive(l, location);
                   return (
                     <Link
                       key={l.to}
                       to={l.to}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition ${active ? 'bg-white/10 text-white font-semibold' : 'text-gray-300 hover:bg-white/5 hover:text-white'}`}
+                      aria-current={active ? 'page' : undefined}
+                      className={`admin-nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${active ? 'font-semibold' : ''}`}
                     >
                       <l.icon className="w-4 h-4 shrink-0" /> {l.label}
                     </Link>
@@ -321,18 +365,19 @@ export default function AdminLayout({ children, title, subtitle }) {
             </div>
           ))}
         </nav>
-        <div className="p-3 border-t border-white/10 shrink-0">
-          <Link to={isAdmin ? '/admin/profile' : '/employee/profile'} className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/5 transition">
+
+        <div className="p-3 border-t border-white/10 shrink-0 flex items-center gap-1">
+          <Link to={isAdmin ? '/admin/profile' : '/employee/profile'} className="flex-1 min-w-0 flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/5 transition">
             <div className={`w-8 h-8 rounded-lg ${avatarColor(user?.id)} flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden`}>
               {user?.avatar ? <img src={user.avatar} alt="" className="w-full h-full object-cover" /> : initials(user?.firstName, user?.lastName)}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium truncate">{user?.firstName} {user?.lastName}</p>
-              <p className="text-xs text-gray-400 truncate">My Profile</p>
+              <p className="text-xs text-[#9db8e6] truncate">View profile</p>
             </div>
           </Link>
-          <button onClick={() => setConfirmLogout(true)} className="flex items-center gap-2.5 px-2 py-2 mt-1 rounded-lg text-sm text-gray-300 hover:bg-white/5 hover:text-white transition w-full">
-            <LogOut className="w-4 h-4 shrink-0" /> Log Out
+          <button onClick={() => setConfirmLogout(true)} title="Log out" aria-label="Log out" className="p-2.5 rounded-lg text-[#9db8e6] hover:bg-white/10 hover:text-white transition shrink-0">
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </aside>
@@ -370,19 +415,33 @@ export default function AdminLayout({ children, title, subtitle }) {
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Topbar */}
-        <div className="h-16 shrink-0 bg-white border-b border-gray-100 flex items-center gap-4 px-6">
+        {/* Solid, not frosted: a backdrop-filter here would become the containing block for the
+            dropdowns' position:fixed click-outside layers and shrink them to this bar. */}
+        <div className="h-16 shrink-0 sticky top-0 z-30 bg-white border-b border-[#e4e8f0] flex items-center gap-3 px-4 sm:px-6 lg:px-8">
+          <button
+            type="button"
+            onClick={() => setNavOpen(true)}
+            aria-label="Open menu"
+            aria-controls="admin-sidebar"
+            aria-expanded={navOpen}
+            className="p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 transition lg:hidden"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
           {isAdmin ? (
-            <form onSubmit={handleSearch} className="relative flex-1 max-w-sm">
+            <form onSubmit={handleSearch} className="relative flex-1 max-w-sm" role="search">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search products..."
-                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-orange focus:border-transparent outline-none transition"
+                aria-label="Search products"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-brand-orange focus:border-transparent outline-none transition"
               />
             </form>
           ) : <div className="flex-1" />}
-          <div className="flex items-center gap-3 ml-auto">
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+            <p className="drafting hidden md:block text-[11px] text-gray-500 pr-2 mr-1 border-r border-gray-200">{today}</p>
             <div className="relative">
               <button onClick={() => setNotifOpen(o => !o)} className="relative p-2 rounded-lg hover:bg-gray-100 transition" aria-label="Notifications">
                 <Bell className="w-5 h-5 text-gray-500" />
@@ -391,7 +450,7 @@ export default function AdminLayout({ children, title, subtitle }) {
               {notifOpen && (
                 <>
                   <button className="fixed inset-0 z-10 cursor-default" onClick={() => setNotifOpen(false)} aria-label="Close notifications" />
-                  <div className="absolute right-0 mt-2 w-96 card p-0 z-20 overflow-hidden">
+                  <div className="fixed inset-x-4 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-96 card p-0 z-20 overflow-hidden">
                     <div className="flex items-center gap-2 px-4 py-3.5 border-b border-gray-100">
                       <h3 className="font-semibold text-gray-900">Notifications</h3>
                       {bellCount > 0 && (
@@ -440,21 +499,14 @@ export default function AdminLayout({ children, title, subtitle }) {
           </div>
         </div>
 
-        {/* Banner */}
         {title && (
-          <div className="relative overflow-hidden bg-gradient-to-br from-brand-navy via-brand-blue to-brand-navy text-white px-6 py-8 shrink-0">
-            <div className="absolute inset-0 opacity-10 pointer-events-none">
-              <div className="float-blob absolute -top-10 -left-10 w-56 h-56 bg-brand-orange rounded-full blur-3xl" />
-              <div className="float-blob-delayed absolute -bottom-16 right-0 w-64 h-64 bg-brand-teal rounded-full blur-3xl" />
-            </div>
-            <div className="relative">
-              <h1 className="font-display text-2xl sm:text-3xl font-bold">{title}</h1>
-              {subtitle && <p className="text-gray-300 text-sm mt-1.5">{subtitle}</p>}
-            </div>
-          </div>
+          <header className="admin-page-head shrink-0 px-4 sm:px-6 lg:px-8 pt-7 pb-1">
+            <h1 className="font-display text-[1.75rem] sm:text-3xl font-extrabold tracking-tight text-brand-ink">{title}</h1>
+            {subtitle && <p className="text-sm text-gray-500 mt-1.5 max-w-2xl">{subtitle}</p>}
+          </header>
         )}
 
-        <div className="flex-1 p-6 min-w-0">
+        <div className="flex-1 px-4 sm:px-6 lg:px-8 py-6 min-w-0">
           {children}
         </div>
       </div>

@@ -969,6 +969,98 @@
   .plan-caption-in { animation: none; }
 }
 
+/* Admin / employee panel (components/AdminLayout.jsx). Same blueprint world as the staff
+   sign-in, kept quiet for all-day work: the sidebar is a strip of drafting paper with the
+   current page "lit" like the room picked at sign-in, and everything inside .admin-shell
+   trades the storefront's frosted glass for solid, hairline-bordered surfaces — dense
+   tables read better on flat white, and there's no ambient mesh behind them to blur. */
+.admin-shell {
+  background-color: #f3f5f9;
+}
+.admin-sidebar {
+  background-color: #0c2452;
+  background-image:
+    linear-gradient(rgba(157, 184, 230, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(157, 184, 230, 0.035) 1px, transparent 1px),
+    linear-gradient(180deg, #0f2b5b 0%, #0b2150 100%);
+  background-size: 24px 24px, 24px 24px, 100% 100%;
+}
+.admin-nav-link {
+  position: relative;
+  color: #c3d1ea;
+}
+.admin-nav-link:hover {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+.admin-nav-link[aria-current="page"] {
+  color: #fff;
+  background-image: linear-gradient(90deg, rgba(255, 107, 53, 0.16), rgba(255, 107, 53, 0.02) 70%);
+}
+/* The light switch: an orange bar on the left edge with a soft spill of light. */
+.admin-nav-link[aria-current="page"]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #ff6b35;
+  box-shadow: 0 0 12px 1px rgba(255, 107, 53, 0.55);
+}
+.admin-nav-link[aria-current="page"] svg {
+  color: #ff8a5c;
+}
+.admin-shell .card {
+  background-image: none;
+  background-color: #fff;
+  border-color: #e4e8f0;
+  box-shadow: 0 1px 2px rgba(15, 43, 91, 0.04);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* On phones a table scrolls sideways at a readable width rather than crushing every
+   column until "1 item" wraps onto two lines. Wider screens keep their natural fit. */
+@media (max-width: 639px) {
+  .admin-shell .overflow-x-auto > table {
+    min-width: 36rem;
+  }
+}
+.admin-shell thead.bg-gray-50 {
+  background-color: #f8fafc;
+  box-shadow: inset 0 -1px 0 #e9edf3;
+}
+.admin-shell thead th {
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-stretch: 72%;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7a8699;
+}
+/* Faint drafting grid behind the page title, fading out before it reaches the text. */
+.admin-page-head {
+  position: relative;
+  isolation: isolate;
+}
+.admin-page-head::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(15, 43, 91, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 43, 91, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 35%, #000 100%), linear-gradient(180deg, #000 30%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, transparent 35%, #000 100%), linear-gradient(180deg, #000 30%, transparent 100%);
+  mask-composite: intersect;
+  pointer-events: none;
+}
+
 /* Account page header (pages/Account.jsx): a faint 40px grid over the navy band, masked so it
    only shows toward the right and fades out before it reaches the name and avatar. */
 .account-hero-grid {

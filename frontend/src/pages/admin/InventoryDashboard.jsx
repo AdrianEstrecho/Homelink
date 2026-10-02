@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Package, AlertTriangle, PackageX, Archive, ArrowRight } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import StatTile from '../../components/admin/StatTile';
 import { useAuth } from '../../context/AuthContext';
 
 export default function InventoryDashboard() {
@@ -23,8 +24,8 @@ export default function InventoryDashboard() {
 
   const { totalProducts, archivedCount, lowStockCount, outOfStockCount, categoryBreakdown, recentProducts } = data;
   const cards = [
-    { label: 'Active Products', value: totalProducts, icon: Package },
-    { label: 'Out of Stock', value: outOfStockCount, icon: PackageX },
+    { label: 'Active products', value: totalProducts, icon: Package },
+    { label: 'Out of stock', value: outOfStockCount, icon: PackageX },
     { label: 'Archived', value: archivedCount, icon: Archive },
   ];
   const maxCategoryCount = Math.max(...categoryBreakdown.map(c => c.count), 1);
@@ -32,35 +33,15 @@ export default function InventoryDashboard() {
   return (
     <AdminLayout title="Dashboard" subtitle={`Welcome back, ${user?.firstName || 'there'}. Here's your product & stock overview.`}>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {cards.map(c => (
-          <div key={c.label} className="card p-4">
-            <div className="w-10 h-10 bg-brand-navy/10 rounded-lg flex items-center justify-center mb-3">
-              <c.icon className="w-5 h-5 text-brand-navy" />
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{c.value}</p>
-            <p className="text-sm text-gray-500">{c.label}</p>
-          </div>
-        ))}
-
-        <Link
-          to="/admin/products"
-          className="rounded-xl p-4 bg-gradient-to-br from-brand-navy via-brand-blue to-brand-navy text-white hover:shadow-lg transition-shadow flex flex-col justify-between"
-        >
-          <div className="w-10 h-10 bg-white/15 rounded-lg flex items-center justify-center mb-3">
-            <AlertTriangle className="w-5 h-5 text-brand-orange" />
-          </div>
-          <div>
-            <p className="text-2xl font-bold">{lowStockCount}</p>
-            <p className="text-sm text-gray-300">Low Stock Items</p>
-          </div>
-        </Link>
+        {cards.map(c => <StatTile key={c.label} label={c.label} value={c.value} icon={c.icon} />)}
+        <StatTile label="Low stock items" value={lowStockCount} icon={AlertTriangle} tone={lowStockCount > 0 ? 'alert' : 'default'} to="/admin/products" action="Review stock" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="card p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="font-semibold text-gray-900">Recently Added Products</h3>
+              <h3 className="font-semibold text-gray-900">Recently added products</h3>
               <p className="text-xs text-gray-400">Latest additions to the catalog</p>
             </div>
             <Link to="/admin/products" className="text-xs font-semibold text-brand-navy hover:text-brand-orange transition flex items-center gap-1 whitespace-nowrap">
@@ -96,20 +77,20 @@ export default function InventoryDashboard() {
         </div>
 
         <div className="card p-6">
-          <h3 className="font-semibold text-gray-900 mb-1">Top Categories</h3>
-          <p className="text-xs text-gray-400 mb-4">Product count by category</p>
+          <h3 className="font-semibold text-gray-900 mb-1">Top categories</h3>
+          <p className="text-xs text-gray-400 mb-5">Product count by category</p>
           {categoryBreakdown.length === 0 ? (
             <p className="text-sm text-gray-400 py-6 text-center">No categories yet.</p>
           ) : (
             <div className="space-y-4">
               {categoryBreakdown.map(c => (
                 <div key={c.name}>
-                  <div className="flex items-center justify-between text-sm mb-1">
+                  <div className="flex items-center justify-between text-sm mb-1.5">
                     <span className="font-medium text-gray-700 truncate">{c.name}</span>
-                    <span className="text-gray-500">{c.count}</span>
+                    <span className="tabular-nums font-medium text-gray-900">{c.count}</span>
                   </div>
-                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-brand-orange" style={{ width: `${Math.round((c.count / maxCategoryCount) * 100)}%` }} />
+                  <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-brand-blue" style={{ width: `${Math.round((c.count / maxCategoryCount) * 100)}%` }} />
                   </div>
                 </div>
               ))}

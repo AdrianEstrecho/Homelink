@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Eye, EyeOff, ArrowUpCircle, X, Archive, ArchiveRestore } from 'lucide-react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import FilterTab from '../../components/admin/FilterTab';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import Pagination from '../../components/Pagination';
@@ -213,12 +214,12 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           {roleTabs.length > 1 && roleTabs.map(t => (
-            <TabButton key={t.key} active={tab === t.key} onClick={() => { setTab(t.key); setView('active'); }}>{t.label} ({counts[t.key] || 0})</TabButton>
+            <FilterTab key={t.key} active={tab === t.key} onClick={() => { setTab(t.key); setView('active'); }} count={counts[t.key] || 0}>{t.label}</FilterTab>
           ))}
           {canToggleArchive && (
             <>
-              <TabButton active={!archivedView} onClick={() => setView('active')}>All Active ({activeCountForTab})</TabButton>
-              <TabButton active={archivedView} onClick={() => setView('archived')}>Archived ({archivedCountForTab})</TabButton>
+              <FilterTab active={!archivedView} onClick={() => setView('active')} count={activeCountForTab}>All Active</FilterTab>
+              <FilterTab active={archivedView} onClick={() => setView('archived')} count={archivedCountForTab}>Archived</FilterTab>
             </>
           )}
         </div>
@@ -347,16 +348,5 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
         <Pagination page={currentPage} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </AdminLayout>
-  );
-}
-
-function TabButton({ active, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${active ? 'bg-brand-navy text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-    >
-      {children}
-    </button>
   );
 }

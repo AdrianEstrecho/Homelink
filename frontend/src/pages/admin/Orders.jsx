@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Pencil, Search, RefreshCw } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import FilterTab from '../../components/admin/FilterTab';
 import OrderDetailsModal from '../../components/OrderDetailsModal';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -100,11 +101,11 @@ export default function AdminOrders() {
       {pageError && <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{pageError}</p>}
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <TabButton active={tab === 'all'} onClick={() => setTab('all')}>All ({counts.all})</TabButton>
+        <FilterTab active={tab === 'all'} onClick={() => setTab('all')} count={counts.all}>All</FilterTab>
         {STATUSES.map(s => (
-          <TabButton key={s} active={tab === s} onClick={() => setTab(s)}>
-            <span className="capitalize">{s}</span> ({counts[s] || 0})
-          </TabButton>
+          <FilterTab key={s} active={tab === s} onClick={() => setTab(s)} count={counts[s] || 0}>
+            <span className="capitalize">{s}</span>
+          </FilterTab>
         ))}
       </div>
 
@@ -192,16 +193,5 @@ export default function AdminOrders() {
         />
       )}
     </AdminLayout>
-  );
-}
-
-function TabButton({ active, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${active ? 'bg-brand-navy text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-    >
-      {children}
-    </button>
   );
 }

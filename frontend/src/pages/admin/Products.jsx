@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Search, X, ImageOff, UploadCloud, Info, FolderTree, Tag, ListChecks, Sparkles, ShieldCheck, Image as ImageIcon } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import FilterTab from '../../components/admin/FilterTab';
 import Select from '../../components/Select';
 import PromptDialog from '../../components/PromptDialog';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -361,9 +362,9 @@ export default function AdminProducts() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
-          <TabButton active={tab === 'active'} onClick={() => setTab('active')}>All Active ({activeCount})</TabButton>
+          <FilterTab active={tab === 'active'} onClick={() => setTab('active')} count={activeCount}>All Active</FilterTab>
           {canManageArchive && (
-            <TabButton active={tab === 'archived'} onClick={() => setTab('archived')}>Archived ({archivedCount})</TabButton>
+            <FilterTab active={tab === 'archived'} onClick={() => setTab('archived')} count={archivedCount}>Archived</FilterTab>
           )}
         </div>
         {!showForm && tab !== 'archived' && (
@@ -709,16 +710,5 @@ export default function AdminProducts() {
         <Pagination page={currentPage} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </AdminLayout>
-  );
-}
-
-function TabButton({ active, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${active ? 'bg-brand-navy text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-    >
-      {children}
-    </button>
   );
 }

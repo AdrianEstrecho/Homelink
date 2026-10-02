@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pencil, Search, RefreshCw, Wrench } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
+import FilterTab from '../../components/admin/FilterTab';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import NeedsReviewFlag from '../../components/NeedsReviewFlag';
@@ -96,11 +97,11 @@ export default function AdminBookings() {
       />
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <TabButton active={tab === 'all'} onClick={() => setTab('all')}>All ({counts.all})</TabButton>
+        <FilterTab active={tab === 'all'} onClick={() => setTab('all')} count={counts.all}>All</FilterTab>
         {STATUSES.map(s => (
-          <TabButton key={s} active={tab === s} onClick={() => setTab(s)}>
-            <span className="capitalize">{s.replace('_', ' ')}</span> ({counts[s] || 0})
-          </TabButton>
+          <FilterTab key={s} active={tab === s} onClick={() => setTab(s)} count={counts[s] || 0}>
+            <span className="capitalize">{s.replace('_', ' ')}</span>
+          </FilterTab>
         ))}
       </div>
 
@@ -186,16 +187,5 @@ export default function AdminBookings() {
         <Pagination page={currentPage} totalPages={totalPages} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
     </AdminLayout>
-  );
-}
-
-function TabButton({ active, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${active ? 'bg-brand-navy text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-    >
-      {children}
-    </button>
   );
 }
