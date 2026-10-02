@@ -27,6 +27,28 @@ function toUserResponse(user) {
   };
 }
 
+// The staff portal has people pick their role before signing in and sends that choice as
+// `portal` ('admin' or an employee position). A correct password for a different role is
+// turned away here, before any 2FA code goes out, with the account's real role so the page
+// can offer to switch. This only steers people to the right door — access itself is still
+// enforced per route by role and position.
+function portalMismatch(user, portal) {
+  if (!portal) return null;
+  if (user.role === 'customer') {
+    return { error: 'This portal is for HomeLink staff. Customers sign in on the main site.', code: 'not_staff' };
+  }
+  const matches = portal === 'admin'
+    ? user.role === 'admin'
+    // Employees with no position yet have no role of their own to pick, so any employee role lets them in.
+    : user.role === 'employee' && (!user.position || user.position === portal);
+  if (matches) return null;
+  return {
+    error: 'This account is registered to a different role.',
+    code: 'wrong_portal',
+    portal: user.role === 'admin' ? 'admin' : user.position,
+  };
+}
+
 router.post('/send-verification-code', async (req, res) => {
   try {
     const { email } = req.body;
@@ -97,7 +119,7 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, portal } = req.body;
     const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -105,6 +127,8 @@ router.post('/login', async (req, res) => {
     if (user.archived) {
       return res.status(401).json({ error: 'This account has been archived. Contact an administrator.' });
     }
+    const mismatch = portalMismatch(user, portal);
+    if (mismatch) return res.status(403).json(mismatch);
 
     if (user.two_factor_enabled) {
       const code = generateVerificationCode();

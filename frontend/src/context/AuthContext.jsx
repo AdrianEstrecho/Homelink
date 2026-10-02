@@ -14,8 +14,9 @@ export function AuthProvider({ children }) {
     } else setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
-    const data = await api.post('/auth/login', { email, password });
+  // `portal` is the staff portal's chosen role — the backend turns away a different role.
+  const login = async (email, password, { portal } = {}) => {
+    const data = await api.post('/auth/login', { email, password, portal });
     if (data.requires2FA) return { requires2FA: true, email: data.email };
     localStorage.setItem('homelink_token', data.token);
     setUser(data.user);

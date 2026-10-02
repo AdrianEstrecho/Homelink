@@ -9,6 +9,8 @@ async function request(path, options = {}) {
   if (!res.ok) {
     const err = new Error(data.error || 'Request failed');
     if (data.code) err.code = data.code;
+    // The whole body, for errors that carry more than a message (e.g. wrong_portal's `portal`).
+    err.data = data;
     throw err;
   }
   return data;

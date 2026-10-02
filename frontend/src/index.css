@@ -872,6 +872,103 @@
   .auth-signal[data-on="true"] path { animation: none; opacity: 1; }
 }
 
+/* Staff portal (components/auth/StaffAuthShell.jsx + StaffFloorPlan.jsx): HomeLink's HQ
+   drawn as a blueprint, one room per staff role. Drafting lettering is Archivo pulled to
+   its condensed width (the font loads with its wdth axis — see index.html), so the plan
+   doesn't need a third typeface. */
+.blueprint {
+  background-color: #0c2452;
+  background-image:
+    linear-gradient(rgba(157, 184, 230, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(157, 184, 230, 0.12) 1px, transparent 1px),
+    linear-gradient(rgba(157, 184, 230, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(157, 184, 230, 0.05) 1px, transparent 1px),
+    radial-gradient(ellipse 80% 60% at 20% 0%, #15397a 0%, transparent 70%);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px, 100% 100%;
+  background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px, 0 0;
+}
+.drafting {
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-stretch: 72%;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+.staff-plan .plan-text {
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-stretch: 72%;
+}
+.staff-plan .plan-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  fill: #c9d8f2;
+  transition: fill 0.4s ease;
+}
+.staff-plan .plan-dim {
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  fill: #9db8e6;
+  opacity: 0.7;
+}
+.staff-plan .plan-structure {
+  fill: none;
+  stroke: #dbe6fa;
+}
+.staff-plan .plan-annotation {
+  fill: none;
+  stroke: #9db8e6;
+  stroke-width: 1;
+  opacity: 0.6;
+}
+.staff-plan .plan-solid {
+  fill: #9db8e6;
+}
+.staff-plan .plan-room {
+  transition: opacity 0.4s ease;
+}
+.staff-plan .plan-fill {
+  opacity: 0;
+  stroke: #ff6b35;
+  stroke-width: 1.5;
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1) var(--plan-delay, 0ms);
+}
+.staff-plan .plan-furniture {
+  fill: none;
+  stroke: #9db8e6;
+  stroke-width: 1;
+  opacity: 0.45;
+  transition: stroke 0.4s ease var(--plan-delay, 0ms), opacity 0.4s ease var(--plan-delay, 0ms);
+}
+.staff-plan .plan-room[data-state="dim"] {
+  opacity: 0.4;
+}
+.staff-plan .plan-room[data-state="active"] .plan-fill,
+.staff-plan .plan-room[data-state="lit"] .plan-fill {
+  opacity: 1;
+}
+.staff-plan .plan-room[data-state="active"] .plan-furniture,
+.staff-plan .plan-room[data-state="lit"] .plan-furniture {
+  stroke: #ffc4a6;
+  opacity: 0.9;
+}
+.staff-plan .plan-room[data-state="active"] .plan-label,
+.staff-plan .plan-room[data-state="lit"] .plan-label {
+  fill: #fff;
+}
+.staff-plan--compact .plan-text,
+.staff-plan--compact .plan-annotation {
+  display: none;
+}
+/* Quicker and opacity-only (unlike .auth-rise): the caption swaps on every hover. */
+.plan-caption-in {
+  animation: routeFadeIn 0.25s ease-out backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-caption-in { animation: none; }
+}
+
 /* Account page header (pages/Account.jsx): a faint 40px grid over the navy band, masked so it
    only shows toward the right and fades out before it reaches the name and avatar. */
 .account-hero-grid {

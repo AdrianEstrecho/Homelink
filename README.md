@@ -74,6 +74,12 @@ from the customer login at `/login`. Each portal only accepts its own account ty
 customer credential entered at `/admin/login` (or a staff credential entered at `/login`)
 is rejected. Logging out of the admin dashboard returns to `/admin/login`.
 
+The staff portal opens on a role list — the five employee positions, then Administrator —
+and staff pick theirs before signing in. A correct password for a different role is turned
+away (before any 2FA code is sent) with a one-click switch to the account's own role.
+Employees with no position yet, like the demo employee above, can sign in under any
+employee role.
+
 ## Promo Codes
 
 - `HOMELINK10` — 10% off (min ₱5,000)
