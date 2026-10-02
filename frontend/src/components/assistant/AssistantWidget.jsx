@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, X, Send, RotateCcw, ChevronRight, AlertCircle } from 'lucide-react';
+import { X, Send, RotateCcw, ChevronRight, AlertCircle } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import SafeImage from '../SafeImage';
 import ChatMarkdown from './ChatMarkdown';
+import HandymanAvatar from './HandymanAvatar';
 
 // The server only ever looks at this many recent messages, so there's no point sending more.
 const HISTORY_SENT = 16;
@@ -155,8 +156,8 @@ export default function AssistantWidget({ hidden = false }) {
         >
           <div className="relative flex items-center gap-3 px-4 py-3 bg-brand-navy text-white shrink-0 overflow-hidden">
             <div aria-hidden="true" className="absolute -top-10 -right-6 w-32 h-32 rounded-full bg-brand-orange/25 blur-2xl" />
-            <div className="relative w-9 h-9 rounded-full bg-brand-orange flex items-center justify-center shrink-0">
-              <Sparkles className="w-[18px] h-[18px]" />
+            <div className="relative w-10 h-10 rounded-full bg-white ring-2 ring-brand-orange/70 flex items-center justify-center overflow-hidden shrink-0">
+              <HandymanAvatar className="w-11 h-11 mt-1" />
             </div>
             <div className="relative min-w-0 flex-1">
               <p className="font-display font-bold leading-tight">HomeLink Assistant</p>
@@ -253,9 +254,15 @@ export default function AssistantWidget({ hidden = false }) {
         onClick={() => setOpen(o => !o)}
         aria-label={open ? 'Close HomeLink Assistant' : 'Open HomeLink Assistant'}
         aria-expanded={open}
-        className={`fixed z-[90] bottom-5 right-5 h-14 min-w-14 px-4 sm:px-5 rounded-full bg-brand-navy text-white shadow-[0_10px_30px_-8px_rgba(15,43,91,0.55)] hover:bg-brand-blue active:scale-95 transition-all flex items-center justify-center gap-2 ${open ? 'hidden sm:flex' : ''}`}
+        className={`fixed z-[90] bottom-5 right-5 h-14 min-w-14 px-2 ${open ? 'sm:px-2' : 'sm:pr-5'} rounded-full bg-brand-navy text-white shadow-[0_10px_30px_-8px_rgba(15,43,91,0.55)] hover:bg-brand-blue active:scale-95 transition-all flex items-center justify-center gap-2.5 ${open ? 'hidden sm:flex' : ''}`}
       >
-        {open ? <X className="w-5 h-5" /> : <Sparkles className="w-5 h-5 text-brand-orange" />}
+        {open ? (
+          <X className="w-5 h-5" />
+        ) : (
+          <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center overflow-hidden shrink-0">
+            <HandymanAvatar className="w-11 h-11 mt-1" />
+          </span>
+        )}
         {!open && <span className="hidden sm:inline text-sm font-semibold">Ask HomeLink AI</span>}
       </button>
     </>
