@@ -1250,19 +1250,9 @@
   25% { transform: rotate(-6deg) translateY(-1px); }
   75% { transform: rotate(6deg) translateY(-1px); }
 }
-/* The speech bubble beside the closed chat button pops out from him shortly after the page
-   loads, and its hint line fades in each time it changes. `backwards` rather than `both`, so once
-   the entrance is over the final keyframe doesn't pin the transform the hover lift needs. */
-.assistant-bubble {
-  transform-origin: right center;
-  animation: assistantBubbleIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s backwards;
-}
+/* The hint line in the speech bubble beside the chat button fades in each time it changes. */
 .assistant-hint {
   animation: assistantHintIn 0.4s ease-out both;
-}
-@keyframes assistantBubbleIn {
-  from { opacity: 0; transform: translateX(10px) scale(0.85); }
-  to { opacity: 1; transform: none; }
 }
 @keyframes assistantHintIn {
   from { opacity: 0; transform: translateY(4px); }
@@ -1274,7 +1264,6 @@
   .mascot-hop,
   .mascot-pop,
   .mascot-working,
-  .assistant-bubble,
   .assistant-hint {
     animation: none;
   }

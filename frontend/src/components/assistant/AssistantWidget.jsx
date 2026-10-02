@@ -28,14 +28,19 @@ const LAUNCHER_HINTS = [
   'Delivery, payments & promos',
 ];
 
-// The assistant's mascot: the full figure is the chat button, the head is his avatar in the chat.
-const MASCOT = '/handyman.webp';
-const MASCOT_HEAD = '/handyman-head.webp';
+// The assistant's mascot. The full figure is the chat button and changes pose with the chat:
+// standing at rest, waving (hi) when hovered, jumping as he's clicked, thinking while the chat is
+// open or the customer is typing, and lighting up (answer) once a reply lands. Every pose shares
+// one frame, so swapping them never shifts his feet. The heads are his avatar inside the chat.
+const MASCOT_POSES = ['standing', 'hi', 'jump', 'thinking', 'answer'];
+const mascotPose = (pose) => `/mascot/${pose}.webp`;
+const mascotHead = (pose) => `/mascot/${pose}-head.webp`;
+const HOP_MS = 800;
 
-function MascotAvatar({ motion = 'mascot-pop' }) {
+function MascotAvatar({ pose = 'answer', motion = 'mascot-pop' }) {
   return (
     <span className="w-7 h-7 rounded-full bg-white ring-1 ring-brand-orange/40 shadow-sm overflow-hidden shrink-0 mt-0.5">
-      <img src={MASCOT_HEAD} alt="" className={`w-full h-full object-cover ${motion}`} />
+      <img src={mascotHead(pose)} alt="" className={`w-full h-full object-cover ${motion}`} />
     </span>
   );
 }
@@ -63,7 +68,7 @@ function ItemCard({ item, onNavigate }) {
 function TypingDots() {
   return (
     <div className="flex items-start gap-2" aria-label="Assistant is typing">
-      <MascotAvatar motion="mascot-working" />
+      <MascotAvatar pose="thinking" motion="mascot-working" />
       <div className="flex items-center gap-1 px-4 py-3.5 w-fit rounded-2xl rounded-tl-md bg-white border border-gray-100 shadow-sm">
         {[0, 150, 300].map(delay => (
           <span key={delay} className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: `${delay}ms` }} />
@@ -83,8 +88,12 @@ export default function AssistantWidget({ hidden = false }) {
   const [error, setError] = useState(null);
   // Counts clicks on the mascot; each new value remounts him with the jump animation.
   const [hops, setHops] = useState(0);
+  const [jumping, setJumping] = useState(false);
+  // True from the moment a reply lands until the customer starts typing again.
+  const [answered, setAnswered] = useState(false);
   const [hint, setHint] = useState(0);
   const openTimer = useRef(null);
+  const jumpTimer = useRef(null);
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
   // Bumped by every request and by "new chat", so a reply that lands after the conversation it
@@ -99,7 +108,7 @@ export default function AssistantWidget({ hidden = false }) {
     api.get('/assistant/status').then(data => setEnabled(!!data.enabled)).catch(() => {});
   }, []);
 
-  useEffect(() => () => clearTimeout(openTimer.current), []);
+  useEffect(() => () => { clearTimeout(openTimer.current); clearTimeout(jumpTimer.current); }, []);
 
   // Cycle the bubble's hint line while the chat is closed, unless the visitor prefers less motion.
   useEffect(() => {
@@ -138,7 +147,10 @@ export default function AssistantWidget({ hidden = false }) {
       const { reply, items } = await api.post('/assistant/chat', {
         messages: history.slice(-HISTORY_SENT).map(({ role, content }) => ({ role, content })),
       });
-      if (id === requestId.current) setMessages([...history, { role: 'assistant', content: reply, items }]);
+      if (id === requestId.current) {
+        setMessages([...history, { role: 'assistant', content: reply, items }]);
+        setAnswered(true);
+      }
     } catch (err) {
       if (id === requestId.current) setError(err.message || 'Something went wrong. Please try again.');
     } finally {
@@ -160,6 +172,7 @@ export default function AssistantWidget({ hidden = false }) {
     setMessages([]);
     setError(null);
     setLoading(false);
+    setAnswered(false);
     setInput('');
     inputRef.current?.focus();
   };
@@ -172,8 +185,13 @@ export default function AssistantWidget({ hidden = false }) {
   // the full-screen panel would otherwise cover him before anyone sees the jump.
   const toggleOpen = () => {
     setHops(h => h + 1);
+    setJumping(true);
+    clearTimeout(jumpTimer.current);
+    jumpTimer.current = setTimeout(() => setJumping(false), HOP_MS);
     clearTimeout(openTimer.current);
     if (open) { setOpen(false); return; }
+    // Opening starts him off thinking, even on a conversation he'd already answered.
+    setAnswered(false);
     openTimer.current = setTimeout(() => setOpen(true), isFullScreen() ? 380 : 0);
   };
 
@@ -185,6 +203,17 @@ export default function AssistantWidget({ hidden = false }) {
   };
 
   if (!enabled || hidden) return null;
+
+  const pose = jumping ? 'jump' : !open ? 'standing' : answered && !loading ? 'answer' : 'thinking';
+  // At rest the standing and waving poses trade places on hover or keyboard focus in CSS alone,
+  // so they react instantly; every other pose is chosen by the chat state above.
+  const poseClass = (name) => {
+    if (pose === 'standing' && name === 'standing') return 'opacity-100 group-hover:opacity-0 group-focus-visible:opacity-0';
+    if (pose === 'standing' && name === 'hi') return 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100';
+    return pose === name ? 'opacity-100' : 'opacity-0';
+  };
+  // Inside the chat his avatar only ever thinks or answers; keyed on that, so it pops on each change.
+  const headPose = pose === 'answer' ? 'answer' : 'thinking';
 
   const greeting = `Hi${isCustomer && user.firstName ? ` ${user.firstName}` : ''}! I'm the HomeLink Assistant. Tell me your budget and what you need, and I'll suggest products and services that fit. I can also answer questions about HomeLink, delivery, payments and our policies.`;
 
@@ -200,7 +229,7 @@ export default function AssistantWidget({ hidden = false }) {
           <div className="relative flex items-center gap-3 px-4 py-3 bg-brand-navy text-white shrink-0 overflow-hidden">
             <div aria-hidden="true" className="absolute -top-10 -right-6 w-32 h-32 rounded-full bg-brand-orange/25 blur-2xl" />
             <div className="relative w-11 h-11 rounded-full bg-white ring-2 ring-brand-orange/70 overflow-hidden shrink-0">
-              <img src={MASCOT_HEAD} alt="" className="mascot-pop w-full h-full object-cover" />
+              <img key={headPose} src={mascotHead(headPose)} alt="" className="mascot-pop w-full h-full object-cover" />
             </div>
             <div className="relative min-w-0 flex-1">
               <p className="font-display font-bold leading-tight">HomeLink Assistant</p>
@@ -218,7 +247,7 @@ export default function AssistantWidget({ hidden = false }) {
 
           <div ref={scrollRef} aria-live="polite" className="relative flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-3 bg-brand-light/60 text-sm">
             <div className="flex items-start gap-2">
-              <MascotAvatar />
+              <MascotAvatar pose="hi" />
               <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white border border-gray-100 shadow-sm px-3.5 py-2.5 text-gray-700 leading-relaxed">
                 {greeting}
               </div>
@@ -277,7 +306,7 @@ export default function AssistantWidget({ hidden = false }) {
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => { setInput(e.target.value); setAnswered(false); }}
                 onKeyDown={handleKeyDown}
                 rows={1}
                 maxLength={MAX_CHARS}
@@ -305,35 +334,45 @@ export default function AssistantWidget({ hidden = false }) {
         aria-expanded={open}
         className={`assistant-launcher group fixed z-[90] bottom-3 right-3 sm:bottom-4 sm:right-4 items-end ${open ? 'hidden sm:flex' : 'flex'}`}
       >
-        {/* A speech bubble from the mascot, level with his face, so the label reads as him talking. */}
+        {/* A speech bubble from the mascot, level with his face, so the label reads as him talking.
+            It only slides out while he's hovered (or the button has keyboard focus). It sits outside
+            the button's own box, so the hidden bubble can't catch the pointer, and its padding
+            reaches back to the mascot, so moving from him onto the bubble keeps it open. */}
         {!open && (
-          <span className="assistant-bubble relative hidden sm:block mr-3 mb-5 w-[236px] text-left rounded-2xl bg-white border border-gray-100 pl-4 pr-3 py-2.5 shadow-[0_14px_34px_-12px_rgba(15,43,91,0.45)] transition-transform duration-300 group-hover:-translate-y-0.5">
-            <span aria-hidden="true" className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-brand-orange" />
-            <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-brand-orange">
-              <span className="relative flex w-2 h-2">
-                <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-75 motion-safe:animate-ping" />
-                <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="absolute right-full bottom-5 pr-3 hidden sm:block origin-right opacity-0 translate-x-2 scale-95 pointer-events-none transition duration-200 ease-out delay-100 motion-reduce:transition-none group-hover:opacity-100 group-hover:translate-x-0 group-hover:scale-100 group-hover:pointer-events-auto group-hover:delay-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:scale-100">
+            <span className="relative block w-[236px] text-left rounded-2xl bg-white border border-gray-100 pl-4 pr-3 py-2.5 shadow-[0_14px_34px_-12px_rgba(15,43,91,0.45)]">
+              <span aria-hidden="true" className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-brand-orange" />
+              <span className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-brand-orange">
+                <span className="relative flex w-2 h-2">
+                  <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-75 motion-safe:animate-ping" />
+                  <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+                </span>
+                AI Assistant · Online
               </span>
-              AI Assistant · Online
-            </span>
-            <span className="mt-0.5 flex items-center justify-between gap-2">
-              <span className="font-display text-[15px] font-extrabold tracking-tight text-brand-navy">Ask HomeLink AI</span>
-              <span className="w-6 h-6 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:translate-x-0.5">
-                <ArrowRight className="w-3.5 h-3.5" />
+              <span className="mt-0.5 flex items-center justify-between gap-2">
+                <span className="font-display text-[15px] font-extrabold tracking-tight text-brand-navy">Ask HomeLink AI</span>
+                <span className="w-6 h-6 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:translate-x-0.5">
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </span>
               </span>
+              <span key={hint} className="assistant-hint block text-xs text-gray-500 truncate">{LAUNCHER_HINTS[hint]}</span>
+              <span aria-hidden="true" className="absolute -right-[7px] top-1/2 -translate-y-1/2 rotate-45 w-3.5 h-3.5 bg-white border-t border-r border-gray-100" />
             </span>
-            <span key={hint} className="assistant-hint block text-xs text-gray-500 truncate">{LAUNCHER_HINTS[hint]}</span>
-            <span aria-hidden="true" className="absolute -right-[7px] top-1/2 -translate-y-1/2 rotate-45 w-3.5 h-3.5 bg-white border-t border-r border-gray-100" />
           </span>
         )}
         <span key={hops} className={`relative block ${hops ? 'mascot-hop' : ''}`}>
-          <img
-            src={MASCOT}
-            alt=""
-            width="280"
-            height="360"
-            className="mascot-idle block w-14 sm:w-[76px] h-auto drop-shadow-[0_8px_10px_rgba(15,43,91,0.35)]"
-          />
+          <span className="mascot-idle relative block h-[72px] sm:h-[100px] aspect-[231/300] drop-shadow-[0_8px_10px_rgba(15,43,91,0.35)]">
+            {MASCOT_POSES.map(name => (
+              <img
+                key={name}
+                src={mascotPose(name)}
+                alt=""
+                width="231"
+                height="300"
+                className={`absolute inset-0 w-full h-full transition-opacity duration-100 ${poseClass(name)}`}
+              />
+            ))}
+          </span>
           {open && (
             <span className="absolute top-0 -right-1 w-6 h-6 rounded-full bg-brand-navy text-white ring-2 ring-white flex items-center justify-center">
               <X className="w-3.5 h-3.5" />
