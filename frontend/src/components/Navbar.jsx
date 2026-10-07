@@ -13,6 +13,7 @@ const NAV_LINKS = [
   { to: '/products', label: 'Products' },
   { to: '/services', label: 'Services' },
   { to: '/about', label: 'About' },
+  { to: '/team', label: 'Team' },
   { to: '/location', label: 'Location' },
 ];
 
@@ -157,7 +158,7 @@ export default function Navbar({ onLoginClick }) {
       </div>
 
       <div
-        className={`md:hidden bg-gradient-to-b from-brand-navy/95 to-brand-navy/90 backdrop-blur-xl text-white overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${open ? 'max-h-[420px] opacity-100 border-t border-white/10' : 'max-h-0 opacity-0'}`}
+        className={`md:hidden bg-gradient-to-b from-brand-navy/95 to-brand-navy/90 backdrop-blur-xl text-white overflow-hidden transition-[max-height,opacity] duration-300 ease-out ${open ? 'max-h-[480px] opacity-100 border-t border-white/10' : 'max-h-0 opacity-0'}`}
       >
         <div className="px-4 py-4 space-y-1">
           {NAV_LINKS.map(link => (

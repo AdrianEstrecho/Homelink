@@ -8,6 +8,8 @@ import CountUp from '../components/CountUp';
 import SafeImage from '../components/SafeImage';
 import GalleryLightbox from '../components/GalleryLightbox';
 import { GallerySkeleton } from '../components/Skeleton';
+import MemberAvatar from '../components/team/MemberAvatar';
+import { TEAM, fullNameOf } from '../data/team';
 
 const STATS = [
   { value: '10,000+', label: 'Homeowners Served' },
@@ -256,6 +258,36 @@ export default function About() {
               onNavigate={setLightboxIndex}
             />
           )}
+        </div>
+      </section>
+
+      {/* Team — each avatar opens that teammate's profile on /team. */}
+      <section className="py-16 md:py-20 bg-brand-light">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <Reveal className="card p-6 sm:p-8 md:p-10 flex flex-col md:flex-row md:items-center gap-6 md:gap-10">
+            <ul className="flex -space-x-1.5 shrink-0">
+              {TEAM.map(m => (
+                <li key={m.slug} className="relative hover:z-10 focus-within:z-10">
+                  <Link
+                    to={`/team?member=${m.slug}`}
+                    title={fullNameOf(m)}
+                    aria-label={`${fullNameOf(m)}'s profile`}
+                    className="block rounded-full ring-[3px] ring-white focus-visible:ring-brand-orange transition hover:-translate-y-1"
+                  >
+                    <MemberAvatar member={m} className="w-12 h-12 sm:w-14 sm:h-14 rounded-full" textClassName="text-sm sm:text-base" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <div className="flex-1">
+              <p className="eyebrow mb-2">The Team</p>
+              <h2 className="font-display text-2xl md:text-3xl font-extrabold tracking-tight text-brand-ink mb-2">Meet the people who built HomeLink</h2>
+              <p className="text-gray-500 text-sm leading-relaxed">The developers behind the storefront, service booking, staff portal, and mobile app.</p>
+            </div>
+            <Link to="/team" className="btn-secondary inline-flex items-center gap-2 self-start md:self-auto shrink-0">
+              Meet the team <ArrowRight className="w-4 h-4" />
+            </Link>
+          </Reveal>
         </div>
       </section>
 

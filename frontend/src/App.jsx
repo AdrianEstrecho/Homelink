@@ -31,6 +31,7 @@ import Bookings from './pages/Bookings';
 import Policies from './pages/Policies';
 import Location from './pages/Location';
 import About from './pages/About';
+import Team from './pages/Team';
 import FAQ from './pages/FAQ';
 import AdminLogin from './pages/admin/AdminLogin';
 import StaffForgotPassword from './pages/admin/StaffForgotPassword';
@@ -163,6 +164,7 @@ export default function App() {
           <Route path="/policies" element={<Policies />} />
           <Route path="/location" element={<Location />} />
           <Route path="/about" element={<About />} />
+          <Route path="/team" element={<Team />} />
           <Route path="/faq" element={<FAQ />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin/forgot-password" element={<StaffForgotPassword />} />

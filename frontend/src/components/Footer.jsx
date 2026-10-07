@@ -48,6 +48,7 @@ export default function Footer() {
           <p>&copy; {new Date().getFullYear()} HomeLink. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <Link to="/about" className="hover:text-white transition">About</Link>
+            <Link to="/team" className="hover:text-white transition">Team</Link>
             <Link to="/faq" className="hover:text-white transition">FAQs</Link>
             <Link to="/policies" className="hover:text-white transition">Policies</Link>
             <Link to="/location" className="hover:text-white transition">Find Us</Link>

@@ -374,6 +374,29 @@
   opacity: 1;
 }
 
+/* Member cards on /team (components/team/MemberCard.jsx): a slight lean toward the pointer and
+   a glow in the member's own accent. --tilt-x/--tilt-y and --spot-x/--spot-y are written on
+   pointermove; --glow is the member's color, set inline on the card. */
+.team-card {
+  transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  transition: transform 0.25s ease-out, border-color 0.3s ease;
+}
+.team-card-glow {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(280px circle at var(--spot-x, 50%) var(--spot-y, 30%), var(--glow), transparent 70%);
+}
+.team-card:hover .team-card-glow,
+.team-card:focus-visible .team-card-glow {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .team-card { transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .step-pulse { animation: none; opacity: 0; }
 }
