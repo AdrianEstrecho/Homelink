@@ -1,6 +1,7 @@
-import { forwardRef, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { ShieldCheck, Copy, Check, Banknote, Wallet } from 'lucide-react';
 import Select from './Select';
+import { api } from '../api/client';
 import { PAYMENT_METHODS } from '../constants/paymentMethods';
 
 const BANK_DETAILS = { bank: 'BDO Unibank', accountName: 'HomeLink Home Improvement Inc.', accountNumber: '0012 3456 7890' };
@@ -18,9 +19,23 @@ const cardYearOptions = Array.from({ length: 12 }, (_, i) => new Date().getFullY
 
 // Cash on delivery is only offered where there's a delivery to pay for, so it's opt-in per
 // page rather than part of the default list (the service booking form shares this picker).
+//
+// Gateway methods (card, GCash, QR Ph) can each be switched off in admin Platform Settings.
+// Until that list loads — or if it fails to — all of them show; the backend rejects a disabled
+// one at /checkout-session either way.
 const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber = 2, allowCashOnDelivery = false }, ref) {
-  const methods = PAYMENT_METHODS.filter(m => allowCashOnDelivery || !m.deliveryOnly);
-  const [method, setMethod] = useState('card');
+  const [enabledGateway, setEnabledGateway] = useState(null);
+  useEffect(() => {
+    api.get('/payments/methods').then(r => setEnabledGateway(r.gateway)).catch(() => {});
+  }, []);
+
+  const methods = PAYMENT_METHODS.filter(m =>
+    (allowCashOnDelivery || !m.deliveryOnly) && (!m.gateway || !enabledGateway || enabledGateway.includes(m.value))
+  );
+  // Bank transfer has no toggle, so `methods` is never empty — if the picked method gets
+  // switched off (card is the default), fall back to whatever is listed first.
+  const [chosen, setChosen] = useState('card');
+  const method = methods.some(m => m.value === chosen) ? chosen : methods[0].value;
 
   const [cardForm, setCardForm] = useState(emptyCardForm);
   const [cardError, setCardError] = useState('');
@@ -75,7 +90,7 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
       <div className={`grid sm:grid-cols-2 gap-3 ${methods.length > 4 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
         {methods.map(m => (
           <label key={m.value} className={`flex flex-col items-center text-center gap-1.5 p-4 rounded-xl border cursor-pointer transition ${method === m.value ? 'border-brand-orange bg-brand-orange/5' : 'border-gray-200 hover:border-gray-300'}`}>
-            <input type="radio" name="payment" className="sr-only" checked={method === m.value} onChange={() => setMethod(m.value)} />
+            <input type="radio" name="payment" className="sr-only" checked={method === m.value} onChange={() => setChosen(m.value)} />
             <m.icon className={`w-6 h-6 mb-1 ${method === m.value ? 'text-brand-orange' : 'text-gray-400'}`} />
             <span className="text-sm font-semibold text-brand-ink">{m.label}</span>
             <span className="text-xs text-gray-400">{m.description}</span>

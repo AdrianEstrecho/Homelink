@@ -1234,6 +1234,7 @@ router.put('/approvals/:id/approve', authorizeAdminOr('inventory_clerk', 'bookin
         await logActivity(req, 'product.restock', 'product', cr.entity_id, {
           name: payload.name, quantity: result.addQty, from: result.from, to: result.to,
           clerkCode: reviewer.staff_code, clerkName: `${reviewer.first_name} ${reviewer.last_name}`,
+          source: 'approval',
         });
       }
     } else if (cr.action === 'delete') {
@@ -1507,7 +1508,7 @@ router.get('/audit-logs', authorize('admin'), async (req, res) => {
   const { userId, role, action, limit } = req.query;
   const cappedLimit = Math.min(Math.max(parseInt(limit, 10) || 500, 1), 500);
   let sql = `
-    SELECT a.*, u.first_name, u.last_name, u.email, u.role as user_role, u.staff_code
+    SELECT a.*, u.first_name, u.last_name, u.email, u.role as user_role, u.position as user_position, u.staff_code
     FROM audit_logs a LEFT JOIN users u ON a.user_id = u.id
     WHERE 1=1
   `;

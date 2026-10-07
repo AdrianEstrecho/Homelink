@@ -632,6 +632,11 @@
   justify-content: flex-start;
   background: linear-gradient(180deg, #0a1d42 0%, #123a73 55%, #1a4a8a 100%);
   --progress: 0;
+  /* Eased cursor offset from the pin's center, -1..1 per axis, written by
+     HeroSky.jsx (mouse only). Each layer below shifts against it by its own
+     depth, nearer layers further, so the scene reads as having real depth. */
+  --mx: 0;
+  --my: 0;
 }
 /* Sky brightens a touch as the house grows, reinforcing forward motion using
    only the existing --progress driver — no extra image weight. */
@@ -661,6 +666,32 @@
   object-fit: cover;
   opacity: 0.2;
   mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+/* HeroSky.jsx's starfield canvas, painted over the footage. Gone by about
+   80% progress, as the sky behind it brightens (::before) — dawn breaking. */
+.hero-stars {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: calc(1 - var(--progress) * 1.25);
+}
+/* Sunrise warmth rising from the horizon as the house grows into view — the
+   dawn the stars fade into. Invisible at rest (the house's own backlight,
+   .stage-house, carries the warmth there), so it never floats as a loose
+   blob above the smaller house on narrow screens. */
+.hero-horizon {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 80%;
+  background: radial-gradient(70% 75% at 50% 100%, rgba(255, 150, 90, 0.45) 0%, rgba(255, 107, 53, 0.16) 45%, rgba(255, 107, 53, 0) 80%);
+  opacity: var(--progress);
   pointer-events: none;
 }
 /* Recedes as the villa grows, so the text reads as moving away/behind rather
@@ -704,7 +735,11 @@
   /* Scale base raised to 1.35 so the house already reads as large on first
      paint, before any scroll; its --progress multiplier is reduced to 0.55 so
      the fully-grown end state still lands on the same ~1.9 it was tuned to. */
-  transform: scale(calc(1.35 + var(--progress) * 0.55)) rotate(calc((1 - var(--progress)) * -2.5deg));
+  /* The leading translate is the cursor parallax (--mx/--my), in unscaled px
+     since it comes before the scale. */
+  transform:
+    translate3d(calc(var(--mx) * -10px), calc(var(--my) * -4px), 0)
+    scale(calc(1.35 + var(--progress) * 0.55)) rotate(calc((1 - var(--progress)) * -2.5deg));
   will-change: transform;
   pointer-events: none;
 }
@@ -731,7 +766,11 @@
 /* House.svg is a pre-cut transparent cutout (verified: fully opaque on any
    backdrop, no black background to blend away), so it's a plain <img> —
    no mix-blend-mode needed. A gentle continuous sway keeps it from reading
-   as a static sticker once it has finished growing into place. */
+   as a static sticker once it has finished growing into place.
+   The second drop-shadow is a warm backlight: it traces the house's own
+   silhouette, so it rims the roofline at any size or aspect ratio and lifts
+   the dark concrete off the navy sky. Static on purpose — tying it to
+   --progress would re-rasterize this large blurred image every scroll frame. */
 .stage-house {
   position: absolute;
   inset: 0;
@@ -739,7 +778,7 @@
   height: 100%;
   object-fit: contain;
   object-position: center bottom;
-  filter: drop-shadow(0 25px 40px rgba(0,0,0,0.45));
+  filter: drop-shadow(0 25px 40px rgba(0,0,0,0.45)) drop-shadow(0 -4px 34px rgba(255, 150, 90, 0.4));
   transform-origin: 50% 100%;
   animation: houseSway 7s ease-in-out infinite;
 }
@@ -769,14 +808,18 @@
    object-position instead: "center bottom" was cropping into the dense,
    texture-less lower part of the source; "center 28%" lands the crop window
    on the wispy zone instead. */
+/* The nearest layer, so it takes the most cursor parallax; it overhangs both
+   edges by 40px so that shift never exposes its sides. */
 .villa-clouds {
   position: absolute;
   z-index: 4;
-  left: 0;
-  right: 0;
+  left: -40px;
+  right: -40px;
   bottom: 0;
   height: 68%;
   min-height: 440px;
+  transform: translate3d(calc(var(--mx) * -28px), 0, 0);
+  will-change: transform;
   pointer-events: none;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 35%);
   mask-image: linear-gradient(to bottom, transparent 0%, black 35%);
@@ -809,13 +852,19 @@
 .hero-products {
   display: contents;
 }
+/* --depth is each card's share of the cursor parallax: the front layer sits
+   nearer than the house (10px) and moves further, the back layer less. */
 .hero-product {
   position: absolute;
   z-index: 2;
   display: block;
   border-radius: 1rem;
+  --depth: 20px;
   transform:
-    translate3d(calc(var(--progress) * var(--tx)), calc(var(--progress) * var(--ty)), 0)
+    translate3d(
+      calc(var(--progress) * var(--tx) - var(--mx) * var(--depth)),
+      calc(var(--progress) * var(--ty) - var(--my) * var(--depth) * 0.6),
+      0)
     rotate(calc(var(--rot) * (1 - var(--progress))))
     scale(calc(var(--s, 1) * (1 - var(--progress) * 0.2)));
   opacity: calc(2 - var(--progress) * 2.5);
@@ -834,7 +883,7 @@
 .hero-product--5,
 .hero-product--6,
 .hero-product--7,
-.hero-product--8 { z-index: 1; --s: 0.9; }
+.hero-product--8 { z-index: 1; --s: 0.9; --depth: 13px; }
 .hero-product--5 { right: min(calc(50% + 470px), calc(100% - 212px)); top: 33%; --tx: 140px;  --ty: 300px; --rot: 6deg; }
 .hero-product--6 { right: min(calc(50% + 400px), calc(100% - 248px)); top: 67%; --tx: 110px;  --ty: 150px; --rot: -4deg; }
 .hero-product--7 { left: min(calc(50% + 470px), calc(100% - 212px));  top: 50%; --tx: -140px; --ty: 220px; --rot: -6deg; }
@@ -872,16 +921,48 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
 }
+/* --rx/--ry (tilt toward the cursor) and --gx/--gy (glare position) are set
+   per card by Hero.jsx's pointer handler; --lift raises it on hover or when a
+   chip spotlights it. The base transition is slow so a released card settles
+   back gently; on hover it drops to 0.15s so the tilt tracks the cursor. */
 .hero-product-card {
+  position: relative;
   background: #fff;
   border-radius: 1rem;
   padding: 10px;
   box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.6);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(var(--lift, 0px));
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s ease, opacity 0.3s ease, filter 0.3s ease;
+}
+/* Glossy sheen that follows the cursor. Overlay blending leaves the white
+   card and dark text all but untouched and only brightens the photo. */
+.hero-product-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 0%), rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 60%);
+  mix-blend-mode: overlay;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
 }
 .hero-product:hover .hero-product-card {
-  transform: translateY(-4px);
+  --lift: -4px;
+  transition-duration: 0.15s, 0.3s, 0.3s, 0.3s;
   box-shadow: 0 36px 70px -20px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 107, 53, 0.7);
+}
+.hero-product:hover .hero-product-card::after { opacity: 1; }
+/* Chip spotlight (Hero.jsx sets data-spotlight while a category chip is
+   hovered or focused): matching cards lift and glow, the rest recede. */
+.hero-pin[data-spotlight] .hero-product:not(.is-lit) .hero-product-card {
+  opacity: 0.35;
+  filter: saturate(0.3);
+}
+.hero-product.is-lit { z-index: 2; }
+.hero-product.is-lit .hero-product-card {
+  --lift: -10px;
+  box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 107, 53, 0.85), 0 0 48px -4px rgba(255, 107, 53, 0.55);
 }
 .hero-product-card--tall { width: 196px; }
 .hero-product-card--tall .hero-product-img { height: 112px; }
@@ -945,7 +1026,11 @@
 }
 
 @media (max-width: 860px) {
-  .villa-stage { transform: scale(calc(1.3 + var(--progress) * 0.7)) rotate(calc((1 - var(--progress)) * -2.5deg)); }
+  .villa-stage {
+    transform:
+      translate3d(calc(var(--mx) * -10px), calc(var(--my) * -4px), 0)
+      scale(calc(1.3 + var(--progress) * 0.7)) rotate(calc((1 - var(--progress)) * -2.5deg));
+  }
 }
 @media (max-width: 560px) {
   .hero-copy { padding-top: 96px; }
@@ -1519,6 +1604,8 @@
   from { opacity: 0; transform: translateY(8px) scale(0.92); }
   to { opacity: 1; transform: none; }
 }
+/* Added on top of .smoke-brand-in (so the wrench keeps turning while the logo fades), and
+   wins over it by coming later in the file. */
 .smoke-brand-out {
   animation: smokeBrandOut 0.22s ease-in both;
 }

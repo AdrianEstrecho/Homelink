@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, Info } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 
@@ -90,11 +90,7 @@ export default function AdminSettings() {
 
         <div className="card p-6">
           <h3 className="font-semibold text-gray-900 mb-1">Payment Options</h3>
-          <p className="text-xs text-gray-400 mb-4">Which payment methods are considered active.</p>
-          <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-4">
-            <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <span>Informational only for now — toggling a method here doesn't yet change what's offered at checkout.</span>
-          </div>
+          <p className="text-xs text-gray-400 mb-4">Which online payment methods customers can choose at checkout and when booking a service. Bank transfer and cash on delivery are always offered.</p>
           <div className="space-y-2">
             {[
               ['payment_card_enabled', 'Credit / Debit Card'],

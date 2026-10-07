@@ -26,3 +26,16 @@ export async function getSiteSettings() {
   const rows = await db.prepare('SELECT key, value FROM site_settings').all();
   return { ...SETTINGS_DEFAULTS, ...Object.fromEntries(rows.map(r => [r.key, r.value])) };
 }
+
+// The PayMongo-backed methods an admin can switch off in Platform Settings. Bank transfer and
+// cash on delivery have no toggle — they're always offered, so checkout never runs out of options.
+const GATEWAY_METHOD_SETTINGS = {
+  card: 'payment_card_enabled',
+  gcash: 'payment_gcash_enabled',
+  qrph: 'payment_qrph_enabled',
+};
+
+export async function getEnabledGatewayMethods() {
+  const settings = await getSiteSettings();
+  return Object.keys(GATEWAY_METHOD_SETTINGS).filter(m => settings[GATEWAY_METHOD_SETTINGS[m]] === 'true');
+}
