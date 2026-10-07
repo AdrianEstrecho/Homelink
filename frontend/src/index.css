@@ -1519,6 +1519,8 @@
   from { opacity: 0; transform: translateY(8px) scale(0.92); }
   to { opacity: 1; transform: none; }
 }
+/* Added on top of .smoke-brand-in (so the wrench keeps turning while the logo fades), and
+   wins over it by coming later in the file. */
 .smoke-brand-out {
   animation: smokeBrandOut 0.22s ease-in both;
 }

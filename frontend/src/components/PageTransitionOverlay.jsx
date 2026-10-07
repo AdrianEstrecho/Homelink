@@ -28,12 +28,15 @@ const SHADE = '#c9d1dd';
 const BODY = '226, 231, 239';
 const LIGHT = '#f3f5f9';
 
-// Timeline (ms from mount).
+// Timeline (ms of animation time, which runs with the clock but never more than MAX_STEP a frame).
 const DRIVE = 1000; // the truck crosses the screen
 const COVERED = 1250; // nothing of the old page shows any more
 const HOLD = 320; // the logo sits on the settled cloud
 const CLEAR = 850; // the cloud breaks up and blows away
 const ARRIVE_HOLD = 120;
+// The page swap under the cover can stall the main thread for a few frames. Capping each step
+// makes the smoke and truck carry on from where they were instead of lurching ahead to catch up.
+const MAX_STEP = 40;
 
 // The truck art's viewBox, and where its exhaust pipe's mouth is in it.
 const TRUCK_W = 212;
@@ -72,7 +75,9 @@ export default function PageTransitionOverlay({ mode = 'cover', stayCovered = fa
     const arrive = mode === 'arrive';
     const fire = (name) => callbacks.current[name]?.();
     const showBrand = () => brand.classList.add('smoke-brand-in');
-    const hideBrand = () => brand.classList.replace('smoke-brand-in', 'smoke-brand-out');
+    // Added on top of smoke-brand-in rather than replacing it, so the wrench finishes its turn
+    // while the logo fades instead of snapping back mid-swing.
+    const hideBrand = () => brand.classList.add('smoke-brand-out');
     const uncoverBoot = () => document.documentElement.classList.remove('arriving');
     const ctx = canvasRef.current.getContext('2d');
 
@@ -200,6 +205,14 @@ export default function PageTransitionOverlay({ mode = 'cover', stayCovered = fa
       pass(SHADE, 0.07, 0.11, 1);
       pass(`rgb(${BODY})`, 0, 0, 1);
       pass(LIGHT, -0.17, -0.21, 0.68);
+      // Arriving, the first frame matches the flat cover index.html painted (LIGHT), and the
+      // cloud's shading comes up out of it over the hold instead of popping in.
+      if (arrive && t < ARRIVE_HOLD) {
+        ctx.globalAlpha = 1 - easeOut(t / ARRIVE_HOLD);
+        ctx.fillStyle = LIGHT;
+        ctx.fillRect(0, 0, W, H);
+        ctx.globalAlpha = 1;
+      }
     };
 
     if (arrive) {
@@ -207,23 +220,30 @@ export default function PageTransitionOverlay({ mode = 'cover', stayCovered = fa
     }
 
     let raf = 0;
-    let t0 = 0;
+    let t = 0;
+    let last = 0;
+    let lastExhaustX = nextPuffX;
     let covered = arrive;
     let clearing = false;
     const clearAt = arrive ? ARRIVE_HOLD : COVERED + HOLD;
 
     const frame = (now) => {
-      t0 ||= now;
-      const t = now - t0;
+      const prevT = t;
+      if (last) t += Math.min(now - last, MAX_STEP);
+      last = now;
 
       if (truck) {
         const x = truckX(t);
         truck.style.transform = `translate3d(${x}px, ${truckTop}px, 0)`;
         const exhaustX = x + tw * EXHAUST.x;
+        const span = exhaustX - lastExhaustX;
         while (nextPuffX <= exhaustX && nextPuffX < W + S * 0.05) {
-          exhaustPuff(nextPuffX, t);
+          // Born when the pipe passed this spot, between the last frame and this one, so puffs
+          // dropped in the same frame don't all grow in lockstep.
+          exhaustPuff(nextPuffX, span > 0 ? lerp(prevT, t, (nextPuffX - lastExhaustX) / span) : t);
           nextPuffX += gap * rand(0.8, 1.2);
         }
+        lastExhaustX = exhaustX;
         if (t > DRIVE) truck.style.visibility = 'hidden';
       }
 
