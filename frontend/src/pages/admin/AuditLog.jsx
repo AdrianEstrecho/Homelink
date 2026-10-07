@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
-import { ACTION_META, CATEGORY_STYLE, formatDateTime } from '../../data/auditActions';
+import { ACTION_META, CATEGORY_STYLE, formatDateTime, pageFor } from '../../data/auditActions';
 
 const CATEGORIES = [
   { key: '', label: 'All Actions' },
@@ -72,7 +73,7 @@ export default function AdminAuditLog() {
               <tr className="text-left text-xs text-gray-400 uppercase tracking-wide">
                 <th className="p-3 font-medium">Date &amp; Time</th>
                 <th className="p-3 font-medium">Action</th>
-                <th className="p-3 font-medium">Entity</th>
+                <th className="p-3 font-medium">Page</th>
                 <th className="p-3 font-medium">Admin</th>
                 <th className="p-3 font-medium">Description</th>
               </tr>
@@ -84,6 +85,7 @@ export default function AdminAuditLog() {
                 <tr><td colSpan={5} className="p-8 text-center text-gray-400">No activity recorded yet.</td></tr>
               ) : filtered.map(log => {
                 const meta = ACTION_META[log.action];
+                const page = pageFor(log);
                 return (
                   <tr key={log.id} className="border-t border-gray-100">
                     <td className="p-3 text-gray-500 whitespace-nowrap">{formatDateTime(log.created_at)}</td>
@@ -92,7 +94,11 @@ export default function AdminAuditLog() {
                         {meta?.category || log.action}
                       </span>
                     </td>
-                    <td className="p-3 text-gray-600">{meta?.entity || log.entity_type || '—'}</td>
+                    <td className="p-3 text-gray-600 whitespace-nowrap">
+                      {!page ? '—' : page.to ? (
+                        <Link to={page.to} className="text-brand-navy hover:text-brand-orange hover:underline transition">{page.label}</Link>
+                      ) : page.label}
+                    </td>
                     <td className="p-3">
                       {log.first_name ? (
                         <>
