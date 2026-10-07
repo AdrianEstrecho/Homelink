@@ -29,7 +29,7 @@ export default function Team() {
   const shown = role ? TEAM.filter(m => m.role === role) : TEAM;
 
   // The open profile lives in the URL (?member=<slug>), so a teammate's profile can be linked to
-  // directly — the avatars on the About page do exactly that. Replaced rather than pushed, so
+  // directly. Replaced rather than pushed, so
   // stepping through profiles doesn't leave a trail of history entries for Back to wade through.
   const active = TEAM.find(m => m.slug === searchParams.get('member')) || null;
   const openMember = (slug) => setSearchParams({ member: slug }, { replace: true });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link } from 'react-router-dom';
 import {
   ArrowRight, ShieldCheck, HeartHandshake, Target, Sparkles, Home as HomeIcon, Wrench, Expand, Shield, Truck, Star,
-  ShoppingCart, Search, CalendarClock, AlertTriangle, Package, CreditCard, PackageCheck, Check, X, ArrowUpRight,
+  ShoppingCart, Search, CalendarClock, AlertTriangle, Package, CreditCard, PackageCheck, Check, X,
 } from 'lucide-react';
 import { api } from '../api/client';
 import ErrorState from '../components/ErrorState';
@@ -12,12 +12,10 @@ import SafeImage from '../components/SafeImage';
 import SplitText from '../components/SplitText';
 import GalleryLightbox from '../components/GalleryLightbox';
 import { GallerySkeleton } from '../components/Skeleton';
-import MemberAvatar from '../components/team/MemberAvatar';
 import { LogoMark } from '../components/brand/Logo';
 import { getCategoryIcon } from '../constants/categoryIcons';
 import { useReveal } from '../hooks/useReveal';
 import { useTilt } from '../hooks/useTilt';
-import { TEAM, fullNameOf } from '../data/team';
 
 const STATS = [
   { value: '10,000+', label: 'Homeowners served' },
@@ -289,30 +287,6 @@ export default function About() {
         </div>
       </section>
 
-      {/* Team — a portrait tile per teammate, each opening their profile on /team. On phones
-          the row scrolls sideways rather than leaving one tile alone on the last line. */}
-      <section className="py-16 md:py-24 bg-brand-light overflow-hidden">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <Reveal className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-10">
-            <div className="max-w-xl">
-              <p className="eyebrow mb-3">The Team</p>
-              <h2 className="section-title mb-3"><SplitText text="Meet the people who built HomeLink" /></h2>
-              <p className="text-gray-500 leading-relaxed">The developers behind the storefront, service booking, staff portal, and mobile app.</p>
-            </div>
-            <Link to="/team" className="btn-secondary group inline-flex items-center gap-2 self-start md:self-auto shrink-0">
-              Meet the team <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          </Reveal>
-          <ul className="flex gap-4 overflow-x-auto snap-x snap-mandatory scroll-px-4 no-scrollbar -mx-4 px-4 pb-4 sm:grid sm:grid-cols-3 lg:grid-cols-5 sm:gap-5 sm:overflow-visible sm:mx-0 sm:px-0 sm:pb-0">
-            {TEAM.map((m, i) => (
-              <Reveal as="li" key={m.slug} delay={i * 80} className="w-[62%] shrink-0 snap-start sm:w-auto">
-                <TeamTile member={m} tilt={tilt} />
-              </Reveal>
-            ))}
-          </ul>
-        </div>
-      </section>
-
       {/* CTA */}
       <section className="relative overflow-hidden py-20 md:py-24 bg-brand-navy text-white">
         <div className="absolute inset-0 opacity-[0.18] pointer-events-none" aria-hidden="true">
@@ -486,36 +460,5 @@ function GalleryFilter({ categories, value, onChange }) {
         ))}
       </div>
     </div>
-  );
-}
-
-// One teammate: their photo (or their initials on their colour, until a photo is set), name
-// and role, opening their profile on /team. On hover the tile leans toward the pointer, the
-// photo eases in, a bar in their colour runs along its bottom edge and "View profile" rises.
-function TeamTile({ member, tilt }) {
-  return (
-    <Link
-      {...tilt}
-      to={`/team?member=${member.slug}`}
-      aria-label={`${fullNameOf(member)}, ${member.role}. View profile`}
-      className="card tilt group relative block h-full p-2.5 pb-4"
-    >
-      <div className="relative aspect-[4/5] overflow-hidden rounded-xl bg-gray-100">
-        <MemberAvatar member={member} className="w-full h-full object-top transition duration-700 ease-out group-hover:scale-105" textClassName="text-5xl" />
-        <span className="absolute inset-0 bg-gradient-to-t from-brand-navy/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition duration-500" aria-hidden="true" />
-        <span className="absolute left-3 bottom-4 inline-flex items-center gap-1 rounded-full bg-white/90 backdrop-blur px-2.5 py-1 text-xs font-semibold text-brand-navy opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition duration-300" aria-hidden="true">
-          View profile <ArrowUpRight className="w-3.5 h-3.5" />
-        </span>
-        <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-500" style={{ background: member.color }} aria-hidden="true" />
-      </div>
-      <div className="px-1.5 pt-3.5">
-        <p className="font-display font-bold text-brand-ink leading-tight">{fullNameOf(member)}</p>
-        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-gray-500">
-          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: member.color }} aria-hidden="true" />
-          {member.role}
-        </p>
-      </div>
-      <span className="tilt-glare" aria-hidden="true" />
-    </Link>
   );
 }
