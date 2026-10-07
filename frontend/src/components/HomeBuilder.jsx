@@ -3,29 +3,63 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Check, Hand, RotateCcw, ShoppingBag, Sparkles, Wrench } from 'lucide-react';
 
-// "Kit out a HomeLink home": a cut-away house with a spot for each of six HomeLink products.
-// Drag a product onto the house (or tap it, then tap a spot). The right spot glows green and the
-// product snaps in, and the room it's in comes to life; a wrong spot glows red and the product
-// goes back with a hint. Leave it alone for IDLE_MS and a demo takes over, flying the remaining
-// products into place one by one — touching anything hands control straight back.
+// "Kit out a HomeLink home": a whole street scene — sky, hills, lawn, sidewalk and road — with a
+// cut-away house and a HomeLink delivery truck parked out front, its side rolled up and six
+// products on the shelves. Drag a product from the truck onto the house (or tap it, then tap a
+// spot). The right spot glows green and the product snaps in and its room comes to life; a wrong
+// spot glows red. The HomeLink handyman, up on the truck's roof, reacts to every move in a speech
+// bubble. Leave it alone for IDLE_MS and a demo takes over, carrying the remaining products in
+// one by one — touching anything hands control straight back.
+//
+// The scene is one SVG with two compositions: house and truck side by side from lg up, and
+// stacked (house above, truck on the road below) on narrower screens. Drop spots and the truck's
+// products are HTML buttons laid over the SVG at the same coordinates, which keeps hit-testing,
+// focus and labels simple.
 
 const IDLE_MS = 5000;
-const VIEW_W = 480;
-const VIEW_H = 400;
 
-// `at`/`box` place the installed artwork in the house's 480x400 viewBox; `hit` is the (roomier)
-// drop target over it.
+// Per product: `at`/`box` place the installed artwork in the house's own coordinates (the house
+// is drawn in a 480x400 space with its ground at y=376); `hit` is the roomier drop target over it.
 const PRODUCTS = [
-  { id: 'solar', name: 'Solar Panels', category: 'Solar', noun: 'solar panels', spot: 'Roof', at: [236, 72], box: [120, 62], hit: [230, 66, 132, 74], done: 'free power from the sun.', hint: 'Solar panels go up on the roof, in the sun.' },
-  { id: 'ac', name: 'Air Conditioner', category: 'Aircon', noun: 'air conditioner', spot: 'Bedroom wall', at: [80, 172], box: [96, 34], hit: [76, 166, 104, 48], done: 'the bedroom is cooling down.', hint: 'The aircon goes high on the bedroom wall.' },
-  { id: 'heater', name: 'Water Heater', category: 'Plumbing', noun: 'water heater', spot: 'Bathroom wall', at: [360, 176], box: [40, 74], hit: [350, 172, 60, 82], done: 'hot showers are on.', hint: 'The water heater goes in the bathroom, next to the shower.' },
-  { id: 'bulb', name: 'Smart Bulb', category: 'Smart Home', noun: 'smart bulb', spot: 'Ceiling', at: [138, 272], box: [30, 48], hit: [120, 272, 66, 60], done: 'the living room lights up.', hint: 'The smart bulb hangs from the living room ceiling.' },
-  { id: 'lock', name: 'Smart Lock', category: 'Smart Home', noun: 'smart lock', spot: 'Front door', at: [326, 316], box: [22, 34], hit: [306, 302, 62, 62], done: 'the front door is secured.', hint: 'The smart lock goes on the front door.' },
-  { id: 'cctv', name: 'CCTV Camera', category: 'Security', noun: 'CCTV camera', spot: 'Outside corner', at: [14, 158], box: [46, 28], hit: [4, 144, 64, 52], labelStart: true, done: 'the yard is being watched.', hint: 'The CCTV camera mounts outside, just under the roof.' },
+  { id: 'solar', name: 'Solar Panels', noun: 'solar panels', spot: 'Roof', at: [236, 72], box: [120, 62], hit: [230, 66, 132, 74], done: 'free power from the sun.', hint: 'Solar panels go up on the roof, in the sun.' },
+  { id: 'ac', name: 'Air Conditioner', noun: 'air conditioner', spot: 'Bedroom wall', at: [80, 172], box: [96, 34], hit: [76, 166, 104, 48], done: 'the bedroom is cooling down.', hint: 'The aircon goes high on the bedroom wall.' },
+  { id: 'heater', name: 'Water Heater', noun: 'water heater', spot: 'Bathroom wall', at: [360, 176], box: [40, 74], hit: [350, 172, 60, 82], done: 'hot showers are on.', hint: 'The water heater goes in the bathroom, next to the shower.' },
+  { id: 'bulb', name: 'Smart Bulb', noun: 'smart bulb', spot: 'Ceiling', at: [138, 272], box: [30, 48], hit: [120, 272, 66, 60], done: 'the living room lights up.', hint: 'The smart bulb hangs from the living room ceiling.' },
+  { id: 'lock', name: 'Smart Lock', noun: 'smart lock', spot: 'Front door', at: [326, 316], box: [22, 34], hit: [306, 302, 62, 62], done: 'the front door is secured.', hint: 'The smart lock goes on the front door.' },
+  { id: 'cctv', name: 'CCTV Camera', noun: 'CCTV camera', spot: 'Outside corner', at: [14, 158], box: [46, 28], hit: [4, 144, 64, 52], labelStart: true, done: 'the yard is being watched.', hint: 'The CCTV camera mounts outside, just under the roof.' },
 ];
 const BY_ID = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
 
-const READY = `${PRODUCTS.length} products are waiting to be installed.`;
+// The truck's shelf compartments (truck coordinates, 440x270 with the wheels touching y=262),
+// filled in PRODUCTS order: top shelf left to right, then the bottom shelf.
+const CELLS = [
+  [22, 48, 86, 68], [112, 48, 87, 68], [203, 48, 87, 68],
+  [22, 125, 86, 64], [112, 125, 87, 64], [203, 125, 87, 64],
+];
+
+// Where everything sits in each composition. Bands are the tops of the lawn, sidewalk and road.
+const LAYOUTS = {
+  wide: {
+    w: 1200, h: 600,
+    house: { x: 80, y: 50, s: 1.25 },
+    truck: { x: 724, y: 318, s: 1.05 },
+    sun: [70, 70], hills: [392, 420], grass: 440, walk: 520, road: 534,
+    // The handyman stands on the truck's roof; his bubble floats in the sky beside him and grows
+    // upward, so a long message never comes down over the house's roof.
+    mascot: { left: '80%', bottom: '47%', height: '25%' },
+    bubble: { right: '25%', bottom: '64%', width: '25%' },
+  },
+  tall: {
+    w: 480, h: 760,
+    house: { x: 0, y: 6, s: 1 },
+    truck: { x: 22, y: 468, s: 1 },
+    sun: [436, 36], hills: [300, 326], grass: 350, walk: 470, road: 482,
+    // No room for the whole handyman: his head and the message sit on the lawn between the two.
+    bubble: { left: '3%', right: '3%', top: '50.8%' },
+  },
+};
+
+const READY = 'Drag a product from the truck onto the house!';
 const DONE = 'Every product is in. This home is fully HomeLinked!';
 
 const CONFETTI = Array.from({ length: 18 }, (_, i) => {
@@ -39,20 +73,26 @@ const CONFETTI = Array.from({ length: 18 }, (_, i) => {
   };
 });
 
+const POSES = { info: 'hi', success: 'jump', error: 'thinking' };
+const HEADS = { info: 'hi-head', success: 'answer-head', error: 'thinking-head' };
+
 const capitalize = (s) => s[0].toUpperCase() + s.slice(1);
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-const pct = ([x, y, w, h]) => ({
-  left: `${(x / VIEW_W) * 100}%`,
-  top: `${(y / VIEW_H) * 100}%`,
-  width: `${(w / VIEW_W) * 100}%`,
-  height: `${(h / VIEW_H) * 100}%`,
+const WIDE_QUERY = '(min-width: 1024px)';
+
+// A rectangle in a part's own coordinates, as percentages of the whole scene.
+const place = (L, origin, [x, y, w, h]) => ({
+  left: `${((origin.x + x * origin.s) / L.w) * 100}%`,
+  top: `${((origin.y + y * origin.s) / L.h) * 100}%`,
+  width: `${((w * origin.s) / L.w) * 100}%`,
+  height: `${((h * origin.s) / L.h) * 100}%`,
 });
 
 const SLOT_TONES = {
-  idle: 'border-brand-navy/25 bg-white/35 hover:bg-white/60',
-  ready: 'border-brand-orange/80 bg-brand-orange/10',
-  good: 'border-brand-teal bg-brand-teal/20 shadow-[0_0_0_4px_rgba(0,168,150,0.25)]',
-  bad: 'border-red-500 bg-red-500/15',
+  idle: 'border-white/90 bg-white/25 hover:bg-white/50',
+  ready: 'border-brand-orange bg-brand-orange/15',
+  good: 'border-brand-teal bg-brand-teal/25 shadow-[0_0_0_4px_rgba(0,168,150,0.25)]',
+  bad: 'border-red-500 bg-red-500/20',
 };
 const LABEL_TONES = {
   idle: 'bg-white text-brand-navy',
@@ -60,17 +100,31 @@ const LABEL_TONES = {
   good: 'bg-brand-teal text-white',
   bad: 'bg-red-500 text-white',
 };
-const MESSAGE_TONES = {
-  info: 'bg-gray-50 text-gray-600 border-gray-200',
-  success: 'bg-brand-teal/10 text-[#00806f] border-brand-teal/25',
-  error: 'bg-red-50 text-red-700 border-red-200',
+const BUBBLE_TONES = {
+  info: 'border-white',
+  success: 'border-brand-teal',
+  error: 'border-red-400',
 };
 
-export default function HomeBuilder({ className = '' }) {
+function useWide() {
+  const [wide, setWide] = useState(() => window.matchMedia(WIDE_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(WIDE_QUERY);
+    const onChange = () => setWide(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return wide;
+}
+
+export default function HomeBuilder() {
   const uid = useId().replace(/:/g, '');
+  const wide = useWide();
+  const L = wide ? LAYOUTS.wide : LAYOUTS.tall;
+
   const rootRef = useRef(null);
   const slotRefs = useRef({});
-  const tileRefs = useRef({});
+  const itemRefs = useRef({});
 
   const [installed, setInstalled] = useState({});
   const [selected, setSelected] = useState(null);
@@ -80,7 +134,7 @@ export default function HomeBuilder({ className = '' }) {
   const [flight, setFlight] = useState(null);
   const [demo, setDemo] = useState(false);
   const [round, setRound] = useState(0);
-  const [message, setMessage] = useState({ tone: 'info', text: READY });
+  const [message, setMessage] = useState({ tone: 'info', text: READY, key: 0 });
 
   const installedRef = useRef(installed);
   installedRef.current = installed;
@@ -97,9 +151,14 @@ export default function HomeBuilder({ className = '' }) {
   const count = PRODUCTS.filter(p => installed[p.id]).length;
   const complete = count === PRODUCTS.length;
 
-  const say = (tone, text) => setMessage({ tone, text });
+  // The handyman's poses swap on every message; fetch them all up front so none of them flickers in.
+  useEffect(() => {
+    [...Object.values(POSES), ...Object.values(HEADS)].forEach(name => { new Image().src = `/mascot/${name}.webp`; });
+  }, []);
 
-  const place = (id, slotId, { auto = false } = {}) => {
+  const say = (tone, text) => setMessage(m => ({ tone, text, key: m.key + 1 }));
+
+  const drop = (id, slotId, { auto = false } = {}) => {
     const product = BY_ID[id];
     if (!slotId) {
       say('info', `Drop the ${product.noun} right onto the house.`);
@@ -108,7 +167,7 @@ export default function HomeBuilder({ className = '' }) {
     if (slotId !== id) {
       setFlash(slotId);
       setTimeout(() => setFlash(f => (f === slotId ? null : f)), 700);
-      tileRefs.current[id]?.animate(
+      itemRefs.current[id]?.animate(
         [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }],
         { duration: 380 },
       );
@@ -152,15 +211,15 @@ export default function HomeBuilder({ className = '' }) {
   };
 
   const flyTo = (id) => {
-    const tile = tileRefs.current[id];
+    const item = itemRefs.current[id];
     const slot = slotRefs.current[id];
-    if (!tile || !slot) return;
+    if (!item || !slot) return;
     if (reducedMotion()) {
-      place(id, id, { auto: true });
+      drop(id, id, { auto: true });
       nextStepAt.current = Date.now() + 1500;
       return;
     }
-    const a = tile.getBoundingClientRect();
+    const a = item.getBoundingClientRect();
     const b = slot.getBoundingClientRect();
     setFlight({
       id,
@@ -172,11 +231,11 @@ export default function HomeBuilder({ className = '' }) {
   const land = (id) => {
     flightAnim.current = null;
     setFlight(null);
-    place(id, id, { auto: true });
+    drop(id, id, { auto: true });
     nextStepAt.current = Date.now() + 1100;
   };
 
-  // The demo's clock: once the house has sat in view, untouched, for IDLE_MS, install whatever's
+  // The demo's clock: once the scene has sat in view, untouched, for IDLE_MS, install whatever's
   // left one product at a time; when it's all in, hold the finished house a moment and start over.
   const tick = useRef(null);
   tick.current = () => {
@@ -231,18 +290,14 @@ export default function HomeBuilder({ className = '' }) {
     return best;
   };
 
-  const moveGhost = (x, y) => {
-    if (ghostRef.current) ghostRef.current.style.transform = `translate(${x}px, ${y}px)`;
-  };
-
-  const onTileDown = (e, id) => {
+  const onItemDown = (e, id) => {
     if (e.button > 0 || installedRef.current[id]) return;
     suppressClick.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { id, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, active: false };
   };
 
-  const onTileMove = (e) => {
+  const onItemMove = (e) => {
     const d = drag.current;
     if (!d) return;
     d.x = e.clientX;
@@ -253,7 +308,7 @@ export default function HomeBuilder({ className = '' }) {
       setDragId(d.id);
       setSelected(null);
     }
-    moveGhost(e.clientX, e.clientY);
+    if (ghostRef.current) ghostRef.current.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
     const hit = hitSlot(e.clientX, e.clientY);
     setOver(prev => (prev === hit ? prev : hit));
   };
@@ -265,10 +320,10 @@ export default function HomeBuilder({ className = '' }) {
     suppressClick.current = true;
     setDragId(null);
     setOver(null);
-    if (!cancelled) place(d.id, hitSlot(e.clientX, e.clientY));
+    if (!cancelled) drop(d.id, hitSlot(e.clientX, e.clientY));
   };
 
-  const onTileClick = (id) => {
+  const onItemClick = (id) => {
     if (suppressClick.current) {
       suppressClick.current = false;
       return;
@@ -284,13 +339,30 @@ export default function HomeBuilder({ className = '' }) {
 
   const onSlotClick = (slotId) => {
     if (!selected) {
-      say('info', 'Pick a product first, then tap its spot on the house.');
+      say('info', 'Pick a product from the truck first, then tap its spot on the house.');
       return;
     }
-    if (place(selected, slotId)) setSelected(null);
+    if (drop(selected, slotId)) setSelected(null);
   };
 
   const targeting = Boolean(dragId || selected || flight);
+  const houseCenter = place(L, L.house, [240, 220, 0, 0]);
+
+  const bubbleBody = (
+    <>
+      <p>{message.text}</p>
+      {complete && (
+        <span className="mt-2.5 flex flex-wrap gap-2">
+          <Link to="/products" className="btn-primary inline-flex items-center gap-1.5 text-xs py-1.5 px-3">
+            <ShoppingBag className="w-3.5 h-3.5" /> Shop products
+          </Link>
+          <Link to="/services" className="btn-secondary inline-flex items-center gap-1.5 text-xs py-1.5 px-3">
+            <Wrench className="w-3.5 h-3.5" /> Book an installation
+          </Link>
+        </span>
+      )}
+    </>
+  );
 
   return (
     <section
@@ -299,97 +371,89 @@ export default function HomeBuilder({ className = '' }) {
       onPointerDownCapture={takeOver}
       onKeyDownCapture={takeOver}
       onPointerMove={noteActivity}
-      className={`card p-3 sm:p-5 lg:p-6 grid gap-5 lg:gap-x-7 lg:gap-y-5 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_350px] lg:grid-rows-[auto_1fr] ${className}`}
+      className="relative overflow-hidden bg-gradient-to-b from-[#bfe1f7] via-[#dcf0fb] to-[#eef8fd]"
     >
-      {/* Heading — first on phones, top right beside the house from lg up. */}
-      <div className="order-1 lg:col-start-2 lg:row-start-1">
-        <p className="eyebrow mb-2">Try it</p>
-        <h2 id={`${uid}-title`} className="font-display text-2xl md:text-3xl font-extrabold tracking-tight text-brand-ink">Kit out a HomeLink home</h2>
-        <p className="mt-2 text-sm text-gray-500 leading-relaxed">
-          Drag each product to where it belongs on the house, or tap a product and then its spot.
-        </p>
-        <div className="mt-4 flex items-center gap-3">
-          <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-brand-orange to-brand-teal transition-[width] duration-500"
-              style={{ width: `${(count / PRODUCTS.length) * 100}%` }}
-            />
-          </div>
-          <span className="text-xs font-semibold tabular-nums text-brand-navy">{count}/{PRODUCTS.length} installed</span>
+      {/* Heading and progress, up in the sky */}
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-12 md:pt-16 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div className="max-w-xl">
+          <p className="eyebrow mb-2">Try it</p>
+          <h2 id={`${uid}-title`} className="section-title">Kit out a HomeLink home</h2>
+          <p className="mt-2 text-gray-600 leading-relaxed">
+            Everything's on the delivery truck. Drag each product to where it belongs on the house,
+            or tap a product and then its spot.
+          </p>
         </div>
-      </div>
-
-      {/* Products, status and actions. Before the house in the DOM so keyboard users meet the
-          products first and then the spots; shown below it on phones. */}
-      <div className="order-3 lg:col-start-2 lg:row-start-2">
-        <div className="grid grid-cols-3 lg:grid-cols-2 gap-2 sm:gap-3">
-          {PRODUCTS.map(p => {
-            const done = Boolean(installed[p.id]);
-            const away = dragId === p.id || flight?.id === p.id;
-            return (
-              <button
-                key={p.id}
-                ref={el => { tileRefs.current[p.id] = el; }}
-                type="button"
-                disabled={done}
-                onPointerDown={e => onTileDown(e, p.id)}
-                onPointerMove={onTileMove}
-                onPointerUp={e => endDrag(e)}
-                onPointerCancel={e => endDrag(e, true)}
-                onClick={() => onTileClick(p.id)}
-                aria-pressed={selected === p.id}
-                aria-label={`${p.name}${done ? ', installed' : ''}`}
-                className={`relative flex flex-col items-center gap-1 rounded-xl border px-1.5 py-2 sm:p-2.5 text-center select-none touch-none transition ${
-                  done
-                    ? 'border-brand-teal/30 bg-brand-teal/[0.06] cursor-default'
-                    : selected === p.id
-                      ? 'border-brand-orange bg-brand-orange/5 ring-2 ring-brand-orange/30 cursor-grab'
-                      : 'border-gray-200 bg-white hover:border-brand-navy/30 hover:-translate-y-0.5 hover:shadow-md cursor-grab active:cursor-grabbing'
-                } ${away ? 'opacity-40' : ''}`}
-              >
-                <ProductIcon id={p.id} className={`h-9 sm:h-11 lg:h-12 w-auto max-w-full ${done ? 'opacity-50' : ''}`} />
-                <span className="text-[11px] sm:text-xs font-semibold leading-tight text-brand-ink">{p.name}</span>
-                <span className={`text-[10px] leading-none ${done ? 'text-[#00806f] font-semibold' : 'text-gray-400'}`}>{done ? 'Installed' : p.category}</span>
-                {done && (
-                  <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-brand-teal text-white flex items-center justify-center shadow">
-                    <Check className="w-3 h-3" strokeWidth={3} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        <p role="status" className={`mt-4 rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed transition-colors ${MESSAGE_TONES[message.tone]}`}>
-          {message.text}
-        </p>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          {complete && (
-            <>
-              <Link to="/products" className="btn-primary inline-flex items-center gap-1.5 text-sm py-2 px-4">
-                <ShoppingBag className="w-4 h-4" /> Shop products
-              </Link>
-              <Link to="/services" className="btn-secondary inline-flex items-center gap-1.5 text-sm py-2 px-4">
-                <Wrench className="w-4 h-4" /> Book an installation
-              </Link>
-            </>
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          {demo && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-xs font-semibold text-brand-navy shadow-sm">
+              <span className="hb-blink w-2 h-2 rounded-full bg-brand-orange" />
+              Demo playing. Grab a product to take over
+            </span>
           )}
+          <span className="inline-flex items-center gap-2.5 rounded-full bg-white/80 pl-3 pr-3.5 py-1.5 shadow-sm">
+            <span className="w-20 h-1.5 rounded-full bg-brand-navy/10 overflow-hidden">
+              <span
+                className="block h-full rounded-full bg-gradient-to-r from-brand-orange to-brand-teal transition-[width] duration-500"
+                style={{ width: `${(count / PRODUCTS.length) * 100}%` }}
+              />
+            </span>
+            <span className="text-xs font-semibold tabular-nums text-brand-navy">{count}/{PRODUCTS.length} installed</span>
+          </span>
           <button
             type="button"
             onClick={reset}
             disabled={!count}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-gray-500 hover:text-brand-navy hover:bg-gray-100 transition disabled:opacity-40 disabled:hover:bg-transparent"
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-1.5 text-xs font-semibold text-gray-600 shadow-sm hover:text-brand-navy hover:bg-white transition disabled:opacity-50"
           >
-            <RotateCcw className="w-4 h-4" /> Start over
+            <RotateCcw className="w-3.5 h-3.5" /> Start over
           </button>
         </div>
       </div>
 
-      {/* The house */}
-      <div className="order-2 lg:col-start-1 lg:row-start-1 lg:row-span-2 self-start relative rounded-2xl overflow-hidden border border-white bg-gradient-to-b from-[#d9eefb] via-[#eef8fd] to-[#f7fbf8]">
-        <HouseScene installed={installed} uid={uid} />
+      {/* The scene */}
+      <div className="relative mt-4 md:mt-2 max-w-[1400px] mx-auto">
+        <Scene L={L} installed={installed} uid={uid} />
 
+        {/* The truck's load. Before the drop spots in the DOM, so keyboard users meet the products
+            first and then the spots they go in. */}
+        {PRODUCTS.map((p, i) => {
+          const done = Boolean(installed[p.id]);
+          const style = place(L, L.truck, CELLS[i]);
+          if (done) {
+            return (
+              <span key={p.id} aria-hidden="true" className="absolute flex items-center justify-center rounded-lg border-2 border-dashed border-brand-teal/40" style={style}>
+                <span className="w-6 h-6 rounded-full bg-brand-teal text-white flex items-center justify-center shadow">
+                  <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                </span>
+              </span>
+            );
+          }
+          const away = dragId === p.id || flight?.id === p.id;
+          return (
+            <button
+              key={p.id}
+              ref={el => { itemRefs.current[p.id] = el; }}
+              type="button"
+              onPointerDown={e => onItemDown(e, p.id)}
+              onPointerMove={onItemMove}
+              onPointerUp={e => endDrag(e)}
+              onPointerCancel={e => endDrag(e, true)}
+              onClick={() => onItemClick(p.id)}
+              aria-pressed={selected === p.id}
+              aria-label={p.name}
+              title={p.name}
+              style={style}
+              className={`absolute flex flex-col items-center justify-center gap-1 rounded-lg select-none touch-none transition duration-200 cursor-grab active:cursor-grabbing ${
+                selected === p.id ? 'bg-brand-orange/15 ring-2 ring-brand-orange' : 'hover:bg-white/70 hover:-translate-y-1'
+              } ${away ? 'opacity-30' : ''}`}
+            >
+              <ProductIcon id={p.id} className="w-[78%] h-[58%] drop-shadow-sm" />
+              <span className="hidden lg:block max-w-full truncate rounded bg-white px-1.5 py-px text-[10px] font-semibold text-brand-ink shadow-sm">{p.name}</span>
+            </button>
+          );
+        })}
+
+        {/* Drop spots on the house */}
         {PRODUCTS.map(p => {
           if (installed[p.id]) return null;
           const tone = over === p.id ? (dragId === p.id ? 'good' : 'bad') : flash === p.id ? 'bad' : targeting ? 'ready' : 'idle';
@@ -401,9 +465,9 @@ export default function HomeBuilder({ className = '' }) {
               onClick={() => onSlotClick(p.id)}
               aria-label={`${p.spot}: place ${selected ? `the ${BY_ID[selected].noun}` : 'a product'} here`}
               className={`absolute rounded-xl border-2 border-dashed transition duration-200 ${SLOT_TONES[tone]}`}
-              style={pct(p.hit)}
+              style={place(L, L.house, p.hit)}
             >
-              {tone === 'idle' && <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center text-lg font-bold leading-none text-brand-navy/35">+</span>}
+              {tone === 'idle' && <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center text-lg font-bold leading-none text-brand-navy/40">+</span>}
               <span
                 aria-hidden="true"
                 className={`absolute -top-1.5 -translate-y-full whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold shadow-sm transition-opacity ${
@@ -416,20 +480,38 @@ export default function HomeBuilder({ className = '' }) {
           );
         })}
 
-        {demo && (
-          <span className="pointer-events-none absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-brand-navy shadow-sm">
-            <span className="hb-blink w-2 h-2 rounded-full bg-brand-orange" />
-            Demo playing. Grab a product to take over
+        {/* The handyman and what he has to say */}
+        {wide && (
+          <span aria-hidden="true" className="pointer-events-none absolute -translate-x-1/2" style={L.mascot}>
+            <img
+              key={`pose-${message.key}`}
+              src={`/mascot/${POSES[message.tone]}.webp`}
+              alt=""
+              draggable="false"
+              className="hb-hop block h-full w-auto"
+            />
           </span>
         )}
+        <div className="pointer-events-none absolute" style={L.bubble}>
+          <div
+            key={message.key}
+            role="status"
+            className={`hb-bubble pointer-events-auto relative flex items-start gap-2.5 rounded-2xl border-2 bg-white px-3.5 py-2.5 text-[13px] lg:text-sm leading-snug text-brand-ink shadow-lg ${BUBBLE_TONES[message.tone]}`}
+          >
+            {!wide && <img src={`/mascot/${HEADS[message.tone]}.webp`} alt="" aria-hidden="true" className="w-9 h-9 shrink-0 object-contain" />}
+            <div className="min-w-0">{bubbleBody}</div>
+            {wide && <span aria-hidden="true" className={`absolute bottom-3 -right-[9px] w-4 h-4 rotate-45 border-r-2 border-t-2 bg-white ${BUBBLE_TONES[message.tone]}`} />}
+          </div>
+        </div>
+
         {complete && (
           <>
-            <span className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2">
+            <span className="pointer-events-none absolute -translate-x-1/2" style={{ left: houseCenter.left, top: '2%' }}>
               <span className="fade-up inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand-teal px-3 py-1 text-xs font-bold text-white shadow-md">
                 <Sparkles className="w-3.5 h-3.5" /> Fully HomeLinked!
               </span>
             </span>
-            <div key={round} aria-hidden="true" className="pointer-events-none absolute left-1/2 top-[45%]">
+            <div key={round} aria-hidden="true" className="pointer-events-none absolute" style={{ left: houseCenter.left, top: houseCenter.top }}>
               {CONFETTI.map((c, i) => (
                 <span
                   key={i}
@@ -475,7 +557,7 @@ function GhostCard({ id, tone }) {
   );
 }
 
-// The demo's "hand": carries a product from its tile to its spot along a lifted arc.
+// The demo's "hand": carries a product from the truck to its spot along a lifted arc.
 function FlightGhost({ flight, animRef, onLand }) {
   const ref = useRef(null);
   useLayoutEffect(() => {
@@ -514,6 +596,143 @@ function ProductIcon({ id, className }) {
     <svg viewBox={`${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`} className={className} aria-hidden="true">
       <ProductArt id={id} />
     </svg>
+  );
+}
+
+// ——— The scene ———
+
+function Scene({ L, installed, uid }) {
+  const { w, h } = L;
+  // Ground bands and hills run well past both edges: the SVG is capped at 1400px wide, and on
+  // wider screens they carry on out to the sides of the section.
+  const x0 = -1400;
+  const x1 = w + 1400;
+  const hill = (top, phase) => {
+    let d = `M${x0} ${top + 18}`;
+    for (let x = x0; x < x1; x += 320) d += `Q${x + 160} ${top - 26 + ((x / 320 + phase) % 2) * 18} ${x + 320} ${top + 18}`;
+    return `${d}L${x1} ${L.grass + 20}L${x0} ${L.grass + 20}Z`;
+  };
+  const joints = [];
+  for (let x = x0; x < x1; x += 44) joints.push(`M${x} ${L.walk}v${L.road - L.walk}`);
+  const laneY = L.road + (h - L.road) * (L === LAYOUTS.wide ? 0.55 : 0.9);
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="relative block w-full h-auto overflow-visible" aria-hidden="true">
+      <defs>
+        <radialGradient id={`${uid}-warm`} cx="50%" cy="35%" r="60%">
+          <stop offset="0%" stopColor="#ffd27a" stopOpacity=".6" />
+          <stop offset="100%" stopColor="#ffd27a" stopOpacity="0" />
+        </radialGradient>
+        <clipPath id={`${uid}-living`}><rect x="70" y="272" width="166" height="94" /></clipPath>
+        <clipPath id={`${uid}-solar`}><rect x="-2" y="-2" width="124" height="66" rx="3" /></clipPath>
+      </defs>
+
+      {/* Sky */}
+      <g className="hb-sun">
+        {Array.from({ length: 8 }, (_, i) => (
+          <rect key={i} x={L.sun[0] - 2} y={L.sun[1] - 33} width="4" height="11" rx="2" fill="#ffd27a" transform={`rotate(${i * 45} ${L.sun[0]} ${L.sun[1]})`} />
+        ))}
+      </g>
+      <circle cx={L.sun[0]} cy={L.sun[1]} r="17" fill="#ffd27a" />
+      {[[30, 1, 80, -10], [8, 0.7, 110, -60], [64, 0.8, 140, -100]].map(([y, s, dur, delay]) => (
+        <g key={delay} className="hb-cloud" style={{ '--cloud-to': `${w + 120}px`, animationDuration: `${dur}s`, animationDelay: `${delay}s` }}>
+          <Cloud y={y} s={s} />
+        </g>
+      ))}
+
+      {/* Hills, lawn, sidewalk, road */}
+      <path d={hill(L.hills[0], 0)} fill="#d3ecd9" />
+      <path d={hill(L.hills[1], 1)} fill="#c2e6cc" />
+      <rect x={x0} y={L.grass} width={x1 - x0} height={L.walk - L.grass} fill="#b3dfc0" />
+      <rect x={x0} y={L.walk} width={x1 - x0} height={L.road - L.walk} fill="#e7e2d8" />
+      <path d={joints.join('')} stroke="#d6cfc2" strokeWidth="1.5" />
+      <rect x={x0} y={L.road} width={x1 - x0} height={h - L.road} fill="#1c2536" />
+      <rect x={x0} y={L.road} width={x1 - x0} height="3" fill="#cfc8ba" />
+      <path d={`M${x0} ${laneY}H${x1}`} stroke="#fff" strokeOpacity=".55" strokeWidth="3" strokeDasharray="28 24" />
+      {L === LAYOUTS.wide && <Tree x={34} ground={L.walk} h={96} />}
+
+      <g transform={`translate(${L.house.x} ${L.house.y}) scale(${L.house.s})`}>
+        <House installed={installed} uid={uid} />
+      </g>
+      <g transform={`translate(${L.truck.x} ${L.truck.y}) scale(${L.truck.s})`}>
+        <Truck />
+      </g>
+    </svg>
+  );
+}
+
+function Cloud({ y, s }) {
+  return (
+    <g transform={`translate(0 ${y}) scale(${s})`} fill="#fff" opacity=".9">
+      <circle cx="24" cy="18" r="12" />
+      <circle cx="44" cy="12" r="15" />
+      <circle cx="64" cy="19" r="11" />
+      <rect x="24" y="18" width="40" height="12" />
+    </g>
+  );
+}
+
+function Tree({ x, ground, h }) {
+  return (
+    <g>
+      <rect x={x - 3} y={ground - h * 0.5} width="6" height={h * 0.5} rx="2" fill="#a86f45" />
+      <g className="hb-sway">
+        <circle cx={x} cy={ground - h * 0.64} r={h * 0.3} fill="#3fae86" />
+        <circle cx={x - h * 0.17} cy={ground - h * 0.52} r={h * 0.21} fill="#4fbf96" />
+        <circle cx={x + h * 0.18} cy={ground - h * 0.55} r={h * 0.2} fill="#2f9e78" />
+        <circle cx={x - h * 0.06} cy={ground - h * 0.78} r={h * 0.15} fill="#62cca4" />
+      </g>
+    </g>
+  );
+}
+
+// The HomeLink box truck, parked with its side shutter rolled up. Facing right, cab at the front.
+function Truck() {
+  return (
+    <g>
+      <ellipse cx="220" cy="263" rx="214" ry="7" fill="#0b1324" opacity=".25" />
+
+      {/* Cargo box */}
+      <rect x="6" y="0" width="300" height="218" rx="12" fill="#0f2b5b" />
+      <text x="156" y="16" textAnchor="middle" fontFamily="Archivo, system-ui, sans-serif" fontWeight="800" fontSize="14" fill="#fff">
+        Home<tspan fill="#ff6b35">Link</tspan>
+        <tspan fontSize="9" fontWeight="700" fill="#9fc3ea" dx="6" letterSpacing="1.5">DELIVERY</tspan>
+      </text>
+      <rect x="20" y="46" width="272" height="150" rx="4" fill="#e8edf3" />
+      <rect x="20" y="46" width="272" height="10" fill="#0f2b5b" opacity=".08" />
+      <path d="M110 46V191M201 46V191" stroke="#cbd5e1" strokeWidth="3" />
+      <rect x="20" y="118" width="272" height="5" fill="#c98b5a" />
+      <rect x="20" y="191" width="272" height="5" fill="#c98b5a" />
+      <rect x="14" y="22" width="284" height="24" rx="6" fill="#e2e8f0" />
+      <path d="M18 28h276M18 34h276M18 40h276" stroke="#cbd5e1" strokeWidth="1.5" />
+      <rect x="140" y="42" width="32" height="5" rx="2" fill="#94a3b8" />
+      <rect x="6" y="200" width="300" height="8" fill="#ff6b35" />
+      <rect x="0" y="168" width="7" height="16" rx="2" fill="#ffb020" className="hb-blink" />
+
+      {/* Cab */}
+      <path d="M306 218V96a10 10 0 0 1 10-10h62a14 14 0 0 1 11.8 6.5L422 144a8 8 0 0 0 5 3h1a8 8 0 0 1 8 8V218Z" fill="#ff6b35" />
+      <path d="M346 98h28a8 8 0 0 1 6.8 3.8L404 140h-58Z" fill="#bfe3ff" />
+      <path d="M357 103l-6 28" stroke="#fff" strokeWidth="4" strokeLinecap="round" opacity=".6" />
+      <path d="M340 104v108" stroke="#c8461a" strokeWidth="1.5" />
+      <rect x="312" y="150" width="22" height="22" rx="5" fill="#0f2b5b" />
+      <path d="M317 163l6-5 6 5v6h-12Z" fill="#fff" />
+      <rect x="346" y="152" width="10" height="3.5" rx="1.5" fill="#c8461a" />
+      <rect x="428" y="160" width="8" height="11" rx="2" fill="#fde68a" />
+      <circle cx="432" cy="152" r="3" fill="#ffb020" className="hb-blink" />
+      <rect x="420" y="206" width="20" height="10" rx="3" fill="#cbd5e1" />
+      <rect x="306" y="200" width="122" height="8" fill="#e85a28" />
+
+      {/* Chassis and wheels */}
+      <rect x="10" y="214" width="420" height="14" rx="4" fill="#0b1f44" />
+      {[70, 128, 368].map(cx => (
+        <g key={cx}>
+          <path d={`M${cx - 30} 236a30 30 0 0 1 60 0Z`} fill="#0b1f44" />
+          <circle cx={cx} cy="236" r="26" fill="#1f2937" />
+          <circle cx={cx} cy="236" r="12" fill="#cbd5e1" />
+          <circle cx={cx} cy="236" r="4" fill="#64748b" />
+        </g>
+      ))}
+    </g>
   );
 }
 
@@ -637,7 +856,8 @@ function CctvArt({ live }) {
   );
 }
 
-// ——— The house: a cut-away with the front wall off, so the rooms each product belongs in show. ———
+// ——— The house: a cut-away with the front wall off, so the rooms each product belongs in show.
+// Drawn in a 480x400 space with its ground at y=376; the scene places and scales it. ———
 
 function Win({ x, y, w, h }) {
   return (
@@ -651,18 +871,7 @@ function Win({ x, y, w, h }) {
   );
 }
 
-function Cloud({ y, s }) {
-  return (
-    <g transform={`translate(0 ${y}) scale(${s})`} fill="#fff" opacity=".9">
-      <circle cx="24" cy="18" r="12" />
-      <circle cx="44" cy="12" r="15" />
-      <circle cx="64" cy="19" r="11" />
-      <rect x="24" y="18" width="40" height="12" />
-    </g>
-  );
-}
-
-function HouseScene({ installed, uid }) {
+function House({ installed, uid }) {
   const on = (id) => Boolean(installed[id]);
   const fade = (visible, max = 1) => ({ opacity: visible ? max : 0 });
   const roofLines = [76, 94, 112, 130].map(y => {
@@ -675,36 +884,9 @@ function HouseScene({ installed, uid }) {
   ].join('');
 
   return (
-    <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="block w-full h-auto" aria-hidden="true">
-      <defs>
-        <radialGradient id={`${uid}-warm`} cx="50%" cy="35%" r="60%">
-          <stop offset="0%" stopColor="#ffd27a" stopOpacity=".6" />
-          <stop offset="100%" stopColor="#ffd27a" stopOpacity="0" />
-        </radialGradient>
-        <clipPath id={`${uid}-living`}><rect x="70" y="272" width="166" height="94" /></clipPath>
-        <clipPath id={`${uid}-solar`}><rect x="-2" y="-2" width="124" height="66" rx="3" /></clipPath>
-      </defs>
-
-      {/* Sky */}
-      <g className="hb-sun" style={{ transformOrigin: '444px 46px' }}>
-        {Array.from({ length: 8 }, (_, i) => (
-          <rect key={i} x="442" y="15" width="4" height="10" rx="2" fill="#ffd27a" transform={`rotate(${i * 45} 444 46)`} />
-        ))}
-      </g>
-      <circle cx="444" cy="46" r="15" fill="#ffd27a" />
-      <g className="hb-cloud" style={{ animationDuration: '70s', animationDelay: '-20s' }}><Cloud y={22} s={1} /></g>
-      <g className="hb-cloud" style={{ animationDuration: '95s', animationDelay: '-70s' }}><Cloud y={6} s={0.7} /></g>
-
-      {/* Ground, a tree and a hedge */}
-      <rect x="0" y="376" width={VIEW_W} height="24" fill="#bfe6cf" />
-      <rect x="0" y="376" width={VIEW_W} height="3" fill="#a5d9b9" />
-      <rect x="455" y="332" width="6" height="46" rx="2" fill="#a86f45" />
-      <g className="hb-sway" style={{ transformOrigin: '458px 378px' }}>
-        <circle cx="458" cy="318" r="22" fill="#3fae86" />
-        <circle cx="444" cy="330" r="14" fill="#4fbf96" />
-        <circle cx="471" cy="328" r="13" fill="#2f9e78" />
-        <circle cx="454" cy="304" r="11" fill="#62cca4" />
-      </g>
+    <g>
+      {/* A tree and a hedge either side */}
+      <Tree x={458} ground={378} h={80} />
       <circle cx="18" cy="370" r="9" fill="#4fbf96" />
       <circle cx="32" cy="367" r="11" fill="#3fae86" />
       <circle cx="46" cy="371" r="8" fill="#4fbf96" />
@@ -807,6 +989,6 @@ function HouseScene({ installed, uid }) {
           <circle className="hb-ring" cx={p.box[0] / 2} cy={p.box[1] / 2} r={Math.max(...p.box) / 2 + 4} fill="none" stroke="#00a896" strokeWidth="3" />
         </g>
       ))}
-    </svg>
+    </g>
   );
 }

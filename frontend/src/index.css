@@ -434,7 +434,8 @@
   to { transform: scale(1.5); opacity: 0; }
 }
 .hb-sun {
-  transform-box: view-box;
+  transform-box: fill-box;
+  transform-origin: center;
   animation: hbSpin 24s linear infinite;
 }
 @keyframes hbSpin {
@@ -445,10 +446,11 @@
 }
 @keyframes hbCloud {
   from { transform: translateX(-90px); }
-  to { transform: translateX(520px); }
+  to { transform: translateX(var(--cloud-to, 520px)); }
 }
 .hb-sway {
-  transform-box: view-box;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
   animation: hbSway 4s ease-in-out infinite alternate;
 }
 @keyframes hbSway {
@@ -516,7 +518,27 @@
   from { transform: translate(0, 0) rotate(0); opacity: 1; }
   to { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; }
 }
+/* The handyman hops each time he has something new to say, and his bubble pops in from the
+   corner its tail is on. */
+.hb-hop {
+  transform-origin: 50% 100%;
+  animation: hbHop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+@keyframes hbHop {
+  0% { transform: translateY(0) scale(1, 1); }
+  30% { transform: translateY(-10px) scale(0.97, 1.03); }
+  100% { transform: translateY(0) scale(1, 1); }
+}
+.hb-bubble {
+  transform-origin: 100% 100%;
+  animation: hbBubble 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes hbBubble {
+  from { transform: scale(0.85); opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
+  .hb-hop,
+  .hb-bubble,
   .hb-pop,
   .hb-ring,
   .hb-sun,

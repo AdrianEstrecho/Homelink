@@ -38,7 +38,7 @@ export default function Team() {
   return (
     <div>
       {/* Header */}
-      <section className="pt-16 pb-16 md:pt-20 md:pb-20">
+      <section className="pt-16 pb-14 md:pt-20 md:pb-16">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <p className="eyebrow justify-center mb-4"><Users className="w-3.5 h-3.5" /> Meet the Team</p>
           <h1 className="section-title mb-4">The people behind HomeLink</h1>
@@ -47,10 +47,10 @@ export default function Team() {
             HomeLink was designed and built by this team of developers.
           </p>
         </div>
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 mt-10 md:mt-12">
-          <HomeBuilder />
-        </div>
       </section>
+
+      {/* A whole street to play in; its road runs straight into the team section below. */}
+      <HomeBuilder />
 
       {/* Members */}
       <section className="relative overflow-hidden py-16 md:py-20 bg-gradient-to-br from-brand-navy to-brand-blue">
