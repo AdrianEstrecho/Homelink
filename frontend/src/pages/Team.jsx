@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Bot, Check, Github, LayoutDashboard, Linkedin, Mail, Server, ShoppingBag, Smartphone, Users, Wrench, X } from 'lucide-react';
 import Reveal from '../components/Reveal';
-import DeliveryLane from '../components/DeliveryLane';
+import HomeBuilder from '../components/HomeBuilder';
 import Modal, { ModalBody, ModalTitle, modalButton } from '../components/Modal';
 import MemberCard from '../components/team/MemberCard';
 import MemberAvatar from '../components/team/MemberAvatar';
@@ -37,8 +37,8 @@ export default function Team() {
 
   return (
     <div>
-      {/* Header — the delivery lane's road runs straight into the team section below. */}
-      <section className="pt-16 md:pt-20">
+      {/* Header */}
+      <section className="pt-16 pb-16 md:pt-20 md:pb-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <p className="eyebrow justify-center mb-4"><Users className="w-3.5 h-3.5" /> Meet the Team</p>
           <h1 className="section-title mb-4">The people behind HomeLink</h1>
@@ -47,7 +47,9 @@ export default function Team() {
             HomeLink was designed and built by this team of developers.
           </p>
         </div>
-        <DeliveryLane className="mt-6 md:mt-8" />
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-10 md:mt-12">
+          <HomeBuilder />
+        </div>
       </section>
 
       {/* Members */}
@@ -85,8 +87,9 @@ export default function Team() {
             </div>
           )}
 
-          {/* Flex rather than grid so an incomplete last row sits centered. */}
-          <div className="flex flex-wrap justify-center gap-3 sm:gap-5">
+          {/* Flex rather than grid so an incomplete last row sits centered; the taller row gap
+              leaves room for the next row's lanyards. */}
+          <div className="flex flex-wrap justify-center gap-x-3 gap-y-6 sm:gap-x-5 sm:gap-y-8">
             {shown.map((m, i) => (
               <Reveal key={m.slug} delay={i * 80} className="w-[calc(50%-0.375rem)] sm:w-[calc(33.333%-0.834rem)] lg:w-[calc(20%-1rem)]">
                 <MemberCard member={m} index={TEAM.indexOf(m)} onOpen={() => openMember(m.slug)} />

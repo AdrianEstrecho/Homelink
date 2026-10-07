@@ -1,61 +1,93 @@
-import { ArrowUpRight } from 'lucide-react';
+import { useRef } from 'react';
+import { ArrowUpRight, Home } from 'lucide-react';
 import MemberAvatar from './MemberAvatar';
 import { fullNameOf } from '../../data/team';
 
-const TILT = 8; // degrees at the card's edges
+const SWING = 7; // degrees at the badge's edges
 
-// One teammate on /team. Leans toward the pointer and glows in the member's own accent; the
-// pointer position goes straight onto CSS variables (.team-card in index.css) rather than
-// state, so tracking it never re-renders. Touch and pen get the glow but not the lean.
+// Barcode bars made from the slug, so every badge has its own code and it never changes.
+function barcodeFor(slug) {
+  const bars = [];
+  let x = 0;
+  for (const ch of slug.replace(/-/g, '')) {
+    const code = ch.charCodeAt(0);
+    const w = 1 + (code % 3);
+    bars.push({ x, w });
+    x += w + 1 + ((code >> 2) % 2);
+  }
+  return { bars, width: x };
+}
+
+// One teammate on /team, drawn as a HomeLink staff ID badge on a lanyard. It swings toward the
+// pointer from where the lanyard hangs (the angle goes straight onto a CSS variable, so it never
+// re-renders) and wobbles to rest when it first scrolls into view (.badge-* in index.css).
 export default function MemberCard({ member, index, onOpen }) {
+  const hangerRef = useRef(null);
+  const { bars, width } = barcodeFor(member.slug);
+  const number = String(index + 1).padStart(2, '0');
+
   const handleMove = (e) => {
-    const el = e.currentTarget;
-    const rect = el.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    el.style.setProperty('--spot-x', `${x}px`);
-    el.style.setProperty('--spot-y', `${y}px`);
     if (e.pointerType !== 'mouse') return;
-    el.style.setProperty('--tilt-x', `${(0.5 - y / rect.height) * TILT}deg`);
-    el.style.setProperty('--tilt-y', `${(x / rect.width - 0.5) * TILT}deg`);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    hangerRef.current.style.setProperty('--swing', `${-x * SWING}deg`);
   };
 
-  const handleLeave = (e) => {
-    e.currentTarget.style.setProperty('--tilt-x', '0deg');
-    e.currentTarget.style.setProperty('--tilt-y', '0deg');
+  const handleLeave = () => {
+    hangerRef.current.style.setProperty('--swing', '0deg');
   };
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      onPointerMove={handleMove}
-      onPointerLeave={handleLeave}
-      aria-haspopup="dialog"
-      aria-label={`${fullNameOf(member)}, ${member.role}. View profile`}
-      style={{ '--glow': `${member.color}47` }}
-      className="team-card group relative flex flex-col w-full h-full text-left rounded-2xl border border-white/10 hover:border-white/25 bg-gradient-to-br from-white/[0.10] to-white/[0.03] p-4 sm:p-6 overflow-hidden"
-    >
-      <span className="team-card-glow" aria-hidden="true" />
+    <div className="badge-settle origin-top" style={{ animationDelay: `${index * 90}ms` }}>
+      <div ref={hangerRef} className="badge-hanger flex flex-col items-center">
+        <span aria-hidden="true" className="badge-strap block w-2.5 sm:w-3 h-9 sm:h-11" />
+        <span aria-hidden="true" className="relative z-10 -mb-3.5 block w-6 sm:w-7 h-3.5 rounded-[4px] bg-gradient-to-b from-gray-100 to-gray-400 shadow ring-1 ring-black/10" />
 
-      <span className="relative flex items-start justify-between gap-2">
-        <MemberAvatar
-          member={member}
-          className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl shadow-lg shadow-black/20 transition-transform duration-500 group-hover:scale-105 group-hover:-rotate-3"
-          textClassName="text-lg sm:text-2xl"
-        />
-        <span className="font-display font-black tabular-nums text-sm text-white/20">.{String(index + 1).padStart(2, '0')}</span>
-      </span>
+        <button
+          type="button"
+          onClick={onOpen}
+          onPointerMove={handleMove}
+          onPointerLeave={handleLeave}
+          aria-haspopup="dialog"
+          aria-label={`${fullNameOf(member)}, ${member.role}. View profile`}
+          className="badge-card group relative block w-full text-left rounded-2xl bg-white overflow-hidden"
+        >
+          <span className={`relative block h-[76px] sm:h-[88px] bg-gradient-to-br ${member.gradient}`}>
+            <span aria-hidden="true" className="badge-grid absolute inset-0" />
+            <span aria-hidden="true" className="absolute top-2.5 left-1/2 -translate-x-1/2 w-9 h-2 rounded-full bg-black/25 shadow-inner" />
+            <span className="absolute top-6 sm:top-7 inset-x-0 flex items-center justify-center gap-1.5 text-white">
+              <span className="w-4 h-4 rounded-[5px] bg-white/25 flex items-center justify-center">
+                <Home className="w-2.5 h-2.5" strokeWidth={2.5} />
+              </span>
+              <span className="font-display text-[11px] font-extrabold tracking-tight">HomeLink</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/75">Dev</span>
+            </span>
+            <span aria-hidden="true" className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/20 text-white flex items-center justify-center transition duration-300 group-hover:bg-white group-hover:text-brand-navy">
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </span>
+          </span>
 
-      <span className="relative block mt-5 sm:mt-7">
-        <span className="block font-display text-lg sm:text-xl font-bold leading-tight text-white">{member.firstName}</span>
-        <span className="block mt-1 text-[11px] sm:text-xs font-semibold uppercase tracking-[0.16em] text-white/50">{member.lastName}</span>
-      </span>
-
-      <span className="relative flex items-center justify-between gap-2 mt-auto pt-5">
-        <span className="badge bg-white/10 text-white/80">{member.role}</span>
-        <ArrowUpRight className="w-4 h-4 shrink-0 text-white/40 transition duration-300 group-hover:text-brand-orange group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-      </span>
-    </button>
+          <span className="relative block -mt-8 sm:-mt-10 px-3 sm:px-4 pb-3.5 sm:pb-4 text-center">
+            <MemberAvatar
+              member={member}
+              className="mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-4 ring-white shadow-lg transition-transform duration-500 group-hover:scale-105"
+              textClassName="text-xl sm:text-2xl"
+            />
+            <span className="block mt-3 font-display text-base sm:text-lg font-extrabold leading-tight text-brand-ink">{member.firstName}</span>
+            <span className="block mt-0.5 text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">{member.lastName}</span>
+            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: member.color }} />
+              {member.role}
+            </span>
+            <span className="mt-3.5 pt-3 flex items-center justify-between gap-2 border-t border-dashed border-gray-200">
+              <span className="font-mono text-[10px] tracking-wider text-gray-400">HL-DEV-{number}</span>
+              <svg aria-hidden="true" viewBox={`0 0 ${width} 14`} className="h-3.5 w-auto text-brand-ink/70">
+                {bars.map(b => <rect key={b.x} x={b.x} width={b.w} height="14" fill="currentColor" />)}
+              </svg>
+            </span>
+          </span>
+        </button>
+      </div>
+    </div>
   );
 }

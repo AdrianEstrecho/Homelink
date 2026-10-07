@@ -374,131 +374,190 @@
   opacity: 1;
 }
 
-/* Member cards on /team (components/team/MemberCard.jsx): a slight lean toward the pointer and
-   a glow in the member's own accent. --tilt-x/--tilt-y and --spot-x/--spot-y are written on
-   pointermove; --glow is the member's color, set inline on the card. */
-.team-card {
-  transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
-  transition: transform 0.25s ease-out, border-color 0.3s ease;
+/* Staff ID badges on /team (components/team/MemberCard.jsx). Two nested rotations, both pivoting
+   where the lanyard hangs from: .badge-settle wobbles to rest once its Reveal wrapper scrolls
+   in, and .badge-hanger swings toward the pointer (--swing is written on pointermove) on a
+   springy curve, so letting go overshoots once before settling. */
+.reveal-in .badge-settle {
+  animation: badgeSettle 1.8s cubic-bezier(0.3, 0.6, 0.4, 1) both;
 }
-.team-card-glow {
+@keyframes badgeSettle {
+  0% { transform: rotate(9deg); }
+  25% { transform: rotate(-6deg); }
+  50% { transform: rotate(3.5deg); }
+  72% { transform: rotate(-1.5deg); }
+  100% { transform: rotate(0); }
+}
+.badge-hanger {
+  transform: rotate(var(--swing, 0deg));
+  transform-origin: top center;
+  transition: transform 0.7s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.badge-strap {
+  border-radius: 2px;
+  background: repeating-linear-gradient(180deg, #ff6b35 0 7px, #ff8f66 7px 9px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 65%);
+  mask-image: linear-gradient(to bottom, transparent, #000 65%);
+}
+.badge-card {
+  box-shadow: 0 18px 36px -16px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: box-shadow 0.3s ease;
+}
+.badge-card:hover {
+  box-shadow: 0 26px 48px -18px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+/* Laminate glare that sweeps across the badge on hover. */
+.badge-card::after {
+  content: '';
   position: absolute;
   inset: 0;
-  opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s ease;
-  background: radial-gradient(280px circle at var(--spot-x, 50%) var(--spot-y, 30%), var(--glow), transparent 70%);
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.45) 50%, transparent 65%);
+  transform: translateX(-120%);
 }
-.team-card:hover .team-card-glow,
-.team-card:focus-visible .team-card-glow {
-  opacity: 1;
+.badge-card:hover::after {
+  transform: translateX(120%);
+  transition: transform 0.9s ease;
+}
+.badge-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.14) 1px, transparent 1px);
+  background-size: 12px 12px;
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+  mask-image: linear-gradient(to bottom, #000, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
-  .team-card { transform: none; }
+  .reveal-in .badge-settle { animation: none; }
+  .badge-hanger { transform: none; transition: none; }
+  .badge-card::after { display: none; }
 }
 
-/* Delivery lane (components/DeliveryLane.jsx). The truck itself is moved from JS; these are the
-   ambient bits around it — drifting clouds, a bouncing chassis and rattling cargo, the AC fan,
-   the camera LEDs, a smart home's lights — plus the one-shot honk and delivery pops. The pops
-   animate an inner element so the wrapper's centering transform is left alone. */
-.lane-cloud {
-  animation: laneCloud linear infinite;
+/* House builder (components/HomeBuilder.jsx): the scenery's ambient motion, what each product
+   does once it's installed, and the pops and confetti that answer a correct drop. SVG pieces
+   that rotate or scale about their own middle use transform-box: fill-box; ones that pivot on a
+   point in the drawing set that point inline against transform-box: view-box. */
+.hb-fade {
+  transition: opacity 0.8s ease;
 }
-@keyframes laneCloud {
-  from { transform: translateX(-140px); }
-  to { transform: translateX(100vw); }
-}
-.lane-bob {
-  animation: laneBob 0.45s ease-in-out infinite alternate;
-}
-@keyframes laneBob {
-  to { transform: translateY(-1.2px); }
-}
-.lane-jiggle {
-  transform-box: fill-box;
-  transform-origin: center bottom;
-  animation: laneJiggle 0.6s ease-in-out infinite alternate;
-}
-@keyframes laneJiggle {
-  to { transform: translateY(-1.5px) rotate(-1deg); }
-}
-.lane-fan {
+.hb-pop {
   transform-box: fill-box;
   transform-origin: center;
-  animation: laneSpin 0.8s linear infinite;
+  animation: hbPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-@keyframes laneSpin {
+@keyframes hbPop {
+  from { transform: scale(0.3); opacity: 0; }
+}
+.hb-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hbRing 0.8s ease-out forwards;
+}
+@keyframes hbRing {
+  from { transform: scale(0.5); opacity: 0.9; }
+  to { transform: scale(1.5); opacity: 0; }
+}
+.hb-sun {
+  transform-box: view-box;
+  animation: hbSpin 24s linear infinite;
+}
+@keyframes hbSpin {
   to { transform: rotate(360deg); }
 }
-.lane-led {
-  animation: laneBlink 1.6s steps(1) infinite;
+.hb-cloud {
+  animation: hbCloud linear infinite;
 }
-@keyframes laneBlink {
-  50% { opacity: 0.15; }
+@keyframes hbCloud {
+  from { transform: translateX(-90px); }
+  to { transform: translateX(520px); }
 }
-.lane-smart-window {
-  animation: laneLights 6s ease-in-out infinite;
+.hb-sway {
+  transform-box: view-box;
+  animation: hbSway 4s ease-in-out infinite alternate;
 }
-@keyframes laneLights {
-  0%, 35% { fill: #bfdcf5; }
-  50%, 85% { fill: #ffd27a; }
-  100% { fill: #bfdcf5; }
+@keyframes hbSway {
+  from { transform: rotate(-1.5deg); }
+  to { transform: rotate(1.5deg); }
 }
-.lane-puff {
-  animation: lanePuff 1.2s ease-out infinite;
+.hb-glint {
+  animation: hbGlint 4.5s ease-in-out infinite;
 }
-@keyframes lanePuff {
-  from { transform: translate(0, 0) scale(0.5); opacity: 0.6; }
-  to { transform: translate(-22px, -8px) scale(1.6); opacity: 0; }
+@keyframes hbGlint {
+  0%, 50% { transform: translateX(0) skewX(-20deg); }
+  100% { transform: translateX(170px) skewX(-20deg); }
 }
-.lane-honk {
-  animation: laneHonk 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.hb-blink {
+  animation: hbBlink 1.4s steps(1) infinite;
 }
-@keyframes laneHonk {
-  0% { opacity: 0; transform: translateY(6px) scale(0.6); }
-  15% { opacity: 1; transform: translateY(0) scale(1); }
-  75% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-6px); }
+@keyframes hbBlink {
+  50% { opacity: 0.2; }
 }
-.lane-badge {
-  animation: laneBadge 2.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.hb-air {
+  animation: hbAir 2s ease-out infinite;
 }
-@keyframes laneBadge {
-  0% { opacity: 0; transform: translateY(8px) scale(0.7); }
-  15% { opacity: 1; transform: translateY(0) scale(1); }
-  80% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-6px); }
+@keyframes hbAir {
+  from { transform: translateY(-4px); opacity: 0.9; }
+  to { transform: translateY(14px); opacity: 0; }
 }
-.lane-drop {
-  animation: laneDrop 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.hb-drip {
+  stroke-dasharray: 3 7;
+  animation: hbDrip 0.6s linear infinite;
 }
-@keyframes laneDrop {
-  0% { opacity: 0; transform: translateY(16px) scale(0.5); }
-  18% { opacity: 1; transform: translateY(-8px) scale(1); }
-  30% { transform: translateY(0); }
-  80% { opacity: 1; }
-  100% { opacity: 0; }
+@keyframes hbDrip {
+  to { stroke-dashoffset: -10; }
 }
-@keyframes laneFadeOut {
-  0% { opacity: 0; }
-  10%, 80% { opacity: 1; }
-  100% { opacity: 0; }
+.hb-steam {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hbSteam 2.6s ease-out infinite;
+}
+@keyframes hbSteam {
+  from { transform: translateY(0) scale(0.6); opacity: 0.7; }
+  to { transform: translateY(-26px) scale(1.5); opacity: 0; }
+}
+.hb-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hbGlow 2.4s ease-in-out infinite alternate;
+}
+@keyframes hbGlow {
+  from { opacity: 0.25; transform: scale(0.9); }
+  to { opacity: 0.5; transform: scale(1.1); }
+}
+.hb-scan {
+  transform-box: fill-box;
+  transform-origin: 100% 0%;
+  animation: hbScan 3s ease-in-out infinite alternate;
+}
+@keyframes hbScan {
+  from { transform: rotate(-12deg); }
+  to { transform: rotate(12deg); }
+}
+.hb-confetti {
+  animation: hbConfetti 1.6s cubic-bezier(0.2, 0.6, 0.4, 1) forwards;
+}
+@keyframes hbConfetti {
+  from { transform: translate(0, 0) rotate(0); opacity: 1; }
+  to { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lane-cloud,
-  .lane-bob,
-  .lane-jiggle,
-  .lane-fan,
-  .lane-led,
-  .lane-smart-window {
+  .hb-pop,
+  .hb-ring,
+  .hb-sun,
+  .hb-cloud,
+  .hb-sway,
+  .hb-glint,
+  .hb-blink,
+  .hb-air,
+  .hb-drip,
+  .hb-steam,
+  .hb-glow,
+  .hb-scan {
     animation: none;
   }
-  .lane-puff { display: none; }
-  .lane-honk,
-  .lane-badge,
-  .lane-drop {
-    animation-name: laneFadeOut;
-  }
+  .hb-ring,
+  .hb-confetti,
+  .hb-glint { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
