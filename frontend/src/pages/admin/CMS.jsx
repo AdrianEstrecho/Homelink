@@ -164,8 +164,8 @@ function GalleryTab({ onRequestDelete }) {
   return (
     <div>
       <SectionHeader
-        title="About Page Gallery"
-        subtitle="Photos shown in the gallery grid on the About page."
+        title="Project Gallery"
+        subtitle="Photos shown in the mobile app's Project Gallery."
         action={!showForm && <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 text-sm py-2"><Plus className="w-4 h-4" /> Add Photo</button>}
       />
 
@@ -373,8 +373,8 @@ function PoliciesTab({ onRequestDelete }) {
 
 // ---------- Page Text ----------
 const PAGE_TEXT_FIELDS = [
-  { key: 'about_heading', label: 'About Page Heading' },
-  { key: 'about_intro', label: 'About Page Intro', multiline: true },
+  { key: 'about_heading', label: 'About HomeLink Heading' },
+  { key: 'about_intro', label: 'About HomeLink Intro', multiline: true },
   { key: 'contact_address', label: 'Contact Address', multiline: true },
   { key: 'contact_phone', label: 'Contact Phone' },
   { key: 'contact_email', label: 'Contact Email' },
@@ -403,7 +403,7 @@ function PageTextTab() {
 
   return (
     <form onSubmit={handleSave} className="max-w-2xl space-y-4">
-      <SectionHeader title="Page Text" subtitle="Editable copy used on the About and Contact (Location) pages." />
+      <SectionHeader title="Page Text" subtitle="Editable copy about HomeLink (the assistant answers from it) and for the Contact (Location) page." />
       {notice && <p className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg px-3 py-2">{notice}</p>}
       <div className="card p-5 space-y-4">
         {PAGE_TEXT_FIELDS.map(f => (

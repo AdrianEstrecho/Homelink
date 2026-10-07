@@ -11,6 +11,7 @@ import HowItWorks from '../components/home/HowItWorks';
 import ServicesShowcase from '../components/home/ServicesShowcase';
 import Testimonials from '../components/home/Testimonials';
 import SpotlightCard from '../components/home/SpotlightCard';
+import SplitText from '../components/SplitText';
 import CategoryTile, { countLabel } from '../components/CategoryTile';
 import { getCategoryIcon } from '../constants/categoryIcons';
 import { ProductCardSkeleton, CategorySkeleton } from '../components/Skeleton';
@@ -145,7 +146,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <Reveal className="text-center max-w-xl mx-auto mb-12">
             <p className="eyebrow justify-center mb-3">What We Offer</p>
-            <h2 className="section-title">Shop by category</h2>
+            <h2 className="section-title"><SplitText text="Shop by category" /></h2>
           </Reveal>
           <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-3 sm:gap-4">
             {categories.loading ? (
@@ -176,7 +177,7 @@ export default function Home() {
           <Reveal className="flex justify-between items-end mb-10 gap-4">
             <div>
               <p className="eyebrow mb-3">Handpicked</p>
-              <h2 className="section-title">Featured products</h2>
+              <h2 className="section-title"><SplitText text="Featured products" /></h2>
             </div>
             <Link to="/products" className="shrink-0 text-brand-navy font-semibold hover:text-brand-orange transition flex items-center gap-1.5 group">
               View All <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
@@ -192,9 +193,7 @@ export default function Home() {
             ) : (
               featuredProducts.map((p, i) => (
                 <Reveal key={p.id} delay={i * 70} className="h-full">
-                  <div className="h-full transition-transform duration-300 hover:-translate-y-1.5">
-                    <ProductCard product={p} />
-                  </div>
+                  <ProductCard product={p} />
                 </Reveal>
               ))
             )}
@@ -212,7 +211,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-5 gap-10 lg:gap-14 items-center">
           <Reveal className="lg:col-span-2">
             <p className="eyebrow mb-3">Shop With Confidence</p>
-            <h2 className="section-title text-white mb-4">Protected from checkout to completion</h2>
+            <h2 className="section-title text-white mb-4"><SplitText text="Protected from checkout to completion" /></h2>
             <p className="text-white/70 leading-relaxed mb-8">
               Clear policies, secure payments, and a support team that answers. Here’s what comes with every HomeLink order and booking.
             </p>
@@ -255,7 +254,7 @@ export default function Home() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-5 gap-10 lg:gap-14 items-start">
             <Reveal className="lg:col-span-2">
               <p className="eyebrow mb-3">Need Help?</p>
-              <h2 className="section-title mb-4">Questions, answered</h2>
+              <h2 className="section-title mb-4"><SplitText text="Questions, answered" /></h2>
               <p className="text-gray-500 leading-relaxed mb-8">
                 Quick answers to what homeowners ask us most. Can’t find yours? Our support team is a call or an email away.
               </p>
@@ -323,7 +322,7 @@ export default function Home() {
           <div className="float-blob-delayed absolute -bottom-24 right-1/4 w-80 h-80 bg-brand-teal rounded-full blur-3xl" />
         </div>
         <Reveal className="relative max-w-3xl mx-auto px-4 text-center">
-          <h2 className="font-display text-3xl md:text-5xl font-extrabold tracking-tight mb-5">Ready to upgrade your home?</h2>
+          <h2 className="font-display text-3xl md:text-5xl font-extrabold tracking-tight mb-5"><SplitText text="Ready to upgrade your home?" /></h2>
           <p className="text-gray-300 mb-10 max-w-lg mx-auto">Join thousands of homeowners who trust HomeLink for their home improvement needs.</p>
           <Link to="/register" className="btn-primary inline-flex items-center gap-2">Get Started Free <ArrowRight className="w-4 h-4" /></Link>
         </Reveal>

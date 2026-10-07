@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingCart, Star, Check, Heart } from 'lucide-react';
 import { formatPrice } from '../api/client';
@@ -7,6 +7,8 @@ import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '../context/ToastContext';
 import { useLoginPrompt } from '../hooks/useLoginPrompt';
+import { useTilt } from '../hooks/useTilt';
+import { flyToCart } from '../utils/flyToCart';
 import SafeImage from './SafeImage';
 import StarRating from './account/StarRating';
 import ConfirmDialog from './ConfirmDialog';
@@ -19,11 +21,16 @@ export default function ProductCard({ product }) {
   const promptLogin = useLoginPrompt();
   const [confirmUnfavorite, setConfirmUnfavorite] = useState(false);
   const [confirmAddToCart, setConfirmAddToCart] = useState(false);
+  // Bumped on every save to the wishlist; keys the heart's pop and spark burst so each replays.
+  const [hearts, setHearts] = useState(0);
+  const imageRef = useRef(null);
+  const tilt = useTilt();
   const outOfStock = product.stock === 0;
   const lowStock = !outOfStock && product.stock <= 5;
   const wishlisted = has(product.id);
 
   const addToCart = () => {
+    flyToCart(imageRef.current);
     addItem(product);
     if (wishlisted) removeWishlistItem(product.id);
     showToast({
@@ -52,6 +59,7 @@ export default function ProductCard({ product }) {
     if (user?.role !== 'customer') { promptLogin('Log in to save items to your wishlist.'); return; }
     if (wishlisted) { setConfirmUnfavorite(true); return; }
     addWishlistItem(product);
+    setHearts(n => n + 1);
   };
 
   const handleConfirmUnfavorite = () => {
@@ -61,10 +69,11 @@ export default function ProductCard({ product }) {
 
   return (
     <>
-    <div className="card group hover:border-brand-navy/20 hover:shadow-md h-full flex flex-col">
+    <div {...tilt} className="card tilt group relative hover:border-brand-navy/20 h-full flex flex-col">
       <div className="relative overflow-hidden bg-gray-100">
         <Link to={`/products/${product.slug}`} className="block">
           <SafeImage
+            ref={imageRef}
             src={product.image}
             alt={product.name}
             className="w-full h-48 object-cover group-hover:scale-105 transition duration-500"
@@ -84,9 +93,14 @@ export default function ProductCard({ product }) {
           onClick={handleWishlistToggle}
           aria-label={wishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
           aria-pressed={wishlisted}
-          className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-sm hover:scale-110 transition"
+          className="absolute z-10 top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow-sm hover:scale-110 transition"
         >
-          <Heart className={`w-4 h-4 transition ${wishlisted ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} />
+          <Heart key={`heart-${hearts}`} className={`w-4 h-4 transition ${hearts ? 'heart-pop' : ''} ${wishlisted ? 'fill-red-500 text-red-500' : 'text-gray-500'}`} />
+          {hearts > 0 && (
+            <span key={`burst-${hearts}`} className="heart-burst" aria-hidden="true">
+              {[0, 60, 120, 180, 240, 300].map(a => <i key={a} style={{ '--a': `${a}deg` }} />)}
+            </span>
+          )}
         </button>
       </div>
       <div className="p-5 flex flex-col flex-1">
@@ -115,6 +129,7 @@ export default function ProductCard({ product }) {
           </button>
         </div>
       </div>
+      <span className="tilt-glare" aria-hidden="true" />
     </div>
     <ConfirmDialog
       open={confirmUnfavorite}

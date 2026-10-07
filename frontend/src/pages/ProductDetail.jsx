@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Check, ChevronRight, Truck, ShieldCheck, Wrench, Star, Zap, Heart, PackageCheck, AlertTriangle, XCircle, RotateCcw, Headset } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
@@ -8,6 +8,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '../context/ToastContext';
 import { useLoginPrompt } from '../hooks/useLoginPrompt';
 import { specEntries, toHighlights } from '../utils/catalogSpecs';
+import { flyToCart } from '../utils/flyToCart';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
 import ProductCard from '../components/ProductCard';
@@ -42,6 +43,7 @@ export default function ProductDetail() {
   const [product, setProduct] = useState(null);
   const [error, setError] = useState(false);
   const [qty, setQty] = useState(1);
+  const imageRef = useRef(null);
   const { user } = useAuth();
   const { addItem } = useCart();
   const { has, addItem: addWishlistItem, removeItem: removeWishlistItem } = useWishlist();
@@ -113,6 +115,7 @@ export default function ProductDetail() {
   const wishlisted = has(product.id);
 
   const addToCart = () => {
+    flyToCart(imageRef.current);
     addItem(product, qty);
     if (wishlisted) removeWishlistItem(product.id);
     showToast({
@@ -179,7 +182,7 @@ export default function ProductDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 xl:gap-12 items-start">
         <div className="space-y-4">
           <Reveal className="card relative">
-            <SafeImage src={product.image} alt={product.name} className="w-full h-96 lg:h-[28rem] object-cover" />
+            <SafeImage ref={imageRef} src={product.image} alt={product.name} className="w-full h-96 lg:h-[28rem] object-cover" />
             {product.featured && (
               <span className="absolute top-4 left-4 badge bg-brand-orange text-white flex items-center gap-1">
                 <Star className="w-3 h-3" /> Featured

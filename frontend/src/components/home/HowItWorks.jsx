@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Check, ShoppingCart, Search, CreditCard, Truck, Wrench, CalendarCheck, UserCheck, Activity } from 'lucide-react';
 import Reveal from '../Reveal';
+import SplitText from '../SplitText';
 
 // Mirrors the real customer flows: ORDER_STEPS / BOOKING_STEPS in
 // backend/utils/tracking.js and the methods in PaymentMethodPicker.jsx.
@@ -71,7 +72,7 @@ export default function HowItWorks() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <Reveal className="text-center max-w-xl mx-auto mb-8">
           <p className="eyebrow justify-center mb-3">How It Works</p>
-          <h2 className="section-title">From checkout to a job well done</h2>
+          <h2 className="section-title"><SplitText text="From checkout to a job well done" /></h2>
           <p className="text-gray-500 mt-3 leading-relaxed">Whether you’re buying a product or booking a pro, every step happens in one place.</p>
         </Reveal>
 

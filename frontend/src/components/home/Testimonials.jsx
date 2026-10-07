@@ -3,6 +3,7 @@ import Reveal from '../Reveal';
 import ErrorState from '../ErrorState';
 import StarRating from '../account/StarRating';
 import { ReviewCardSkeleton } from '../Skeleton';
+import SplitText from '../SplitText';
 
 // A loop narrower than the viewport would show an empty gap before its
 // duplicate scrolls in, so short review lists are repeated up to this many.
@@ -45,7 +46,7 @@ export default function Testimonials({ reviews, onRetry }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <Reveal className="text-center max-w-xl mx-auto mb-10">
           <p className="eyebrow justify-center mb-3">Testimonials</p>
-          <h2 className="section-title">What our customers say</h2>
+          <h2 className="section-title"><SplitText text="What our customers say" /></h2>
           <p className="text-gray-500 mt-3">Real reviews from homeowners who bought through HomeLink.</p>
         </Reveal>
         {reviews.loading ? (

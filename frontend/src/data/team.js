@@ -1,4 +1,4 @@
-// The development team shown on /team (and the avatar strip on /about). Everything a member's
+// The development team shown on /team. Everything a member's
 // card and profile dialog show comes from here, so filling in a field below is all it takes to
 // put it on the page — empty ones (bio, contributions, links, photo) are simply left out.
 //

@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
 import { Skeleton } from '../components/Skeleton';
+import SplitText from '../components/SplitText';
 
 function getOpenStatus() {
   const now = new Date();
@@ -48,7 +49,7 @@ export default function Location() {
     <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-16 pb-20">
       <div className="mb-10">
         <p className="eyebrow mb-3">Visit Us</p>
-        <h1 className="section-title mb-2">Find Us</h1>
+        <h1 className="section-title mb-2"><SplitText text="Find Us" /></h1>
         <p className="text-gray-500 max-w-lg">Visit our showroom, call ahead, or get directions straight from your map app.</p>
       </div>
 

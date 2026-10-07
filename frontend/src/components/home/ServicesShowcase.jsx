@@ -4,6 +4,7 @@ import Reveal from '../Reveal';
 import ServiceCard from '../ServiceCard';
 import ErrorState from '../ErrorState';
 import { ServiceCardSkeleton } from '../Skeleton';
+import SplitText from '../SplitText';
 
 const VISIBLE = 4;
 
@@ -17,7 +18,7 @@ export default function ServicesShowcase({ services, onRetry }) {
         <Reveal className="flex justify-between items-end mb-10 gap-4">
           <div>
             <p className="eyebrow mb-3">Book a Pro</p>
-            <h2 className="section-title">Popular services</h2>
+            <h2 className="section-title"><SplitText text="Popular services" /></h2>
           </div>
           <Link to="/services" className="shrink-0 text-brand-navy font-semibold hover:text-brand-orange transition flex items-center gap-1.5 group">
             View All <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />

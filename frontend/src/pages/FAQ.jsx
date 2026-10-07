@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HelpCircle, ChevronDown } from 'lucide-react';
 import { api } from '../api/client';
+import SplitText from '../components/SplitText';
 
 export default function FAQ() {
   const [faqs, setFaqs] = useState([]);
@@ -12,7 +13,7 @@ export default function FAQ() {
     <div className="max-w-3xl mx-auto px-4 py-16 md:py-20">
       <div className="text-center mb-16">
         <p className="eyebrow justify-center mb-4"><HelpCircle className="w-3.5 h-3.5" /> Support</p>
-        <h1 className="section-title">Frequently Asked Questions</h1>
+        <h1 className="section-title"><SplitText text="Frequently Asked Questions" /></h1>
         <p className="text-gray-500 mt-3">Answers to the questions we hear most from homeowners.</p>
       </div>
       <div className="divide-y divide-gray-100 border-t border-b border-gray-100">

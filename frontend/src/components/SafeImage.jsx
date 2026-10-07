@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { forwardRef, useState } from 'react';
 import { ImageOff } from 'lucide-react';
 
-export default function SafeImage({ src, alt, className = '', iconClassName = 'w-8 h-8' }) {
+// An <img> that swaps in a placeholder icon if it fails to load, and fades in once it has
+// (.img-pending / .img-in in motion.css). The ref goes to the <img>, e.g. for flyToCart.
+const SafeImage = forwardRef(function SafeImage({ src, alt, className = '', iconClassName = 'w-8 h-8' }, ref) {
   const [failed, setFailed] = useState(false);
+  // Tracked per source, so switching to another picture fades that one in too.
+  const [loadedSrc, setLoadedSrc] = useState(null);
 
   if (failed) {
     return (
@@ -12,5 +16,17 @@ export default function SafeImage({ src, alt, className = '', iconClassName = 'w
     );
   }
 
-  return <img src={src} alt={alt} className={className} loading="lazy" onError={() => setFailed(true)} />;
-}
+  return (
+    <img
+      ref={ref}
+      src={src}
+      alt={alt}
+      className={`${className} ${loadedSrc === src ? 'img-in' : 'img-pending'}`}
+      loading="lazy"
+      onLoad={() => setLoadedSrc(src)}
+      onError={() => setFailed(true)}
+    />
+  );
+});
+
+export default SafeImage;

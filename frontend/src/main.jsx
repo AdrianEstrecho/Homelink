@@ -8,6 +8,7 @@ import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { ToastProvider } from './context/ToastContext';
 import './index.css';
+import './motion.css';
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 

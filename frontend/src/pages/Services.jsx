@@ -8,6 +8,7 @@ import Reveal from '../components/Reveal';
 import CategoryTile, { countLabel } from '../components/CategoryTile';
 import { getServiceCategoryIcon } from '../constants/serviceCategoryIcons';
 import { ServiceCardSkeleton, CategorySkeleton } from '../components/Skeleton';
+import SplitText from '../components/SplitText';
 
 const TRUST_POINTS = [
   { icon: ShieldCheck, label: 'Verified Technicians' },
@@ -54,7 +55,7 @@ export default function Services() {
     <div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-10">
         <p className="eyebrow mb-3">Book a Pro</p>
-        <h1 className="section-title mb-2">Professional Services</h1>
+        <h1 className="section-title mb-2"><SplitText text="Professional Services" /></h1>
         <p className="text-gray-500 max-w-lg mb-5">Book verified technicians for installation, maintenance, and repair.</p>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           {TRUST_POINTS.map(({ icon: Icon, label }) => (

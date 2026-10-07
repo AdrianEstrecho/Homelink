@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { ShoppingCart, Heart, User, Menu, X, Wrench, LayoutDashboard, ShieldCheck, LogOut } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
@@ -13,7 +13,6 @@ const NAV_LINKS = [
   { to: '/', label: 'Home' },
   { to: '/products', label: 'Products' },
   { to: '/services', label: 'Services' },
-  { to: '/about', label: 'About' },
   { to: '/team', label: 'Team' },
   { to: '/location', label: 'Location' },
 ];
@@ -55,6 +54,62 @@ export default function Navbar() {
   const transparent = isHome && !pastHero;
   const solidWhite = isHome && pastHero;
 
+  // One underline for all the links: it slides to whichever link is hovered or
+  // focused and settles back under the current page's (.nav-indicator in
+  // motion.css). Written straight onto the element, so hovering never re-renders.
+  const linksRef = useRef(null);
+  const indicatorRef = useRef(null);
+  const moveIndicator = useCallback((link) => {
+    const bar = indicatorRef.current;
+    if (!bar) return;
+    if (!link) {
+      bar.style.opacity = '0';
+      return;
+    }
+    // The first placement jumps there rather than sliding in from the left edge.
+    const first = !bar.dataset.placed;
+    if (first) bar.style.transition = 'none';
+    bar.style.opacity = '1';
+    bar.style.width = `${link.offsetWidth}px`;
+    bar.style.transform = `translateX(${link.offsetLeft}px)`;
+    if (first) {
+      void bar.offsetWidth;
+      bar.style.transition = '';
+      bar.dataset.placed = '1';
+    }
+  }, []);
+  const settleIndicator = useCallback(() => {
+    moveIndicator(linksRef.current?.querySelector('[aria-current="page"]'));
+  }, [moveIndicator]);
+
+  useLayoutEffect(() => {
+    settleIndicator();
+    // The webfont swapping in changes how wide each link is.
+    document.fonts?.ready.then(settleIndicator);
+    window.addEventListener('resize', settleIndicator);
+    return () => window.removeEventListener('resize', settleIndicator);
+  }, [location.pathname, settleIndicator]);
+
+  // How far down the page the reader is, as a thin line along the top edge.
+  const progressRef = useRef(null);
+  useEffect(() => {
+    const bar = progressRef.current;
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.transform = `scaleX(${max > 0 ? Math.min(1, window.scrollY / max) : 0})`;
+    };
+    const onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [location.pathname]);
+
   const requestLogout = () => { setOpen(false); setConfirmLogout(true); };
   // Full reload (not client-side navigate) so any logged-in-only state cached
   // in memory across the app — cart, account data, etc. — is cleared for good.
@@ -90,18 +145,27 @@ export default function Navbar() {
           : 'bg-gradient-to-b from-brand-navy/95 to-brand-navy/80 backdrop-blur-xl border-b border-white/10'
       }`}
     >
+      <span
+        ref={progressRef}
+        aria-hidden="true"
+        className="nav-progress absolute top-0 left-0 w-full h-[2px] origin-left bg-gradient-to-r from-brand-orange to-amber-400"
+        style={{ transform: 'scaleX(0)' }}
+      />
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-20">
           <Link to="/" className="group">
             <Logo tone={solidWhite ? 'navy' : 'white'} markClassName="w-11" />
           </Link>
 
-          <div className="hidden md:flex items-stretch gap-8 h-full">
+          <div ref={linksRef} onMouseLeave={settleIndicator} className="relative hidden md:flex items-stretch gap-8 h-full">
             {NAV_LINKS.map(link => (
               <Link
                 key={link.to}
                 to={link.to}
                 aria-current={isActive(link.to) ? 'page' : undefined}
+                onMouseEnter={e => moveIndicator(e.currentTarget)}
+                onFocus={e => moveIndicator(e.currentTarget)}
+                onBlur={settleIndicator}
                 className={`relative flex items-center text-sm font-medium tracking-wide transition ${
                   isActive(link.to)
                     ? solidWhite ? 'text-brand-navy' : 'text-white'
@@ -109,9 +173,14 @@ export default function Navbar() {
                 }`}
               >
                 {link.label}
-                {isActive(link.to) && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-orange" />}
               </Link>
             ))}
+            <span
+              ref={indicatorRef}
+              aria-hidden="true"
+              className="nav-indicator absolute bottom-0 left-0 h-0.5 rounded-full bg-brand-orange pointer-events-none"
+              style={{ opacity: 0, width: 0 }}
+            />
           </div>
 
           <div className="flex items-center gap-3">
@@ -122,7 +191,7 @@ export default function Navbar() {
               </Link>
             )}
             {user?.role === 'customer' && (
-              <Link to="/cart" className={`relative p-2 rounded-lg transition ${solidWhite ? 'text-gray-600 hover:bg-gray-100' : 'text-white hover:bg-white/10'}`}>
+              <Link to="/cart" data-cart-target className={`relative p-2 rounded-lg transition ${solidWhite ? 'text-gray-600 hover:bg-gray-100' : 'text-white hover:bg-white/10'}`}>
                 <ShoppingCart className="w-5 h-5" />
                 {count > 0 && <span className="absolute -top-1 -right-1 bg-brand-orange text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold text-white">{count}</span>}
               </Link>

@@ -3,11 +3,13 @@ import { Wrench, Clock, ArrowRight } from 'lucide-react';
 import { formatPrice } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useLoginPrompt } from '../hooks/useLoginPrompt';
+import { useTilt } from '../hooks/useTilt';
 import SafeImage from './SafeImage';
 
 export default function ServiceCard({ service }) {
   const { user } = useAuth();
   const promptLogin = useLoginPrompt();
+  const tilt = useTilt();
 
   const handleBook = (e) => {
     if (user?.role !== 'customer') {
@@ -17,7 +19,7 @@ export default function ServiceCard({ service }) {
   };
 
   return (
-    <div className="card hover:border-brand-navy/20 hover:shadow-md group h-full flex flex-col">
+    <div {...tilt} className="card tilt group relative hover:border-brand-navy/20 h-full flex flex-col">
       <div className="relative h-40 overflow-hidden bg-gray-100">
         <Link to={`/services/${service.slug}`} className="block h-full">
           <SafeImage
@@ -39,9 +41,10 @@ export default function ServiceCard({ service }) {
           <span className="font-bold text-brand-orange text-base">{formatPrice(service.base_price)}</span>
         </div>
         <Link to={`/services/${service.slug}/book`} onClick={handleBook} className="flex items-center justify-center gap-2 w-full btn-primary text-sm py-2">
-          <Wrench className="w-4 h-4" /> Book Service <ArrowRight className="w-4 h-4" />
+          <Wrench className="w-4 h-4" /> Book Service <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
         </Link>
       </div>
+      <span className="tilt-glare" aria-hidden="true" />
     </div>
   );
 }

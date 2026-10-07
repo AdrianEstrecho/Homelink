@@ -10,6 +10,7 @@ import Pagination from '../components/Pagination';
 import CategoryTile, { countLabel } from '../components/CategoryTile';
 import { getCategoryIcon } from '../constants/categoryIcons';
 import { ProductCardSkeleton, CategorySkeleton } from '../components/Skeleton';
+import SplitText from '../components/SplitText';
 
 const PAGE_SIZE = 30;
 
@@ -109,7 +110,7 @@ export default function Products() {
     <div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-10">
         <p className="eyebrow mb-3">Catalog</p>
-        <h1 className="section-title mb-2">Products</h1>
+        <h1 className="section-title mb-2"><SplitText text="Products" /></h1>
         <p className="text-gray-500 max-w-lg">Browse our wide selection of home improvement products, from air conditioning to smart home devices.</p>
       </div>
 

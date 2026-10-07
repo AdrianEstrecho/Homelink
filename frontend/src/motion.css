@@ -1,0 +1,181 @@
+/* The site-wide interaction layer: how headings, cards, buttons, images and the cart respond as
+   people scroll, point and shop. Imported after index.css (main.jsx), so where a rule here
+   restyles a shared class (.btn-primary) it takes over from the one there. Hover effects only
+   apply to a real pointer, and reduced motion keeps everything still. */
+
+/* Section headings (components/SplitText.jsx): each word rises out of its own mask, one after
+   another, once the heading scrolls into view. Words are inline-blocks with overflow hidden,
+   which moves their baseline to the bottom edge, so they're top-aligned to keep the line even;
+   the bottom padding leaves room for descenders. */
+.split-word {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+.split-word > span {
+  display: inline-block;
+  transform: translateY(110%);
+  transition: transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: calc(var(--i) * 60ms + 80ms);
+}
+.split-in .split-word > span {
+  transform: none;
+}
+
+/* Product and service cards (hooks/useTilt.js): on hover a card lifts and leans toward the
+   pointer, and a soft glare follows it. The transform only exists while hovered, so the card is
+   back to a plain, crisply rendered box at rest; leaving eases it home. */
+.tilt {
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+}
+.tilt-glare {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(circle at var(--glare-x, 50%) var(--glare-y, 0%), rgba(255, 255, 255, 0.32), transparent 55%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .tilt:hover {
+    transform: perspective(1000px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(-6px);
+    transition-duration: 0.25s, 0.35s, 0.35s;
+    box-shadow: 0 26px 50px -22px rgba(15, 43, 91, 0.4);
+  }
+  .tilt:hover .tilt-glare {
+    opacity: 1;
+  }
+}
+
+/* Primary buttons: a band of light sweeps across on hover. It's a background image parked off
+   the left edge at rest (so nothing extra is positioned or clipped), and it jumps straight back
+   when the pointer leaves rather than sweeping in reverse. */
+.btn-primary {
+  background-image: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.3) 50%, transparent 65%);
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  background-repeat: no-repeat;
+  transition: background-position 0s, background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+.btn-primary:disabled {
+  background-image: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover {
+    background-position: 0% 0;
+    transition: background-position 0.75s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  }
+}
+
+/* Images (components/SafeImage.jsx) stay hidden until they've loaded, then fade in, instead of
+   painting in top to bottom. `backwards` rather than `both`, so once it's done the image's own
+   opacity classes apply again. */
+.img-pending {
+  opacity: 0;
+}
+.img-in {
+  animation: imgIn 0.6s ease backwards;
+}
+@keyframes imgIn {
+  from { opacity: 0; }
+}
+
+/* Navbar (components/Navbar.jsx): one underline that slides to whichever link is hovered or
+   focused and settles back on the current page, and a reading-progress line along the top. */
+.nav-indicator {
+  transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.2, 1), width 0.45s cubic-bezier(0.2, 0.9, 0.2, 1), opacity 0.25s ease;
+}
+.nav-progress {
+  transition: transform 0.12s linear;
+}
+
+/* Adding to the cart (utils/flyToCart.js): a copy of the product's photo is thrown into the
+   navbar's cart icon, which bounces when it lands. */
+.cart-flyer {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+}
+.cart-flyer > img,
+.cart-flyer > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 2px solid #fff;
+  box-shadow: 0 14px 30px -10px rgba(15, 43, 91, 0.5);
+}
+.cart-flyer > span {
+  background: #ff6b35;
+}
+
+/* Saving to the wishlist (components/ProductCard.jsx): the heart pops and throws off a ring of
+   sparks. Each spark is turned to its angle (--a) and flies outward along it. */
+.heart-pop {
+  animation: heartPop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes heartPop {
+  40% { transform: scale(1.35); }
+}
+.heart-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.heart-burst i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px;
+  border-radius: 9999px;
+  background: #ef4444;
+  opacity: 0;
+  animation: heartSpark 0.6s ease-out;
+}
+.heart-burst i:nth-child(even) {
+  background: #ff6b35;
+}
+@keyframes heartSpark {
+  from { transform: rotate(var(--a)) translateY(-6px) scale(1); opacity: 1; }
+  to { transform: rotate(var(--a)) translateY(-20px) scale(0.3); opacity: 0; }
+}
+
+/* A print pass is a fresh paint where the fade never runs, which would leave photos on a
+   printed receipt at the animation's starting opacity of 0. */
+@media print {
+  .img-in {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .split-word > span {
+    transform: none;
+    transition: none;
+  }
+  .tilt,
+  .tilt:hover {
+    transform: none;
+  }
+  .btn-primary:hover {
+    background-position: 100% 0;
+  }
+  .img-in,
+  .heart-pop,
+  .heart-burst {
+    animation: none;
+  }
+  .heart-burst {
+    display: none;
+  }
+  .nav-indicator,
+  .nav-progress {
+    transition: none;
+  }
+}
