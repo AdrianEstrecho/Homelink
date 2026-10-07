@@ -11,6 +11,7 @@ import HowItWorks from '../components/home/HowItWorks';
 import ServicesShowcase from '../components/home/ServicesShowcase';
 import Testimonials from '../components/home/Testimonials';
 import SpotlightCard from '../components/home/SpotlightCard';
+import HomeBuilder from '../components/HomeBuilder';
 import SplitText from '../components/SplitText';
 import CategoryTile, { countLabel } from '../components/CategoryTile';
 import { getCategoryIcon } from '../constants/categoryIcons';
@@ -101,7 +102,8 @@ export default function Home() {
   // Section backgrounds alternate light / white down the page, with navy
   // bands (Shop with confidence, CTA) as the dark breaks:
   // stats white → categories light → featured white → how it works light →
-  // services white → confidence navy → testimonials white → FAQ light → CTA navy.
+  // services white → confidence navy → testimonials white → house builder (its own
+  // sky-to-road street) → FAQ light → CTA navy.
   return (
     <div>
       <Hero products={featured.data} />
@@ -246,6 +248,9 @@ export default function Home() {
       </section>
 
       <Testimonials reviews={reviews} onRetry={loadReviews} />
+
+      {/* Kit out a HomeLink home: drag products off the delivery truck onto the house. */}
+      <HomeBuilder />
 
       {/* FAQ preview + support contacts. The open question gets an orange
           accent bar and a filled chevron; its answer fades in as it expands. */}
