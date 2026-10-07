@@ -42,9 +42,14 @@ router.get('/', async (req, res) => {
   if (search) { where += ' AND (p.name ILIKE ? OR p.description ILIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
   if (featured === 'true') { where += ' AND p.featured = 1'; }
 
+  // main_category_* resolves a subcategory ("Split Type") to its top-level parent
+  // ("Air Conditioners") for callers that group by the broad category, like the
+  // homepage hero's category chips.
   const products = await db.prepare(`
-    SELECT p.*, c.name as category_name, c.slug as category_slug, ${RATING_COLUMNS}
-    FROM products p LEFT JOIN categories c ON p.category_id = c.id
+    SELECT p.*, c.name as category_name, c.slug as category_slug,
+      COALESCE(pc.name, c.name) as main_category_name, COALESCE(pc.slug, c.slug) as main_category_slug,
+      ${RATING_COLUMNS}
+    FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN categories pc ON c.parent_id = pc.id
     ${where} ORDER BY ${SORT_COLUMNS[sort] || SORT_COLUMNS.featured} LIMIT ? OFFSET ?
   `).all(...params, limit, offset);
   const shaped = products.map(shapeProduct);
