@@ -47,7 +47,7 @@ export default function Team() {
             HomeLink was designed and built by this team of developers.
           </p>
         </div>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-10 md:mt-12">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 mt-10 md:mt-12">
           <HomeBuilder />
         </div>
       </section>

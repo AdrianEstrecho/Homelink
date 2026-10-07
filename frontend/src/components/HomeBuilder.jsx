@@ -299,11 +299,11 @@ export default function HomeBuilder({ className = '' }) {
       onPointerDownCapture={takeOver}
       onKeyDownCapture={takeOver}
       onPointerMove={noteActivity}
-      className={`card p-4 sm:p-6 lg:p-8 grid gap-5 lg:gap-x-8 lg:gap-y-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] ${className}`}
+      className={`card p-3 sm:p-5 lg:p-6 grid gap-5 lg:gap-x-7 lg:gap-y-5 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_350px] lg:grid-rows-[auto_1fr] ${className}`}
     >
       {/* Heading — first on phones, top right beside the house from lg up. */}
       <div className="order-1 lg:col-start-2 lg:row-start-1">
-        <p className="eyebrow mb-2"><Sparkles className="w-3.5 h-3.5" /> Try it</p>
+        <p className="eyebrow mb-2">Try it</p>
         <h2 id={`${uid}-title`} className="font-display text-2xl md:text-3xl font-extrabold tracking-tight text-brand-ink">Kit out a HomeLink home</h2>
         <p className="mt-2 text-sm text-gray-500 leading-relaxed">
           Drag each product to where it belongs on the house, or tap a product and then its spot.
@@ -322,7 +322,7 @@ export default function HomeBuilder({ className = '' }) {
       {/* Products, status and actions. Before the house in the DOM so keyboard users meet the
           products first and then the spots; shown below it on phones. */}
       <div className="order-3 lg:col-start-2 lg:row-start-2">
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="grid grid-cols-3 lg:grid-cols-2 gap-2 sm:gap-3">
           {PRODUCTS.map(p => {
             const done = Boolean(installed[p.id]);
             const away = dragId === p.id || flight?.id === p.id;
@@ -347,7 +347,7 @@ export default function HomeBuilder({ className = '' }) {
                       : 'border-gray-200 bg-white hover:border-brand-navy/30 hover:-translate-y-0.5 hover:shadow-md cursor-grab active:cursor-grabbing'
                 } ${away ? 'opacity-40' : ''}`}
               >
-                <ProductIcon id={p.id} className={`h-9 sm:h-11 w-auto max-w-full ${done ? 'opacity-50' : ''}`} />
+                <ProductIcon id={p.id} className={`h-9 sm:h-11 lg:h-12 w-auto max-w-full ${done ? 'opacity-50' : ''}`} />
                 <span className="text-[11px] sm:text-xs font-semibold leading-tight text-brand-ink">{p.name}</span>
                 <span className={`text-[10px] leading-none ${done ? 'text-[#00806f] font-semibold' : 'text-gray-400'}`}>{done ? 'Installed' : p.category}</span>
                 {done && (
