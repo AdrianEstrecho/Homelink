@@ -13,6 +13,7 @@ import SplitText from '../components/SplitText';
 import GalleryLightbox from '../components/GalleryLightbox';
 import { GallerySkeleton } from '../components/Skeleton';
 import MemberAvatar from '../components/team/MemberAvatar';
+import HomeBuilder from '../components/HomeBuilder';
 import { LogoMark } from '../components/brand/Logo';
 import { getCategoryIcon } from '../constants/categoryIcons';
 import { useReveal } from '../hooks/useReveal';
@@ -318,6 +319,9 @@ export default function About() {
           </Reveal>
         </div>
       </section>
+
+      {/* Kit out a HomeLink home — a street to play in; its road runs into the CTA below. */}
+      <HomeBuilder />
 
       {/* CTA */}
       <section className="relative overflow-hidden py-20 md:py-24 bg-brand-navy text-white">

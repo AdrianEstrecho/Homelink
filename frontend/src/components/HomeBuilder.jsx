@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Check, Hand, RotateCcw, ShoppingBag, Sparkles, Wrench } from 'lucide-react';
+import DeliveryTruck from './DeliveryTruck';
 
 // "Kit out a HomeLink home": a whole street scene — sky, hills, lawn, sidewalk and road — with a
 // cut-away house and a HomeLink delivery truck parked out front, its side rolled up and six
@@ -655,7 +656,7 @@ function Scene({ L, installed, uid }) {
         <House installed={installed} uid={uid} />
       </g>
       <g transform={`translate(${L.truck.x} ${L.truck.y}) scale(${L.truck.s})`}>
-        <Truck />
+        <DeliveryTruck open hazards />
       </g>
     </svg>
   );
@@ -682,56 +683,6 @@ function Tree({ x, ground, h }) {
         <circle cx={x + h * 0.18} cy={ground - h * 0.55} r={h * 0.2} fill="#2f9e78" />
         <circle cx={x - h * 0.06} cy={ground - h * 0.78} r={h * 0.15} fill="#62cca4" />
       </g>
-    </g>
-  );
-}
-
-// The HomeLink box truck, parked with its side shutter rolled up. Facing right, cab at the front.
-function Truck() {
-  return (
-    <g>
-      <ellipse cx="220" cy="263" rx="214" ry="7" fill="#0b1324" opacity=".25" />
-
-      {/* Cargo box */}
-      <rect x="6" y="0" width="300" height="218" rx="12" fill="#0f2b5b" />
-      <text x="156" y="16" textAnchor="middle" fontFamily="Archivo, system-ui, sans-serif" fontWeight="800" fontSize="14" fill="#fff">
-        Home<tspan fill="#ff6b35">Link</tspan>
-        <tspan fontSize="9" fontWeight="700" fill="#9fc3ea" dx="6" letterSpacing="1.5">DELIVERY</tspan>
-      </text>
-      <rect x="20" y="46" width="272" height="150" rx="4" fill="#e8edf3" />
-      <rect x="20" y="46" width="272" height="10" fill="#0f2b5b" opacity=".08" />
-      <path d="M110 46V191M201 46V191" stroke="#cbd5e1" strokeWidth="3" />
-      <rect x="20" y="118" width="272" height="5" fill="#c98b5a" />
-      <rect x="20" y="191" width="272" height="5" fill="#c98b5a" />
-      <rect x="14" y="22" width="284" height="24" rx="6" fill="#e2e8f0" />
-      <path d="M18 28h276M18 34h276M18 40h276" stroke="#cbd5e1" strokeWidth="1.5" />
-      <rect x="140" y="42" width="32" height="5" rx="2" fill="#94a3b8" />
-      <rect x="6" y="200" width="300" height="8" fill="#ff6b35" />
-      <rect x="0" y="168" width="7" height="16" rx="2" fill="#ffb020" className="hb-blink" />
-
-      {/* Cab */}
-      <path d="M306 218V96a10 10 0 0 1 10-10h62a14 14 0 0 1 11.8 6.5L422 144a8 8 0 0 0 5 3h1a8 8 0 0 1 8 8V218Z" fill="#ff6b35" />
-      <path d="M346 98h28a8 8 0 0 1 6.8 3.8L404 140h-58Z" fill="#bfe3ff" />
-      <path d="M357 103l-6 28" stroke="#fff" strokeWidth="4" strokeLinecap="round" opacity=".6" />
-      <path d="M340 104v108" stroke="#c8461a" strokeWidth="1.5" />
-      <rect x="312" y="150" width="22" height="22" rx="5" fill="#0f2b5b" />
-      <path d="M317 163l6-5 6 5v6h-12Z" fill="#fff" />
-      <rect x="346" y="152" width="10" height="3.5" rx="1.5" fill="#c8461a" />
-      <rect x="428" y="160" width="8" height="11" rx="2" fill="#fde68a" />
-      <circle cx="432" cy="152" r="3" fill="#ffb020" className="hb-blink" />
-      <rect x="420" y="206" width="20" height="10" rx="3" fill="#cbd5e1" />
-      <rect x="306" y="200" width="122" height="8" fill="#e85a28" />
-
-      {/* Chassis and wheels */}
-      <rect x="10" y="214" width="420" height="14" rx="4" fill="#0b1f44" />
-      {[70, 128, 368].map(cx => (
-        <g key={cx}>
-          <path d={`M${cx - 30} 236a30 30 0 0 1 60 0Z`} fill="#0b1f44" />
-          <circle cx={cx} cy="236" r="26" fill="#1f2937" />
-          <circle cx={cx} cy="236" r="12" fill="#cbd5e1" />
-          <circle cx={cx} cy="236" r="4" fill="#64748b" />
-        </g>
-      ))}
     </g>
   );
 }

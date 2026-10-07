@@ -558,6 +558,49 @@
   .hb-glint { display: none; }
 }
 
+/* Delivery lane on /team (components/DeliveryLane.jsx). The truck itself is moved from JS; these
+   are the bits around it — drifting clouds, a bouncing body, exhaust puffs, and the honk. */
+.lane-cloud {
+  animation: laneCloud linear infinite;
+}
+@keyframes laneCloud {
+  from { transform: translateX(-140px); }
+  to { transform: translateX(100vw); }
+}
+.lane-bob {
+  animation: laneBob 0.45s ease-in-out infinite alternate;
+}
+@keyframes laneBob {
+  to { transform: translateY(-3px); }
+}
+.lane-puff {
+  animation: lanePuff 1.2s ease-out infinite;
+}
+@keyframes lanePuff {
+  from { transform: translate(0, 0) scale(0.5); opacity: 0.6; }
+  to { transform: translate(-22px, -8px) scale(1.6); opacity: 0; }
+}
+.lane-honk {
+  animation: laneHonk 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes laneHonk {
+  0% { opacity: 0; transform: translateY(6px) scale(0.6); }
+  15% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes laneFadeOut {
+  0% { opacity: 0; }
+  10%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lane-cloud,
+  .lane-bob { animation: none; }
+  .lane-puff { display: none; }
+  .lane-honk { animation-name: laneFadeOut; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .step-pulse { animation: none; opacity: 0; }
 }
