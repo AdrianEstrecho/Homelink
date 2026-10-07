@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, User, ShoppingCart, Star } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, User, Star } from 'lucide-react';
 import { formatPrice } from '../api/client';
 import SafeImage from './SafeImage';
 
@@ -9,8 +9,14 @@ import SafeImage from './SafeImage';
 // the house can't be clicked or tabbed to.
 const CARDS_HIDDEN_AT = 0.8;
 
+// The hero sits right under the "10,000+ Homeowners Served" pill, so a
+// "3.5 (2)" there undercuts it. Only well-established, well-rated scores are
+// shown here; the product page still shows every rating as-is.
+const HERO_MIN_REVIEWS = 5;
+const HERO_MIN_RATING = 4;
+
 function HeroRating({ product }) {
-  if (!(product.review_count > 0)) return null;
+  if (!(product.review_count >= HERO_MIN_REVIEWS && Number(product.avg_rating) >= HERO_MIN_RATING)) return null;
   return (
     <span className="flex items-center gap-1 text-[11px] text-gray-400">
       <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
@@ -20,10 +26,12 @@ function HeroRating({ product }) {
   );
 }
 
-function CartBadge() {
+// The whole card links to the product page, so the badge is an arrow rather
+// than a cart icon, which would promise an add-to-cart the click doesn't do.
+function ViewBadge() {
   return (
     <span className="w-8 h-8 rounded-full bg-brand-orange text-white flex items-center justify-center shrink-0 shadow-sm" aria-hidden="true">
-      <ShoppingCart className="w-4 h-4" />
+      <ArrowUpRight className="w-4 h-4" />
     </span>
   );
 }
@@ -46,11 +54,11 @@ function HeroProductCard({ product, index }) {
             <div className="hero-product-card hero-product-card--compact flex items-center gap-3">
               <SafeImage src={product.image} alt="" className="w-14 h-14 rounded-xl object-cover bg-gray-100 shrink-0" iconClassName="w-5 h-5" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-brand-ink truncate">{product.name}</p>
+                <p className="text-sm font-semibold text-brand-ink leading-snug line-clamp-2">{product.name}</p>
                 <HeroRating product={product} />
                 <p className="text-sm font-bold text-brand-navy">{formatPrice(product.price)}</p>
               </div>
-              <CartBadge />
+              <ViewBadge />
             </div>
           ) : (
             <div className="hero-product-card hero-product-card--tall">
@@ -64,11 +72,11 @@ function HeroProductCard({ product, index }) {
               </div>
               <div className="px-1 pt-2.5">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-brand-teal truncate">{product.category_name}</p>
-                <p className="text-sm font-semibold text-brand-ink truncate mt-0.5">{product.name}</p>
+                <p className="text-sm font-semibold text-brand-ink leading-snug line-clamp-2 mt-0.5">{product.name}</p>
                 <HeroRating product={product} />
                 <div className="flex items-center justify-between gap-2 mt-2">
                   <span className="font-bold text-brand-navy">{formatPrice(product.price)}</span>
-                  <CartBadge />
+                  <ViewBadge />
                 </div>
               </div>
             </div>
@@ -143,7 +151,7 @@ export default function Hero({ products = [] }) {
           </div>
 
           <h1
-            className="fade-up font-display font-extrabold tracking-tightest leading-[0.98] text-white mb-4 text-[clamp(2rem,5vw,3.75rem)]"
+            className="fade-up font-display font-extrabold tracking-tightest [word-spacing:0.12em] leading-[0.98] text-white mb-4 text-[clamp(2rem,5vw,3.75rem)]"
             style={{ animationDelay: '90ms' }}
           >
             Shop products.<br />Book services.
