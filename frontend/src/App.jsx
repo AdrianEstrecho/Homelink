@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -30,6 +30,7 @@ import Orders from './pages/Orders';
 import Bookings from './pages/Bookings';
 import Policies from './pages/Policies';
 import Location from './pages/Location';
+import About from './pages/About';
 import Team from './pages/Team';
 import FAQ from './pages/FAQ';
 import AdminLogin from './pages/admin/AdminLogin';
@@ -170,8 +171,7 @@ export default function App() {
           <Route path="/bookings" element={<ProtectedRoute roles={['customer']}><Bookings /></ProtectedRoute>} />
           <Route path="/policies" element={<Policies />} />
           <Route path="/location" element={<Location />} />
-          {/* The About page was retired; old links land on the homepage instead of a 404. */}
-          <Route path="/about" element={<Navigate to="/" replace />} />
+          <Route path="/about" element={<About />} />
           <Route path="/team" element={<Team />} />
           <Route path="/faq" element={<FAQ />} />
           <Route path="/admin/login" element={<AdminLogin />} />

@@ -1379,6 +1379,62 @@
   }
 }
 
+/* About page (pages/About.jsx). A faint blueprint grid behind the hero that fades out toward
+   the bottom; the service orbit, whose track turns while each chip counter-turns at the same
+   rate to stay upright (pointing at it pauses both, so a chip can be picked); a soft pulse
+   behind the mark; the before-and-after steps sliding in on every switch; and the gallery
+   filter's pill, which is placed from JS and slides between categories. */
+.about-grid {
+  background-image:
+    linear-gradient(rgba(15, 43, 91, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 43, 91, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  -webkit-mask-image: radial-gradient(ellipse 80% 70% at 70% 30%, #000, transparent);
+  mask-image: radial-gradient(ellipse 80% 70% at 70% 30%, #000, transparent);
+}
+.about-orbit-track {
+  animation: aboutOrbit 48s linear infinite;
+}
+.about-orbit-upright {
+  animation: aboutOrbit 48s linear infinite reverse;
+}
+.about-orbit:hover .about-orbit-track,
+.about-orbit:hover .about-orbit-upright,
+.about-orbit:focus-within .about-orbit-track,
+.about-orbit:focus-within .about-orbit-upright {
+  animation-play-state: paused;
+}
+@keyframes aboutOrbit {
+  to { transform: rotate(360deg); }
+}
+.about-pulse {
+  animation: aboutPulse 3.2s ease-out infinite;
+}
+@keyframes aboutPulse {
+  0% { transform: scale(1); opacity: 0.7; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+.compare-step {
+  animation: compareIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+@keyframes compareIn {
+  from { opacity: 0; transform: translateX(-14px); }
+}
+.gallery-pill {
+  transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.2, 1), width 0.45s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .about-orbit-track,
+  .about-orbit-upright,
+  .about-pulse,
+  .compare-step {
+    animation: none;
+  }
+  .gallery-pill {
+    transition: none;
+  }
+}
+
 /* The HomeLink mark (components/brand/Logo.jsx). Hovering a logo inside a .group gives the
    wrench a turn about the bolt in its jaw, overshooting a little on the way back. */
 .group:hover .logo-wrench {

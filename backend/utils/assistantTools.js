@@ -249,7 +249,7 @@ async function buildStoreInfo() {
     faqs: faqs.map(f => ({ question: f.question, answer: clip(f.answer, 600) })),
     policies: policies.map(p => ({ title: p.title, content: clip(p.content, 1200) })),
     pages: {
-      products: '/products', services: '/services', team: '/team', faq: '/faq', policies: '/policies',
+      products: '/products', services: '/services', about: '/about', team: '/team', faq: '/faq', policies: '/policies',
       location_and_contact: '/location', account_and_support_tickets: '/account', orders: '/orders', bookings: '/bookings',
     },
   };
