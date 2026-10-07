@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
-import PageTransitionOverlay from './components/PageTransitionOverlay';
+import PageTransitionOverlay, { arriveAfterReload } from './components/PageTransitionOverlay';
 import AssistantWidget from './components/assistant/AssistantWidget';
 import { PageTransitionProvider } from './context/PageTransitionContext';
 import NotFound from './pages/NotFound';
@@ -74,26 +74,36 @@ export default function App() {
   const isAuthSection = AUTH_PATHS.includes(location.pathname);
   const hideChrome = isStaffSection || isAuthSection;
 
-  // Full-screen "cover" transition for moments that warrant more ceremony than
-  // the default route-fade: entering login from the homepage, and landing back
-  // on a page after a successful login/signup. Exposed via PageTransitionContext
-  // so Login/Register can trigger it too, not just Navbar (which App.jsx can
-  // prop-drill directly). Navbar/Login/Register all unmount across these
-  // navigations, so the overlay has to live up here to bridge the two pages.
-  // Timings: 300ms to fully cover, a 450ms hold with the spinner (the actual
-  // navigate() fires here, hidden underneath), then 400ms to reveal.
-  const [coverPhase, setCoverPhase] = useState(null); // null | 'in' | 'out'
-  const coverTimers = useRef([]);
-  const coverTransitionTo = (path) => {
-    if (coverPhase) return;
-    coverTimers.current.forEach(clearTimeout);
-    setCoverPhase('in');
-    coverTimers.current = [
-      setTimeout(() => { navigate(path); setCoverPhase('out'); }, 750),
-      setTimeout(() => setCoverPhase(null), 750 + 400),
-    ];
+  // The delivery transition (PageTransitionOverlay) for moments that warrant
+  // more ceremony than the default route-fade: entering the login flow, landing
+  // back on a page after a successful login/signup, and logging out. Exposed via
+  // PageTransitionContext so any page can trigger it. Navbar/Login/Register/
+  // Account all unmount across these navigations, so the overlay has to live up
+  // here to bridge the two pages. navigate() fires once the smoke has hidden the
+  // page. With `reload`, the page is reloaded there instead, after `before`
+  // (e.g. logout) has run, and the reloaded page clears the same smoke.
+  const [cover, setCover] = useState(null); // { path, reload, before } while it runs
+  const covering = useRef(false);
+  const coverTransitionTo = useCallback((path, { reload = false, before } = {}) => {
+    if (covering.current) return;
+    covering.current = true;
+    setCover({ path, reload, before });
+  }, []);
+  const handleCovered = () => {
+    cover.before?.();
+    if (!cover.reload) {
+      navigate(cover.path);
+      return;
+    }
+    arriveAfterReload();
+    window.location.href = cover.path;
   };
-  useEffect(() => () => coverTimers.current.forEach(clearTimeout), []);
+  const endCover = useCallback(() => {
+    covering.current = false;
+    setCover(null);
+  }, []);
+  // Set by index.html when this load is the reload at the end of a logout.
+  const [arriving, setArriving] = useState(() => document.documentElement.classList.contains('arriving'));
 
   // Browsers don't reset scroll position on client-side route changes, so a nav
   // click from partway down one page lands partway down the next. Keyed on
@@ -124,11 +134,9 @@ export default function App() {
           <span className="float-blob w-[30rem] h-[30rem] bottom-[-10rem] right-[10vw] bg-brand-blue" />
         </div>
       )}
-      {!hideChrome && <Navbar onLoginClick={coverTransitionTo} />}
-      {/* key={coverPhase} forces a fresh node for the 'out' stage rather than
-          re-rendering the 'in' one with a swapped animation class — same
-          guaranteed-replay reasoning as route-fade above. */}
-      {coverPhase && <PageTransitionOverlay key={coverPhase} phase={coverPhase} />}
+      {!hideChrome && <Navbar />}
+      {cover && <PageTransitionOverlay stayCovered={cover.reload} onCovered={handleCovered} onDone={endCover} />}
+      {arriving && <PageTransitionOverlay mode="arrive" onDone={() => setArriving(false)} />}
       <main className={hideChrome ? '' : 'flex-1'}>
         {/* key={location.pathname} forces a fresh DOM node per route, so route-fade's
             CSS animation (not a transition) reliably replays on every navigation — a

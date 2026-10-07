@@ -9,7 +9,33 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Archivo:wdth,wght@62..125,600..900&display=swap" rel="stylesheet" />
     <link rel="preload" as="image" href="/House.svg" fetchpriority="high" />
+    <meta name="theme-color" content="#0f2b5b" />
     <title>HomeLink - Home Improvement Marketplace</title>
+    <script>
+      // Logging out covers the screen in the delivery truck's smoke and then reloads; the flag
+      // (set by arriveAfterReload in src/components/PageTransitionOverlay.jsx) keeps this reload
+      // under the same smoke until the app mounts and clears it, instead of flashing blank.
+      try {
+        if (sessionStorage.getItem('homelink:arrive')) {
+          sessionStorage.removeItem('homelink:arrive');
+          document.documentElement.classList.add('arriving');
+        }
+      } catch (e) {}
+    </script>
+    <style>
+      html.arriving body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: 499;
+        background: #f3f5f9;
+        /* Never strand anyone behind it if the app fails to start. */
+        animation: arrive-fallback 0.3s ease 5s forwards;
+      }
+      @keyframes arrive-fallback {
+        to { opacity: 0; visibility: hidden; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

@@ -1,11 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingCart, Heart, User, Menu, X, Home, Wrench, LayoutDashboard, ShieldCheck, LogOut } from 'lucide-react';
+import { ShoppingCart, Heart, User, Menu, X, Wrench, LayoutDashboard, ShieldCheck, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
+import { usePageTransition } from '../context/PageTransitionContext';
 import ConfirmDialog from './ConfirmDialog';
-import PageTransitionOverlay from './PageTransitionOverlay';
+import Logo from './brand/Logo';
 import { landingFor } from '../utils/staffLanding';
 
 const NAV_LINKS = [
@@ -17,14 +18,14 @@ const NAV_LINKS = [
   { to: '/location', label: 'Location' },
 ];
 
-export default function Navbar({ onLoginClick }) {
+export default function Navbar() {
   const { user, logout } = useAuth();
   const { count } = useCart();
   const { count: wishlistCount } = useWishlist();
+  const coverTransitionTo = usePageTransition();
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
 
   // Only the homepage has a dark hero directly beneath the nav, so the
   // transparent-until-scrolled treatment is scoped to it — every other page
@@ -57,20 +58,19 @@ export default function Navbar({ onLoginClick }) {
   const requestLogout = () => { setOpen(false); setConfirmLogout(true); };
   // Full reload (not client-side navigate) so any logged-in-only state cached
   // in memory across the app — cart, account data, etc. — is cleared for good.
-  // The branded overlay covers that reload's blank-white flash; its hold time
-  // just needs to clear the .3s cover-in animation before the page unloads.
+  // The delivery transition (App.jsx) hides the page before logging out and
+  // reloading, and the reloaded homepage opens under the same smoke.
   const handleLogout = () => {
     setConfirmLogout(false);
-    setLoggingOut(true);
-    setTimeout(() => { logout(); window.location.href = '/'; }, 600);
+    coverTransitionTo('/', { reload: true, before: logout });
   };
 
-  // The full-screen cover transition lives in App.jsx (it has to survive Navbar
+  // The delivery transition lives in App.jsx (it has to survive Navbar
   // unmounting once we land on /login), so this just hands off to it.
   const handleLoginClick = (e) => {
     e.preventDefault();
     setOpen(false);
-    onLoginClick('/login');
+    coverTransitionTo('/login');
   };
 
   // Employees have no separate "Employee" nav item — their one entry point is the
@@ -92,11 +92,8 @@ export default function Navbar({ onLoginClick }) {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-20">
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 bg-brand-orange rounded-lg flex items-center justify-center group-hover:scale-105 transition">
-              <Home className="w-5 h-5 text-white" />
-            </div>
-            <span className={`font-display font-extrabold text-xl tracking-tight transition-colors ${solidWhite ? 'text-brand-navy' : 'text-white'}`}>Home<span className="text-brand-orange">Link</span></span>
+          <Link to="/" className="group">
+            <Logo tone={solidWhite ? 'navy' : 'white'} markClassName="w-11" />
           </Link>
 
           <div className="hidden md:flex items-stretch gap-8 h-full">
@@ -206,7 +203,6 @@ export default function Navbar({ onLoginClick }) {
         onConfirm={handleLogout}
         onCancel={() => setConfirmLogout(false)}
       />
-      {loggingOut && <PageTransitionOverlay phase="in" />}
     </nav>
   );
 }

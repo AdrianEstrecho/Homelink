@@ -5,11 +5,11 @@ import {
   MapPinned, CreditCard, Bell, Lock, Star, LayoutDashboard, LifeBuoy, PackageCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { usePageTransition } from '../context/PageTransitionContext';
 import { api } from '../api/client';
 import Reveal from '../components/Reveal';
 import CountUp from '../components/CountUp';
 import ConfirmDialog from '../components/ConfirmDialog';
-import PageTransitionOverlay from '../components/PageTransitionOverlay';
 import EditableAvatar from '../components/account/EditableAvatar';
 import ProfileTab from '../components/account/ProfileTab';
 import AddressesTab from '../components/account/AddressesTab';
@@ -74,17 +74,18 @@ export default function Account() {
   const [orders, setOrders] = useState(null);
   const [bookings, setBookings] = useState(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
+  const coverTransitionTo = usePageTransition();
 
   useEffect(() => {
     api.get('/orders/my').then(setOrders).catch(() => setOrders([]));
     api.get('/bookings/my').then(setBookings).catch(() => setBookings([]));
   }, []);
 
+  // Same as the Navbar's logout: the transition lives in App.jsx, so it keeps the screen
+  // covered even as logging out sends this protected page off to /login before the reload.
   const handleLogout = () => {
     setConfirmLogout(false);
-    setLoggingOut(true);
-    setTimeout(() => { logout(); window.location.href = '/'; }, 600);
+    coverTransitionTo('/', { reload: true, before: logout });
   };
 
   const memberSince = user?.createdAt
@@ -221,7 +222,6 @@ export default function Account() {
             onConfirm={handleLogout}
             onCancel={() => setConfirmLogout(false)}
           />
-          {loggingOut && <PageTransitionOverlay phase="in" />}
 
           {/* Active tab content */}
           <Reveal delay={180} className="card p-6 sm:p-8">

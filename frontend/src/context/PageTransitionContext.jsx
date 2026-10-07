@@ -1,8 +1,10 @@
 import { createContext, useContext } from 'react';
 
-// Lets any page (not just Navbar, which App.jsx can prop-drill directly)
-// trigger the full-screen cover transition — e.g. Login/Register calling it
-// on auth success, without threading a prop through <Routes>.
+// Lets any page trigger the full-screen delivery transition that lives in App.jsx —
+// e.g. Login/Register calling it on auth success, Navbar/Account on logout — without
+// threading a prop through <Routes>. Call it as coverTransitionTo(path), or
+// coverTransitionTo(path, { reload: true, before }) to run `before` and reload the
+// page at `path` once the screen is covered.
 const PageTransitionContext = createContext(null);
 
 export function PageTransitionProvider({ value, children }) {

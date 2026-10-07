@@ -168,18 +168,6 @@
     animation: routeFadeIn 0.4s ease-out both;
   }
 
-  /* Full-screen branded transition (see PageTransitionOverlay.jsx) — a slower,
-     more deliberate cover-and-reveal for moments that warrant more ceremony
-     than the default .route-fade (e.g. entering the login flow). Scale kept
-     subtle and the element is always the topmost thing on screen (z-[500]),
-     so its transform never has a fixed-position descendant to conflict with. */
-  .overlay-cover-in {
-    animation: overlayCoverIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  .overlay-cover-out {
-    animation: overlayCoverOut 0.4s cubic-bezier(0.7, 0, 0.84, 0) both;
-  }
-
   .toast-in {
     animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
@@ -240,9 +228,7 @@
     .float-blob-delayed,
     .fade-up,
     .toast-in,
-    .route-fade,
-    .overlay-cover-in,
-    .overlay-cover-out {
+    .route-fade {
       animation: none;
     }
   }
@@ -278,16 +264,6 @@
 @keyframes routeFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
-}
-
-@keyframes overlayCoverIn {
-  from { opacity: 0; transform: scale(1.04); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes overlayCoverOut {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(1.04); }
 }
 
 @keyframes toastIn {
@@ -1375,11 +1351,68 @@
   .fade-up,
   .toast-in,
   .route-fade,
-  .overlay-cover-in,
-  .overlay-cover-out,
   .dialog-panel,
   .dialog-scrim {
     animation: none;
+  }
+}
+
+/* The HomeLink mark (components/brand/Logo.jsx). Hovering a logo inside a .group gives the
+   wrench a turn about the bolt in its jaw, overshooting a little on the way back. */
+.group:hover .logo-wrench {
+  animation: wrenchTurn 0.7s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+@keyframes wrenchTurn {
+  0% { transform: rotate(0); }
+  35% { transform: rotate(-16deg); }
+  100% { transform: rotate(0); }
+}
+
+/* The delivery transition (components/PageTransitionOverlay.jsx). The truck and smoke are
+   moved from JS; these are the truck's rattle and wheels, and the logo surfacing in the smoke
+   (its wrench gives a turn as it lands). */
+.smoke-truck-body {
+  animation: smokeTruckBob 0.16s ease-in-out infinite alternate;
+}
+@keyframes smokeTruckBob {
+  to { transform: translateY(-1.5px); }
+}
+.smoke-wheel {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: smokeWheel 0.3s linear infinite;
+}
+@keyframes smokeWheel {
+  to { transform: rotate(360deg); }
+}
+.smoke-brand {
+  opacity: 0;
+}
+.smoke-brand-in {
+  animation: smokeBrandIn 0.5s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+.smoke-brand-in .logo-wrench {
+  animation: wrenchTurn 0.8s 0.1s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+@keyframes smokeBrandIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+.smoke-brand-out {
+  animation: smokeBrandOut 0.22s ease-in both;
+}
+@keyframes smokeBrandOut {
+  from { opacity: 1; }
+  to { opacity: 0; transform: scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .logo-wrench,
+  .smoke-brand-in .logo-wrench {
+    animation: none;
+  }
+  .smoke-brand-in,
+  .smoke-brand-out {
+    animation-duration: 0.01ms;
   }
 }
 

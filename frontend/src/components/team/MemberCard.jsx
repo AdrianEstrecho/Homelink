@@ -1,5 +1,6 @@
 import { useRef } from 'react';
-import { ArrowUpRight, Home } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
+import { LogoMark } from '../brand/Logo';
 import MemberAvatar from './MemberAvatar';
 import { fullNameOf } from '../../data/team';
 
@@ -56,9 +57,7 @@ export default function MemberCard({ member, index, onOpen }) {
             <span aria-hidden="true" className="badge-grid absolute inset-0" />
             <span aria-hidden="true" className="absolute top-2.5 left-1/2 -translate-x-1/2 w-9 h-2 rounded-full bg-black/25 shadow-inner" />
             <span className="absolute top-6 sm:top-7 inset-x-0 flex items-center justify-center gap-1.5 text-white">
-              <span className="w-4 h-4 rounded-[5px] bg-white/25 flex items-center justify-center">
-                <Home className="w-2.5 h-2.5" strokeWidth={2.5} />
-              </span>
+              <LogoMark wrench="currentColor" className="w-[18px]" />
               <span className="font-display text-[11px] font-extrabold tracking-tight">HomeLink</span>
               <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/75">Dev</span>
             </span>

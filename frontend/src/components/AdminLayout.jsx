@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import ConfirmDialog from './ConfirmDialog';
+import Logo from './brand/Logo';
 import Modal, { ModalBody, ModalHeader } from './Modal';
 import { ACTION_META, timeAgo, parseUtc } from '../data/auditActions';
 import { getStaffRole } from '../constants/staffRoles';
@@ -319,9 +320,8 @@ export default function AdminLayout({ children, title, subtitle }) {
         className={`admin-sidebar w-64 shrink-0 h-screen fixed inset-y-0 left-0 z-50 text-white flex flex-col transition-transform duration-300 ease-out lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 ${navOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}
       >
         <div className="flex items-center gap-2.5 px-5 h-16 shrink-0">
-          <Link to={landingFor(user) || '/admin'} className="flex items-center gap-2.5 min-w-0" title="Go to your dashboard">
-            <span className="w-8 h-8 bg-brand-orange rounded-lg flex items-center justify-center shrink-0"><Home className="w-4 h-4" /></span>
-            <span className="font-display font-extrabold text-lg tracking-tight truncate">Home<span className="text-brand-orange">Link</span></span>
+          <Link to={landingFor(user) || '/admin'} className="group min-w-0" title="Go to your dashboard">
+            <Logo tone="white" markClassName="w-9" textClassName="text-lg" />
           </Link>
           <button type="button" onClick={() => setNavOpen(false)} aria-label="Close menu" className="ml-auto p-1.5 rounded-lg text-[#9db8e6] hover:text-white hover:bg-white/10 transition lg:hidden">
             <X className="w-5 h-5" />

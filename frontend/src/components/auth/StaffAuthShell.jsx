@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Home as HomeIcon, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { getStaffRole } from '../../constants/staffRoles';
+import Logo from '../brand/Logo';
 import StaffFloorPlan from './StaffFloorPlan';
 
 // The staff sign-in and password-reset pages' layout: the form column on the left, and on
@@ -21,12 +22,7 @@ export default function StaffAuthShell({ title, subtitle, top, step, stepDir, pl
       <div className="w-full lg:w-1/2 flex flex-col px-4 sm:px-12 lg:px-16 py-6 sm:py-8">
         <header className="flex items-center justify-between gap-4">
           <Link to="/" className="inline-flex items-center gap-2.5 group w-fit">
-            <span className="w-9 h-9 bg-brand-orange rounded-lg flex items-center justify-center group-hover:scale-105 transition">
-              <HomeIcon className="w-5 h-5 text-white" />
-            </span>
-            <span className="font-display font-extrabold text-xl tracking-tight text-brand-navy">
-              Home<span className="text-brand-orange">Link</span>
-            </span>
+            <Logo markClassName="w-11" />
             <span className="drafting text-[10px] text-brand-navy/70 border border-brand-navy/20 rounded px-1.5 py-0.5">Staff</span>
           </Link>
           <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-navy transition">

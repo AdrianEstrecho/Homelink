@@ -1,16 +1,12 @@
 import { Link } from 'react-router-dom';
-import { Home as HomeIcon, ChevronLeft } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import AuthScene from './auth/AuthScene';
+import BrandLogo from './brand/Logo';
 
 function Logo() {
   return (
-    <Link to="/" className="inline-flex items-center gap-2 group w-fit">
-      <div className="w-9 h-9 bg-brand-orange rounded-lg flex items-center justify-center group-hover:scale-105 transition">
-        <HomeIcon className="w-5 h-5 text-white" />
-      </div>
-      <span className="font-display font-extrabold text-xl tracking-tight text-brand-navy">
-        Home<span className="text-brand-orange">Link</span>
-      </span>
+    <Link to="/" className="group w-fit">
+      <BrandLogo markClassName="w-11" />
     </Link>
   );
 }

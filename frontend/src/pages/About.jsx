@@ -9,6 +9,7 @@ import SafeImage from '../components/SafeImage';
 import GalleryLightbox from '../components/GalleryLightbox';
 import { GallerySkeleton } from '../components/Skeleton';
 import MemberAvatar from '../components/team/MemberAvatar';
+import { LogoMark } from '../components/brand/Logo';
 import { TEAM, fullNameOf } from '../data/team';
 
 const STATS = [
@@ -94,11 +95,8 @@ export default function About() {
               </div>
             </div>
             <div className="lg:col-span-2 flex justify-center">
-              <div className="relative w-56 h-56 sm:w-64 sm:h-64 rounded-[2rem] bg-gradient-to-br from-brand-navy to-brand-blue shadow-xl flex items-center justify-center">
-                <HomeIcon className="w-20 h-20 sm:w-24 sm:h-24 text-white" strokeWidth={1.5} />
-                <div className="absolute -bottom-3 -right-3 w-14 h-14 rounded-2xl bg-brand-orange flex items-center justify-center shadow-lg">
-                  <Wrench className="w-7 h-7 text-white" />
-                </div>
+              <div className="group relative w-56 h-56 sm:w-64 sm:h-64 rounded-[2rem] bg-gradient-to-br from-brand-navy to-brand-blue shadow-xl flex items-center justify-center">
+                <LogoMark className="w-32 sm:w-36 text-white" />
               </div>
             </div>
           </Reveal>

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Home, Mail, Phone, MapPin } from 'lucide-react';
+import { Mail, Phone, MapPin } from 'lucide-react';
+import Logo from './brand/Logo';
 
 export default function Footer() {
   return (
@@ -11,10 +12,7 @@ export default function Footer() {
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-16 md:py-20">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 md:gap-8">
           <div>
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 bg-brand-orange rounded-lg flex items-center justify-center"><Home className="w-4 h-4" /></div>
-              <span className="font-display font-extrabold text-lg">Home<span className="text-brand-orange">Link</span></span>
-            </div>
+            <Logo tone="white" markClassName="w-10" textClassName="text-lg" className="mb-4" />
             <p className="text-gray-400 text-sm leading-relaxed">Your one-stop platform for home improvement products and professional installation services.</p>
           </div>
           <div>

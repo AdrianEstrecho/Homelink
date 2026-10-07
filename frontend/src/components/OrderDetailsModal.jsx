@@ -4,6 +4,7 @@ import { formatPrice, statusColor } from '../api/client';
 import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from './Modal';
 import { downloadReceiptPdf } from '../utils/receiptPdf';
 import SafeImage from './SafeImage';
+import { LogoMark } from './brand/Logo';
 import { paymentMethodLabel } from '../constants/paymentMethods';
 
 export default function OrderDetailsModal({
@@ -45,6 +46,7 @@ export default function OrderDetailsModal({
     <Modal onClose={handleDismiss} dismissible={!confirmLoading} scrimClassName="no-print" className="print-area print:border print:border-dashed print:border-gray-300">
         {!previewing && (
           <div className="hidden print:block text-center px-6 pt-6 font-mono">
+            <LogoMark className="w-12 mx-auto mb-1.5 text-brand-navy" />
             <p className="text-xl font-bold text-brand-navy">Home<span className="text-brand-orange">Link</span></p>
             <p className="text-[10px] text-gray-400 tracking-widest uppercase mt-1">Home Improvement &amp; Services</p>
             <div className="border-t border-dashed border-gray-300 mt-3 pt-3">
