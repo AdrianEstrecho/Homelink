@@ -64,7 +64,7 @@ const POSITION_NAV_PATHS = {
   inventory_clerk: ['/admin/products', '/admin/services', '/admin/orders', '/admin/returns', '/admin/bookings', '/admin/vouchers', '/admin/support', '/admin/approvals'],
   general_staff: ['/admin/products', '/admin/services', '/admin/orders', '/admin/bookings', '/admin/vouchers', '/admin/support'],
   booking_coordinator: ['/admin/bookings', '/admin/technicians', '/admin/approvals'],
-  hr: ['/admin/hr/employees', '/admin/suppliers', '/admin/approvals'],
+  hr: ['/admin/reports', '/admin/hr/employees', '/admin/suppliers', '/admin/approvals'],
   installer: [],
 };
 

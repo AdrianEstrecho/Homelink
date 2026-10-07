@@ -119,7 +119,7 @@ function describePayload(cr, current) {
     return `${p.code} — ${discount} off`;
   }
   if (cr.entity_type === 'supplier') {
-    const bits = [p.category, p.contactName].filter(Boolean);
+    const bits = [p.category, p.contactName, p.isPartner && 'Partner'].filter(Boolean);
     return `"${p.name}"${bits.length ? ` — ${bits.join(' · ')}` : ''}`;
   }
   return '';

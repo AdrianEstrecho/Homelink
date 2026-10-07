@@ -194,7 +194,7 @@ export default function App() {
           <Route path="/admin/support" element={<ProtectedRoute roles={['admin', 'employee']} positions={['general_staff', 'inventory_clerk']} redirectTo="/admin/login"><AdminSupportMessages /></ProtectedRoute>} />
           <Route path="/admin/audit-log" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminAuditLog /></ProtectedRoute>} />
           <Route path="/admin/profile" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminProfile /></ProtectedRoute>} />
-          <Route path="/admin/reports" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminReports /></ProtectedRoute>} />
+          <Route path="/admin/reports" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><AdminReports /></ProtectedRoute>} />
           <Route path="/admin/cms" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminCMS /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute roles={['admin']} redirectTo="/admin/login"><AdminSettings /></ProtectedRoute>} />
           <Route path="/admin/hr/dashboard" element={<ProtectedRoute roles={['admin', 'employee']} positions={['hr']} redirectTo="/admin/login"><HRDashboard /></ProtectedRoute>} />
