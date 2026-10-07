@@ -24,6 +24,46 @@ const SKYLINE = `url("data:image/svg+xml,${encodeURIComponent(
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+// "Beep beep": two short blasts of a two-tone car horn, synthesised with Web Audio so there's no
+// sound file to ship. The audio context is made on the first honk, since browsers only let sound
+// start from a click or key press, and reused after that.
+let audioCtx = null;
+function playHorn() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  if (!audioCtx) audioCtx = new Ctx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const ctx = audioCtx;
+
+  const volume = ctx.createGain();
+  volume.gain.value = 0.12;
+  const muffle = ctx.createBiquadFilter();
+  muffle.type = 'lowpass';
+  muffle.frequency.value = 1800;
+  muffle.connect(volume);
+  volume.connect(ctx.destination);
+
+  const start = ctx.currentTime + 0.01;
+  [0, 0.24].forEach(offset => {
+    const t = start + offset;
+    const blast = ctx.createGain();
+    blast.gain.setValueAtTime(0, t);
+    blast.gain.linearRampToValueAtTime(1, t + 0.015);
+    blast.gain.setValueAtTime(1, t + 0.15);
+    blast.gain.linearRampToValueAtTime(0, t + 0.18);
+    blast.connect(muffle);
+    // Two notes a major third apart, the classic car-horn chord.
+    [415, 523].forEach(freq => {
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      osc.connect(blast);
+      osc.start(t);
+      osc.stop(t + 0.2);
+    });
+  });
+}
+
 export default function DeliveryLane({ className = '' }) {
   const hintId = useId();
   const laneRef = useRef(null);
@@ -123,6 +163,7 @@ export default function DeliveryLane({ className = '' }) {
 
   const honk = () => {
     setHonks(n => n + 1);
+    playHorn();
     if (reducedMotion()) return;
     sim.current.v += 200;
     hopRef.current?.animate(
