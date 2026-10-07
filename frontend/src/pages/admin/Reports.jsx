@@ -1,28 +1,22 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { DollarSign, ShoppingCart, Calendar, TrendingUp, Download, Users, UserPlus, Repeat } from 'lucide-react';
 import { api, formatPrice } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import RevenueChart from '../../components/admin/RevenueChart';
+import SupplierReports from '../../components/admin/SupplierReports';
+import { useAuth } from '../../context/AuthContext';
+import { downloadCsv } from '../../utils/csv';
 
+// HR only gets the Supplier Reports tab (the rest is admin-only revenue data, and
+// GET /admin/reports refuses them). The tab lives in ?view= rather than ?tab= so the sidebar's
+// Reports link stays highlighted (AdminLayout matches ?tab against nav items).
 const TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'products', label: 'Products & Services' },
   { key: 'customers', label: 'Customers' },
+  { key: 'suppliers', label: 'Supplier Reports', hr: true },
 ];
-
-function downloadCsv(filename, headers, rows) {
-  const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = [headers.map(escape).join(','), ...rows.map(row => row.map(escape).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
 
 function ExportButton({ onClick }) {
   return (
@@ -33,12 +27,24 @@ function ExportButton({ onClick }) {
 }
 
 export default function AdminReports() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [data, setData] = useState(null);
-  const [tab, setTab] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  useEffect(() => { api.get('/admin/reports').then(setData).catch(() => {}); }, []);
+  const tabs = isAdmin ? TABS : TABS.filter(t => t.hr);
+  const requestedTab = searchParams.get('view');
+  const tab = tabs.some(t => t.key === requestedTab) ? requestedTab : tabs[0].key;
+  const supplierId = tab === 'suppliers' ? searchParams.get('supplier') : null;
+  const setTab = (key) => setSearchParams(key === 'overview' ? {} : { view: key }, { replace: true });
+  // Opening a supplier's report is a real navigation (back returns to the partner list).
+  const selectSupplier = (id) => setSearchParams(id ? { view: 'suppliers', supplier: id } : { view: 'suppliers' });
 
-  if (!data) {
+  useEffect(() => {
+    if (isAdmin) api.get('/admin/reports').then(setData).catch(() => {});
+  }, [isAdmin]);
+
+  if (tab !== 'suppliers' && !data) {
     return (
       <AdminLayout title="Reports">
         <div className="flex justify-center py-12"><div className="animate-spin w-8 h-8 border-4 border-brand-orange border-t-transparent rounded-full" /></div>
@@ -46,29 +52,38 @@ export default function AdminReports() {
     );
   }
 
-  const { totals, salesByMonth, byCategory, topProducts, topServices, topCustomers, customerInsights } = data;
-  const maxCategoryRevenue = Math.max(1, ...byCategory.map(c => c.revenue));
+  const { totals, salesByMonth, byCategory, topProducts, topServices, topCustomers, customerInsights } = data || {};
+  const maxCategoryRevenue = data ? Math.max(1, ...byCategory.map(c => c.revenue)) : 1;
 
-  const cards = [
+  const cards = data ? [
     { label: 'Total Revenue', value: formatPrice(totals.revenue), icon: DollarSign },
     { label: 'Paid Orders', value: totals.orders, icon: ShoppingCart },
     { label: 'Paid Bookings', value: totals.bookings, icon: Calendar },
     { label: 'Avg Order Value', value: formatPrice(totals.avgOrderValue), icon: TrendingUp },
-  ];
+  ] : [];
 
   return (
-    <AdminLayout title="Reports" subtitle="Sales performance, product/service rankings, and customer insights.">
-      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-1.5 rounded-md text-sm font-semibold transition ${tab === t.key ? 'bg-white text-brand-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+    <AdminLayout
+      title={isAdmin ? 'Reports' : 'Supplier Reports'}
+      subtitle={isAdmin
+        ? 'Sales performance, product/service rankings, customer insights, and partner supplier reports.'
+        : 'Sales reports for partner suppliers, ready to download and send.'}
+    >
+      {tabs.length > 1 && (
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit max-w-full overflow-x-auto">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-4 py-1.5 rounded-md text-sm font-semibold whitespace-nowrap transition ${tab === t.key ? 'bg-white text-brand-navy shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === 'suppliers' && <SupplierReports supplierId={supplierId} onSelectSupplier={selectSupplier} />}
 
       {tab === 'overview' && (
         <>

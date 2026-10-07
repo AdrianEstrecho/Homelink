@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, UserPlus, Truck, Wrench, ArrowRight, UserCog } from 'lucide-react';
+import { Users, UserPlus, Truck, Wrench, ArrowRight, UserCog, Handshake } from 'lucide-react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import StatTile from '../../components/admin/StatTile';
@@ -38,7 +38,7 @@ export default function HRDashboard() {
         {cards.map(c => <StatTile key={c.label} label={c.label} value={c.value} icon={c.icon} tone={c.tone} to={c.to} action={c.action} />)}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <Link to="/admin/hr/employees" className="card p-5 flex items-center justify-between hover:shadow-md transition">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-teal-50 rounded-lg flex items-center justify-center"><UserCog className="w-5 h-5 text-[#00806f]" /></div>
@@ -55,6 +55,20 @@ export default function HRDashboard() {
             <div>
               <p className="font-semibold text-gray-900">Manage suppliers</p>
               <p className="text-xs text-gray-400">Add, update, and review vendor accounts</p>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-gray-400" />
+        </Link>
+        <Link to="/admin/reports?view=suppliers" className="card p-5 flex items-center justify-between hover:shadow-md transition">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-brand-navy/10 rounded-lg flex items-center justify-center"><Handshake className="w-5 h-5 text-brand-navy" /></div>
+            <div>
+              <p className="font-semibold text-gray-900">Supplier reports</p>
+              <p className="text-xs text-gray-400">
+                {supplierStats.partners
+                  ? `Download sales reports for ${supplierStats.partners} partner${supplierStats.partners === 1 ? '' : 's'}`
+                  : 'Mark a supplier as a partner to start one'}
+              </p>
             </div>
           </div>
           <ArrowRight className="w-4 h-4 text-gray-400" />

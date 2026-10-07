@@ -501,6 +501,18 @@ await db.exec(`
     created_at TIMESTAMPTZ DEFAULT now()
   );
 
+  -- A partnered supplier gets its own sales report (Reports → Supplier Reports) that admin/HR
+  -- download and send back to them. partner_since is a plain 'YYYY-MM-DD' like vouchers'
+  -- valid_from, shown on that report's cover.
+  ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS is_partner INTEGER DEFAULT 0;
+  ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS partner_since TEXT;
+
+  -- Which supplier a product is sourced from — what a supplier report groups sales by. Lives
+  -- down here rather than with the products table because suppliers has to exist first. SET NULL
+  -- so deleting a supplier just unlinks its products instead of blocking on them.
+  ALTER TABLE products ADD COLUMN IF NOT EXISTS supplier_id TEXT REFERENCES suppliers(id) ON DELETE SET NULL;
+  CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier_id);
+
   -- Personal, per-recipient notifications (job assignments, new messages) — distinct from
   -- audit_logs, which records who-did-what for the admin activity feed/trail rather than
   -- who should be told about it.

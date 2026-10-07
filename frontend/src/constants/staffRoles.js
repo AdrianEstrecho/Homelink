@@ -49,7 +49,7 @@ export const STAFF_ROLES = [
     room: 'HR Office',
     summary: 'Employees, suppliers and approvals',
     icon: UsersRound,
-    access: ['Dashboard', 'Employees', 'Suppliers', 'Approvals', 'Messages'],
+    access: ['Dashboard', 'Supplier reports', 'Employees', 'Suppliers', 'Approvals', 'Messages'],
   },
   {
     key: 'admin',

@@ -26,7 +26,7 @@ const highlightRow = (value = '') => ({ id: `h${++rowSeq}`, value });
 // A factory rather than a shared constant — the form holds arrays, and reusing one object
 // across resets would let two edits mutate the same rows.
 const createEmptyForm = () => ({
-  name: '', brand: '', model: '', description: '',
+  name: '', brand: '', model: '', description: '', supplierId: '',
   mainCategoryId: '', subcategoryId: '',
   status: 'active',
   stock: '', addStock: '',
@@ -84,6 +84,7 @@ export default function AdminProducts() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [tab, setTab] = useState(searchParams.get('tab') === 'archived' ? 'archived' : 'active');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [search, setSearch] = useState(searchParams.get('search') || '');
@@ -105,6 +106,7 @@ export default function AdminProducts() {
   const load = () => {
     api.get('/admin/products').then(setProducts).catch(() => {});
     api.get('/admin/categories').then(setCategories).catch(() => {});
+    api.get('/admin/suppliers/options').then(setSuppliers).catch(() => {});
   };
   const loadMyRequests = () => {
     if (!isGeneralStaff) return;
@@ -152,7 +154,7 @@ export default function AdminProducts() {
     const specs = specEntries(p.specifications).map(s => specRow(s.label, s.value));
     const highlights = toHighlights(p.highlights).map(h => highlightRow(h));
     setForm({
-      name: p.name, brand: p.brand || '', model: p.model || '', description: p.description || '',
+      name: p.name, brand: p.brand || '', model: p.model || '', description: p.description || '', supplierId: p.supplier_id || '',
       mainCategoryId: p.main_category_id || '', subcategoryId: p.category_parent_id ? p.category_id : '',
       status: p.status === 'inactive' ? 'inactive' : 'active',
       stock: p.stock, addStock: '',
@@ -260,7 +262,7 @@ export default function AdminProducts() {
     const payload = {
       name: form.name, categoryId, description: form.description,
       price: Number(form.price), image: form.image,
-      brand: form.brand, model: form.model, warranty: form.warranty,
+      brand: form.brand, model: form.model, warranty: form.warranty, supplierId: form.supplierId || null,
       discount: Number(form.discount) || 0, status: form.status,
       featured: form.featured,
       specifications,
@@ -392,8 +394,21 @@ export default function AdminProducts() {
                   <Field label="Material / Maker" hint="Brand or material, shown under the product name.">
                     <input value={form.brand} onChange={e => setForm(f => ({ ...f, brand: e.target.value }))} className="input-field" placeholder="e.g. Daikin" />
                   </Field>
-                  <Field label="Model / SKU" className="md:col-span-2" hint="Optional manufacturer model number customers can search for.">
+                  <Field label="Model / SKU" hint="Optional manufacturer model number customers can search for.">
                     <input value={form.model} onChange={e => setForm(f => ({ ...f, model: e.target.value }))} className="input-field" placeholder="e.g. FTKC35TVM" />
+                  </Field>
+                  <Field label="Supplier" hint="Who HomeLink sources this from. A partner's sales report covers the products picked here.">
+                    <Select
+                      value={form.supplierId}
+                      onChange={v => setForm(f => ({ ...f, supplierId: v }))}
+                      options={[
+                        { value: '', label: 'Not linked to a supplier' },
+                        ...suppliers
+                          // An inactive supplier stays selectable only for the product already linked to it.
+                          .filter(s => s.status === 'active' || s.id === form.supplierId)
+                          .map(s => ({ value: s.id, label: `${s.name}${s.is_partner ? ' — Partner' : ''}${s.status === 'inactive' ? ' (inactive)' : ''}` })),
+                      ]}
+                    />
                   </Field>
                   <Field label="Description" required className="md:col-span-2" hint="Two or three sentences on what it is and who it suits.">
                     <textarea required rows={4} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="input-field" />

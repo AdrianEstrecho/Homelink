@@ -293,10 +293,12 @@ router.get('/products', authorizeAdminOr('inventory_clerk', 'general_staff'), as
   const products = await db.prepare(`
     SELECT p.*, c.name as category_name, c.parent_id as category_parent_id,
       COALESCE(pc.id, c.id) as main_category_id, COALESCE(pc.name, c.name) as main_category_name,
-      CASE WHEN c.parent_id IS NOT NULL THEN c.name ELSE NULL END as subcategory_name
+      CASE WHEN c.parent_id IS NOT NULL THEN c.name ELSE NULL END as subcategory_name,
+      su.name as supplier_name
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
     LEFT JOIN categories pc ON c.parent_id = pc.id
+    LEFT JOIN suppliers su ON p.supplier_id = su.id
     ORDER BY p.archived ASC, p.name ASC
   `).all();
   res.json(products.map(p => ({ ...shapeProduct(p), archived: !!p.archived })));
@@ -322,14 +324,24 @@ router.get('/products/stats', authorizeAdminOr('inventory_clerk', 'general_staff
   res.json({ totalProducts, archivedCount, lowStockCount, outOfStockCount, categoryBreakdown, recentProducts });
 });
 
+// A general_staff product request can sit in the approval queue while its supplier is deleted,
+// so the id is re-checked at write time — a stale one just leaves the product unlinked rather
+// than failing the approval on the foreign key.
+async function resolveSupplierId(supplierId) {
+  if (!supplierId) return null;
+  const supplier = await db.prepare('SELECT id FROM suppliers WHERE id = ?').get(supplierId);
+  return supplier ? supplier.id : null;
+}
+
 async function insertProduct(payload) {
-  const { name, slug, categoryId, description, specifications, highlights, price, stock, image, featured, brand, model, warranty, discount, status } = payload;
+  const { name, slug, categoryId, description, specifications, highlights, price, stock, image, featured, brand, model, warranty, discount, status, supplierId } = payload;
   const id = uuid();
   await db.prepare(`INSERT INTO products
-      (id, category_id, name, slug, description, specifications, highlights, price, stock, image, featured, brand, model, warranty, discount, status)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      (id, category_id, name, slug, description, specifications, highlights, price, stock, image, featured, brand, model, warranty, discount, status, supplier_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .run(id, categoryId, name, slug, description, JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeStringList(highlights)),
-      price, stock, image, featured ? 1 : 0, brand || null, model || null, warranty || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active');
+      price, stock, image, featured ? 1 : 0, brand || null, model || null, warranty || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active',
+      await resolveSupplierId(supplierId));
   return id;
 }
 
@@ -338,14 +350,18 @@ async function insertProduct(payload) {
 async function applyProductUpdate(id, payload) {
   const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(id);
   if (!product) return null;
-  const { name, categoryId, description, specifications, highlights, price, image, featured, brand, model, warranty, discount, status, addStock } = payload;
+  const { name, categoryId, description, specifications, highlights, price, image, featured, brand, model, warranty, discount, status, addStock, supplierId } = payload;
   const addQty = Number(addStock) || 0;
   const stock = addQty > 0 ? product.stock + addQty : product.stock;
+  // Requests queued before products had a supplier field carry no supplierId at all — keep the
+  // current link for those rather than reading the missing key as "unlink".
+  const nextSupplierId = supplierId === undefined ? product.supplier_id : await resolveSupplierId(supplierId);
   await db.prepare(`UPDATE products SET
-      name=?, category_id=?, description=?, specifications=?, highlights=?, price=?, stock=?, image=?, featured=?, brand=?, model=?, warranty=?, discount=?, status=?
+      name=?, category_id=?, description=?, specifications=?, highlights=?, price=?, stock=?, image=?, featured=?, brand=?, model=?, warranty=?, discount=?, status=?, supplier_id=?
       WHERE id=?`)
     .run(name, categoryId, description, JSON.stringify(normalizeSpecifications(specifications)), JSON.stringify(normalizeStringList(highlights)),
-      price, stock, image, featured ? 1 : 0, brand || null, model || null, warranty || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active', id);
+      price, stock, image, featured ? 1 : 0, brand || null, model || null, warranty || null, Number(discount) || 0, status === 'inactive' ? 'inactive' : 'active',
+      nextSupplierId, id);
   return { from: product.stock, to: stock, addQty };
 }
 
@@ -1526,11 +1542,26 @@ router.get('/audit-logs', authorize('admin'), async (req, res) => {
   res.json(logs.map(l => ({ ...l, details: l.details ? JSON.parse(l.details) : null })));
 });
 
+const isoDate = (value) => (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null);
+const todayInManila = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+
+// partner_since only means something while is_partner is on; a partnership switched on without
+// a date starts today. `current` is the existing row on an update, so a request queued before
+// suppliers had a partner field (no isPartner key at all) leaves the partnership as it was.
+function partnershipFields(payload, current) {
+  if (payload.isPartner === undefined && current) {
+    return { isPartner: current.is_partner ? 1 : 0, partnerSince: current.partner_since || null };
+  }
+  if (!payload.isPartner) return { isPartner: 0, partnerSince: null };
+  return { isPartner: 1, partnerSince: isoDate(payload.partnerSince) || current?.partner_since || todayInManila() };
+}
+
 async function insertSupplier(payload) {
   const { name, contactName, email, phone, address, category, notes } = payload;
+  const { isPartner, partnerSince } = partnershipFields(payload, null);
   const id = uuid();
-  await db.prepare('INSERT INTO suppliers (id, name, contact_name, email, phone, address, category, notes) VALUES (?,?,?,?,?,?,?,?)')
-    .run(id, name, contactName || null, email || null, phone || null, address || null, category || null, notes || null);
+  await db.prepare('INSERT INTO suppliers (id, name, contact_name, email, phone, address, category, notes, is_partner, partner_since) VALUES (?,?,?,?,?,?,?,?,?,?)')
+    .run(id, name, contactName || null, email || null, phone || null, address || null, category || null, notes || null, isPartner, partnerSince);
   return id;
 }
 
@@ -1538,8 +1569,9 @@ async function applySupplierUpdate(id, payload) {
   const supplier = await db.prepare('SELECT * FROM suppliers WHERE id = ?').get(id);
   if (!supplier) return null;
   const { name, contactName, email, phone, address, category, notes } = payload;
-  await db.prepare('UPDATE suppliers SET name=?, contact_name=?, email=?, phone=?, address=?, category=?, notes=? WHERE id=?')
-    .run(name, contactName || null, email || null, phone || null, address || null, category || null, notes || null, id);
+  const { isPartner, partnerSince } = partnershipFields(payload, supplier);
+  await db.prepare('UPDATE suppliers SET name=?, contact_name=?, email=?, phone=?, address=?, category=?, notes=?, is_partner=?, partner_since=? WHERE id=?')
+    .run(name, contactName || null, email || null, phone || null, address || null, category || null, notes || null, isPartner, partnerSince, id);
   return supplier;
 }
 
@@ -1554,7 +1586,18 @@ async function deleteSupplierById(id) {
 // until admin approves them. Toggling active/inactive stays immediate for HR, same as the
 // equivalent voucher/product toggles, since it's low-risk and reversible.
 router.get('/suppliers', authorizeAdminOr('hr'), async (req, res) => {
-  res.json(await db.prepare('SELECT * FROM suppliers ORDER BY status ASC, name ASC').all());
+  const rows = await db.prepare(`
+    SELECT s.*, (SELECT COUNT(*) FROM products p WHERE p.supplier_id = s.id) as product_count
+    FROM suppliers s ORDER BY s.status ASC, s.name ASC
+  `).all();
+  res.json(rows.map(s => ({ ...s, is_partner: !!s.is_partner })));
+});
+
+// Just enough to fill the product form's Supplier picker — the people who edit products
+// (inventory clerks, general staff) don't otherwise get the supplier list or its contact details.
+router.get('/suppliers/options', authorizeAdminOr('inventory_clerk', 'general_staff', 'hr'), async (req, res) => {
+  const rows = await db.prepare('SELECT id, name, status, is_partner FROM suppliers ORDER BY status ASC, name ASC').all();
+  res.json(rows.map(s => ({ ...s, is_partner: !!s.is_partner })));
 });
 
 router.post('/suppliers', authorizeAdminOr('hr'), async (req, res) => {
@@ -1612,6 +1655,7 @@ router.get('/hr/stats', authorizeAdminOr('hr'), async (req, res) => {
   const supplierStats = {
     total: (await db.prepare('SELECT COUNT(*) as c FROM suppliers').get()).c,
     active: (await db.prepare("SELECT COUNT(*) as c FROM suppliers WHERE status='active'").get()).c,
+    partners: (await db.prepare('SELECT COUNT(*) as c FROM suppliers WHERE is_partner = 1').get()).c,
   };
   const recentHires = await db.prepare(`
     SELECT id, first_name, last_name, email, position, staff_code, created_at
@@ -1672,6 +1716,198 @@ router.get('/reports', authorize('admin'), async (req, res) => {
       newCustomersThisMonth,
       repeatCustomerRate: payingCustomers ? Math.round((repeatCustomers / payingCustomers) * 100) : 0,
     },
+  });
+});
+
+// Supplier reports — one per partner supplier, covering only the products linked to them
+// (products.supplier_id). Admin and HR download these and send them on to the supplier, so they
+// carry order references and quantities but never customer names or addresses.
+//
+// Days are Manila days: the period someone picks is a PH calendar range, and a sale at 7am on
+// the 1st is still the previous day in UTC.
+const REPORT_TZ = 'Asia/Manila';
+
+// A line counts as sold when its order was paid and not cancelled. An order whose every unit
+// came back flips to 'refunded' (see the return-received handler), but it was still a sale — its
+// units show up again under returns — so it stays in, while an order refunded any other way
+// (a cancellation, or a manual refund) does not.
+const SOLD_ORDER_SQL = `o.status <> 'cancelled' AND (
+  o.payment_status = 'paid'
+  OR (o.payment_status = 'refunded' AND EXISTS (
+    SELECT 1 FROM return_requests rr0 WHERE rr0.order_id = o.id AND rr0.kind = 'return' AND rr0.status = 'received'))
+)`;
+
+// Returns are counted in the period they arrived back (received_at), the way a supplier would
+// book a credit, not against the period of the original sale — so a period's net can go negative.
+const RECEIVED_RETURN_SQL = "rr.kind = 'return' AND rr.status = 'received'";
+
+function reportPeriod(query) {
+  const from = isoDate(query.from);
+  const to = isoDate(query.to);
+  if (from && to && from > to) return { error: 'The start date must be on or before the end date.' };
+  return { from, to };
+}
+
+// Inclusive from/to on a timestamptz column, either end optional (both missing = all time).
+function periodFilter(column, { from, to }) {
+  const day = `(${column} AT TIME ZONE '${REPORT_TZ}')::date`;
+  const parts = [];
+  const params = [];
+  if (from) { parts.push(`${day} >= ?::date`); params.push(from); }
+  if (to) { parts.push(`${day} <= ?::date`); params.push(to); }
+  return { sql: parts.length ? ` AND ${parts.join(' AND ')}` : '', params };
+}
+
+const withNet = (row) => ({
+  ...row,
+  net_units: row.units_sold - row.returned_units,
+  net_sales: row.gross_sales - row.returned_value,
+});
+
+router.get('/reports/suppliers', authorizeAdminOr('hr'), async (req, res) => {
+  const period = reportPeriod(req.query);
+  if (period.error) return res.status(400).json({ error: period.error });
+  const sales = periodFilter('o.created_at', period);
+  const returns = periodFilter('rr.received_at', period);
+
+  const partners = await db.prepare(`
+    SELECT su.id, su.name, su.category, su.contact_name, su.email, su.status, su.partner_since,
+      (SELECT COUNT(*) FROM products p WHERE p.supplier_id = su.id) as product_count,
+      COALESCE(s.orders, 0) as orders, COALESCE(s.units, 0) as units_sold, COALESCE(s.gross, 0) as gross_sales,
+      COALESCE(r.units, 0) as returned_units, COALESCE(r.value, 0) as returned_value
+    FROM suppliers su
+    LEFT JOIN (
+      SELECT p.supplier_id, COUNT(DISTINCT o.id) as orders, SUM(oi.quantity) as units, SUM(oi.quantity * oi.price) as gross
+      FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
+      WHERE p.supplier_id IS NOT NULL AND ${SOLD_ORDER_SQL}${sales.sql}
+      GROUP BY p.supplier_id
+    ) s ON s.supplier_id = su.id
+    LEFT JOIN (
+      SELECT p.supplier_id, SUM(ri.quantity) as units, SUM(ri.quantity * ri.unit_price) as value
+      FROM return_items ri JOIN return_requests rr ON rr.id = ri.return_id JOIN products p ON p.id = ri.product_id
+      WHERE p.supplier_id IS NOT NULL AND ${RECEIVED_RETURN_SQL}${returns.sql}
+      GROUP BY p.supplier_id
+    ) r ON r.supplier_id = su.id
+    WHERE su.is_partner = 1
+    ORDER BY gross_sales DESC, su.name ASC
+  `).all(...sales.params, ...returns.params);
+  const otherSuppliers = (await db.prepare('SELECT COUNT(*) as c FROM suppliers WHERE is_partner IS DISTINCT FROM 1').get()).c;
+
+  res.json({ period, partners: partners.map(withNet), otherSuppliers });
+});
+
+router.get('/reports/suppliers/:id', authorizeAdminOr('hr'), async (req, res) => {
+  const period = reportPeriod(req.query);
+  if (period.error) return res.status(400).json({ error: period.error });
+  const supplier = await db.prepare(`
+    SELECT id, name, contact_name, email, phone, address, category, status, is_partner, partner_since
+    FROM suppliers WHERE id = ?
+  `).get(req.params.id);
+  if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
+  if (!supplier.is_partner) {
+    return res.status(409).json({ error: 'Supplier reports are only kept for partners. Mark this supplier as a partner on the Suppliers page first.' });
+  }
+  const sales = periodFilter('o.created_at', period);
+  const returns = periodFilter('rr.received_at', period);
+
+  const products = (await db.prepare(`
+    SELECT p.id, p.name, p.model, p.brand, p.price, p.stock, p.status, p.archived,
+      COALESCE(pc.name, c.name) as category,
+      COALESCE(s.orders, 0) as orders, COALESCE(s.units, 0) as units_sold, COALESCE(s.gross, 0) as gross_sales,
+      COALESCE(r.units, 0) as returned_units, COALESCE(r.value, 0) as returned_value,
+      rv.avg_rating, COALESCE(rv.review_count, 0) as review_count
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN categories pc ON c.parent_id = pc.id
+    LEFT JOIN (
+      SELECT oi.product_id, COUNT(DISTINCT o.id) as orders, SUM(oi.quantity) as units, SUM(oi.quantity * oi.price) as gross
+      FROM order_items oi JOIN orders o ON o.id = oi.order_id
+      WHERE ${SOLD_ORDER_SQL}${sales.sql}
+      GROUP BY oi.product_id
+    ) s ON s.product_id = p.id
+    LEFT JOIN (
+      SELECT ri.product_id, SUM(ri.quantity) as units, SUM(ri.quantity * ri.unit_price) as value
+      FROM return_items ri JOIN return_requests rr ON rr.id = ri.return_id
+      WHERE ${RECEIVED_RETURN_SQL}${returns.sql}
+      GROUP BY ri.product_id
+    ) r ON r.product_id = p.id
+    LEFT JOIN (
+      SELECT product_id, ROUND(AVG(rating)::numeric, 1) as avg_rating, COUNT(*) as review_count
+      FROM reviews GROUP BY product_id
+    ) rv ON rv.product_id = p.id
+    WHERE p.supplier_id = ?
+    ORDER BY gross_sales DESC, p.name ASC
+  `).all(...sales.params, ...returns.params, supplier.id)).map(p => withNet({ ...p, archived: !!p.archived }));
+
+  const monthlySales = await db.prepare(`
+    SELECT to_char(o.created_at AT TIME ZONE '${REPORT_TZ}', 'YYYY-MM') as month,
+      COUNT(DISTINCT o.id) as orders, SUM(oi.quantity) as units, SUM(oi.quantity * oi.price) as gross
+    FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
+    WHERE p.supplier_id = ? AND ${SOLD_ORDER_SQL}${sales.sql}
+    GROUP BY month
+  `).all(supplier.id, ...sales.params);
+  const monthlyReturns = await db.prepare(`
+    SELECT to_char(rr.received_at AT TIME ZONE '${REPORT_TZ}', 'YYYY-MM') as month,
+      SUM(ri.quantity) as units, SUM(ri.quantity * ri.unit_price) as value
+    FROM return_items ri JOIN return_requests rr ON rr.id = ri.return_id JOIN products p ON p.id = ri.product_id
+    WHERE p.supplier_id = ? AND ${RECEIVED_RETURN_SQL}${returns.sql}
+    GROUP BY month
+  `).all(supplier.id, ...returns.params);
+  const monthKeys = [...new Set([...monthlySales, ...monthlyReturns].map(m => m.month))].sort();
+  const months = monthKeys.map(month => {
+    const s = monthlySales.find(m => m.month === month);
+    const r = monthlyReturns.find(m => m.month === month);
+    return withNet({
+      month,
+      orders: s?.orders || 0, units_sold: s?.units || 0, gross_sales: s?.gross || 0,
+      returned_units: r?.units || 0, returned_value: r?.value || 0,
+    });
+  });
+
+  const salesLines = await db.prepare(`
+    SELECT oi.id, o.id as order_id, o.created_at, o.status as order_status,
+      p.id as product_id, p.name as product_name, p.model, oi.quantity, oi.price
+    FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
+    WHERE p.supplier_id = ? AND ${SOLD_ORDER_SQL}${sales.sql}
+    ORDER BY o.created_at DESC
+  `).all(supplier.id, ...sales.params);
+  const returnLines = await db.prepare(`
+    SELECT ri.id, rr.id as return_id, rr.order_id, rr.received_at,
+      p.id as product_id, p.name as product_name, p.model, ri.quantity, ri.unit_price
+    FROM return_items ri JOIN return_requests rr ON rr.id = ri.return_id JOIN products p ON p.id = ri.product_id
+    WHERE p.supplier_id = ? AND ${RECEIVED_RETURN_SQL}${returns.sql}
+    ORDER BY rr.received_at DESC
+  `).all(supplier.id, ...returns.params);
+
+  const sum = (rows, key) => rows.reduce((t, r) => t + (Number(r[key]) || 0), 0);
+  const listed = products.filter(p => !p.archived);
+  const totals = withNet({
+    // Per-product order counts would count an order holding two of this supplier's products
+    // twice; each order falls in exactly one month, so the monthly counts add up cleanly.
+    orders: sum(months, 'orders'),
+    units_sold: sum(products, 'units_sold'),
+    gross_sales: sum(products, 'gross_sales'),
+    returned_units: sum(products, 'returned_units'),
+    returned_value: sum(products, 'returned_value'),
+  });
+  const inventory = {
+    products: products.length,
+    listed: listed.length,
+    stockOnHand: sum(listed, 'stock'),
+    lowStock: listed.filter(p => p.stock > 0 && p.stock <= 5).length,
+    outOfStock: listed.filter(p => p.stock <= 0).length,
+  };
+
+  res.json({
+    supplier: { ...supplier, is_partner: !!supplier.is_partner },
+    period,
+    generatedAt: new Date().toISOString(),
+    totals,
+    inventory,
+    products,
+    months,
+    sales: salesLines,
+    returns: returnLines,
   });
 });
 

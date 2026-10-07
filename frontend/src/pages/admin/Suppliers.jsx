@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Pencil, Truck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, Trash2, Pencil, Truck, Handshake, BarChart3 } from 'lucide-react';
 import { api } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -7,11 +8,19 @@ import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../c
 import FormField from '../../components/FormField';
 import { useAuth } from '../../context/AuthContext';
 
-const emptyForm = { name: '', contactName: '', email: '', phone: '', address: '', category: '', notes: '' };
+const emptyForm = { name: '', contactName: '', email: '', phone: '', address: '', category: '', notes: '', isPartner: false, partnerSince: '' };
 
 function toForm(s) {
-  return { name: s.name, contactName: s.contact_name || '', email: s.email || '', phone: s.phone || '', address: s.address || '', category: s.category || '', notes: s.notes || '' };
+  return {
+    name: s.name, contactName: s.contact_name || '', email: s.email || '', phone: s.phone || '', address: s.address || '', category: s.category || '', notes: s.notes || '',
+    isPartner: !!s.is_partner, partnerSince: s.partner_since || '',
+  };
 }
+
+const todayYmd = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export default function Suppliers() {
   const { user } = useAuth();
@@ -68,7 +77,7 @@ export default function Suppliers() {
   const confirmDelete = () => { remove(confirmDeleteId); setConfirmDeleteId(null); };
 
   return (
-    <AdminLayout title="Supplier Management" subtitle="Manage vendors and material suppliers.">
+    <AdminLayout title="Supplier Management" subtitle="Manage vendors and material suppliers. Partners get their own sales report.">
       <ConfirmDialog
         open={!!confirmDeleteId}
         icon={Trash2}
@@ -143,6 +152,25 @@ export default function Suppliers() {
           <FormField label="Notes" className="md:col-span-2">
             <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="input-field resize-none" rows={2} />
           </FormField>
+          <div className={`md:col-span-2 rounded-xl border p-4 transition ${form.isPartner ? 'border-orange-200 bg-orange-50/60' : 'border-gray-200'}`}>
+            <label className="flex items-start gap-2.5 text-sm text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={form.isPartner}
+                onChange={e => setForm({ ...form, isPartner: e.target.checked, partnerSince: e.target.checked ? (form.partnerSince || todayYmd()) : '' })}
+              />
+              <span>
+                <span className="font-medium inline-flex items-center gap-1.5"><Handshake className="w-4 h-4 text-brand-orange" /> Partner supplier</span>
+                <span className="block text-xs text-gray-500 mt-0.5">Partners get their own sales report under Reports → Supplier Reports, covering every product linked to them.</span>
+              </span>
+            </label>
+            {form.isPartner && (
+              <FormField label="Partner since" className="mt-3 md:w-1/2">
+                <input type="date" value={form.partnerSince} onChange={e => setForm({ ...form, partnerSince: e.target.value })} className="input-field" />
+              </FormField>
+            )}
+          </div>
         </ModalBody>
         <ModalFooter>
           <button type="button" onClick={cancelForm} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
@@ -168,10 +196,13 @@ export default function Suppliers() {
             ) : suppliers.map(s => (
               <tr key={s.id} className="border-t border-gray-100">
                 <td className="p-3">
-                  <div className="flex items-center gap-2 font-medium text-gray-800">
+                  <div className="flex items-center gap-2 font-medium text-gray-800 flex-wrap">
                     <Truck className="w-3.5 h-3.5 text-brand-orange shrink-0" /> {s.name}
+                    {s.is_partner && <span className="badge bg-orange-100 text-[#c8461a] gap-1"><Handshake className="w-3 h-3" /> Partner</span>}
                   </div>
-                  {s.email && <p className="text-xs text-gray-400 ml-5">{s.email}</p>}
+                  {(s.email || s.product_count > 0) && (
+                    <p className="text-xs text-gray-400 ml-5">{[s.email, s.product_count > 0 && `${s.product_count} product${s.product_count === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}</p>
+                  )}
                 </td>
                 <td className="p-3 text-gray-600">{s.contact_name || '—'}</td>
                 <td className="p-3 text-gray-600">{s.category || '—'}</td>
@@ -183,6 +214,9 @@ export default function Suppliers() {
                 </td>
                 <td className="p-3">
                   <div className="flex items-center justify-end gap-1.5">
+                    {s.is_partner && (
+                      <Link to={`/admin/reports?view=suppliers&supplier=${s.id}`} title="Supplier report" className="p-1.5 rounded-lg bg-orange-50 text-brand-orange hover:bg-orange-100 transition"><BarChart3 className="w-3.5 h-3.5" /></Link>
+                    )}
                     <button onClick={() => startEdit(s)} title="Edit" className="p-1.5 rounded-lg bg-teal-50 text-[#00806f] hover:bg-teal-100 transition"><Pencil className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setConfirmDeleteId(s.id)} title={isAdmin ? 'Delete' : 'Request deletion'} className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
