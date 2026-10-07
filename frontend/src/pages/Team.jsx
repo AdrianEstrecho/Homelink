@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Bot, Check, Github, LayoutDashboard, Linkedin, Mail, Server, ShoppingBag, Smartphone, Users, Wrench, X } from 'lucide-react';
 import Reveal from '../components/Reveal';
+import DeliveryLane from '../components/DeliveryLane';
 import Modal, { ModalBody, ModalTitle, modalButton } from '../components/Modal';
 import MemberCard from '../components/team/MemberCard';
 import MemberAvatar from '../components/team/MemberAvatar';
@@ -36,8 +37,8 @@ export default function Team() {
 
   return (
     <div>
-      {/* Header */}
-      <section className="pt-16 pb-14 md:pt-20 md:pb-16">
+      {/* Header — the delivery lane's road runs straight into the team section below. */}
+      <section className="pt-16 md:pt-20">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <p className="eyebrow justify-center mb-4"><Users className="w-3.5 h-3.5" /> Meet the Team</p>
           <h1 className="section-title mb-4">The people behind HomeLink</h1>
@@ -46,6 +47,7 @@ export default function Team() {
             HomeLink was designed and built by this team of developers.
           </p>
         </div>
+        <DeliveryLane className="mt-6 md:mt-8" />
       </section>
 
       {/* Members */}

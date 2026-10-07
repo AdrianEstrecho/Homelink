@@ -397,6 +397,110 @@
   .team-card { transform: none; }
 }
 
+/* Delivery lane (components/DeliveryLane.jsx). The truck itself is moved from JS; these are the
+   ambient bits around it — drifting clouds, a bouncing chassis and rattling cargo, the AC fan,
+   the camera LEDs, a smart home's lights — plus the one-shot honk and delivery pops. The pops
+   animate an inner element so the wrapper's centering transform is left alone. */
+.lane-cloud {
+  animation: laneCloud linear infinite;
+}
+@keyframes laneCloud {
+  from { transform: translateX(-140px); }
+  to { transform: translateX(100vw); }
+}
+.lane-bob {
+  animation: laneBob 0.45s ease-in-out infinite alternate;
+}
+@keyframes laneBob {
+  to { transform: translateY(-1.2px); }
+}
+.lane-jiggle {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: laneJiggle 0.6s ease-in-out infinite alternate;
+}
+@keyframes laneJiggle {
+  to { transform: translateY(-1.5px) rotate(-1deg); }
+}
+.lane-fan {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: laneSpin 0.8s linear infinite;
+}
+@keyframes laneSpin {
+  to { transform: rotate(360deg); }
+}
+.lane-led {
+  animation: laneBlink 1.6s steps(1) infinite;
+}
+@keyframes laneBlink {
+  50% { opacity: 0.15; }
+}
+.lane-smart-window {
+  animation: laneLights 6s ease-in-out infinite;
+}
+@keyframes laneLights {
+  0%, 35% { fill: #bfdcf5; }
+  50%, 85% { fill: #ffd27a; }
+  100% { fill: #bfdcf5; }
+}
+.lane-puff {
+  animation: lanePuff 1.2s ease-out infinite;
+}
+@keyframes lanePuff {
+  from { transform: translate(0, 0) scale(0.5); opacity: 0.6; }
+  to { transform: translate(-22px, -8px) scale(1.6); opacity: 0; }
+}
+.lane-honk {
+  animation: laneHonk 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes laneHonk {
+  0% { opacity: 0; transform: translateY(6px) scale(0.6); }
+  15% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+.lane-badge {
+  animation: laneBadge 2.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes laneBadge {
+  0% { opacity: 0; transform: translateY(8px) scale(0.7); }
+  15% { opacity: 1; transform: translateY(0) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+.lane-drop {
+  animation: laneDrop 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes laneDrop {
+  0% { opacity: 0; transform: translateY(16px) scale(0.5); }
+  18% { opacity: 1; transform: translateY(-8px) scale(1); }
+  30% { transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes laneFadeOut {
+  0% { opacity: 0; }
+  10%, 80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lane-cloud,
+  .lane-bob,
+  .lane-jiggle,
+  .lane-fan,
+  .lane-led,
+  .lane-smart-window {
+    animation: none;
+  }
+  .lane-puff { display: none; }
+  .lane-honk,
+  .lane-badge,
+  .lane-drop {
+    animation-name: laneFadeOut;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .step-pulse { animation: none; opacity: 0; }
 }
