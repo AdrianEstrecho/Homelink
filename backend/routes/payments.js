@@ -6,9 +6,16 @@ import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
 import { createCheckoutSessionV2, retrieveCheckoutSession, verifyWebhookSignature } from '../utils/paymongo.js';
 import { resolveFrontendUrl } from '../utils/frontendUrl.js';
+import { getEnabledGatewayMethods } from '../utils/siteSettings.js';
 import { finalizePendingBooking } from './bookings.js';
 
 const router = Router();
+
+// Which of card / GCash / QR Ph the admin has left switched on, so the checkout and service
+// booking pickers only show what /checkout-session will actually accept.
+router.get('/methods', async (req, res) => {
+  res.json({ gateway: await getEnabledGatewayMethods() });
+});
 
 // Reconstructs the priced order-items shape fulfillOrder() expects from a pending_checkouts
 // row's stored snapshot. Only `product.id` is read downstream (order_items insert + stock
@@ -59,6 +66,9 @@ router.post('/checkout-session', authenticate, async (req, res) => {
     const { items, shippingAddress, promoCode, paymentMethod } = req.body;
     if (!['card', 'gcash', 'qrph'].includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod must be "card", "gcash", or "qrph"' });
+    }
+    if (!(await getEnabledGatewayMethods()).includes(paymentMethod)) {
+      return res.status(400).json({ error: 'That payment method is currently unavailable. Please choose another.' });
     }
 
     const { orderItems, subtotal, discount, total, appliedPromo } = await validateAndPriceCart(items, promoCode);

@@ -9,6 +9,7 @@ import { logActivity } from '../utils/audit.js';
 import { BOOKING_STEPS, ORIGIN, getBookingTimeline, getBookingDestination } from '../utils/tracking.js';
 import { bookingStatusEmail } from '../utils/email.js';
 import { resolveFrontendUrl } from '../utils/frontendUrl.js';
+import { getEnabledGatewayMethods } from '../utils/siteSettings.js';
 
 const router = Router();
 
@@ -120,6 +121,9 @@ router.post('/checkout-session', authenticate, async (req, res) => {
     const { serviceId, scheduledDate, scheduledTime, address, notes, paymentMethod } = req.body;
     if (!['card', 'gcash', 'qrph'].includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod must be "card", "gcash", or "qrph"' });
+    }
+    if (!(await getEnabledGatewayMethods()).includes(paymentMethod)) {
+      return res.status(400).json({ error: 'That payment method is currently unavailable. Please choose another.' });
     }
     if (!scheduledDate || !scheduledTime || !address) {
       return res.status(400).json({ error: 'scheduledDate, scheduledTime, and address are required' });
