@@ -298,43 +298,28 @@ function Ledger({ cells }) {
   );
 }
 
-// Products that have run out or are about to (5 or fewer left), emptiest first; each name opens
-// Products filtered to it so it can be restocked. While every product is stocked it stays as a
-// quiet one-line all-clear, so the admin can tell "nothing is low" from "the check is missing".
+// Products that have run out or are about to (5 or fewer left), emptiest first, as a red
+// warning; each name opens Products filtered to it so it can be restocked. Hidden while every
+// product has more than 5 units.
 function StockAlert({ lowCount, outCount, products }) {
   const total = lowCount + outCount;
-  if (total === 0) {
-    return (
-      <section aria-label="Stock levels" className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-[#e4e8f0] bg-white px-4 py-3 sm:px-5 shadow-[0_1px_2px_rgba(15,43,91,0.04)]">
-        <span className="w-9 h-9 rounded-lg bg-brand-navy/[0.06] text-brand-navy flex items-center justify-center shrink-0" aria-hidden="true">
-          <PackageCheck className="w-[18px] h-[18px]" />
-        </span>
-        <div className="flex-1 min-w-[12rem]">
-          <h3 className="font-semibold text-gray-900">All products are well stocked</h3>
-          <p className="text-xs text-gray-400">No product is at 5 units or fewer — low stock will show here</p>
-        </div>
-        <Link to="/admin/products" className="inline-flex items-center gap-1 text-xs font-semibold text-brand-navy hover:text-brand-orange transition whitespace-nowrap">
-          View products <ArrowRight className="w-3 h-3" />
-        </Link>
-      </section>
-    );
-  }
+  if (total === 0) return null;
   const summary = [
     outCount > 0 && `${outCount.toLocaleString()} out of stock`,
     lowCount > 0 && `${lowCount.toLocaleString()} running low`,
   ].filter(Boolean).join(' · ');
   const more = total - products.length;
   return (
-    <section aria-label="Low stock alert" className="mb-6 rounded-2xl border border-[#ffd8c6] bg-[#fff6f1] p-4 sm:p-5">
+    <section aria-label="Low stock warning" className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 sm:p-5">
       <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
-        <span className="w-9 h-9 rounded-lg bg-brand-orange/15 text-[#c8461a] flex items-center justify-center shrink-0" aria-hidden="true">
+        <span className="w-9 h-9 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0" aria-hidden="true">
           <AlertTriangle className="w-[18px] h-[18px]" />
         </span>
         <div className="flex-1 min-w-[12rem]">
-          <h3 className="font-semibold text-[#a2401a]">Low stock alert</h3>
-          <p className="text-xs text-[#a2401a]/80">{summary} — 5 or fewer units counts as low</p>
+          <h3 className="font-semibold text-red-700">Low stock warning</h3>
+          <p className="text-xs text-red-600/80">{summary} — 5 or fewer units counts as low</p>
         </div>
-        <Link to="/admin/products" className="inline-flex items-center gap-1 text-xs font-semibold text-[#c8461a] hover:text-[#a2401a] transition whitespace-nowrap pt-1">
+        <Link to="/admin/products" className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-800 transition whitespace-nowrap pt-1">
           Review stock <ArrowRight className="w-3 h-3" />
         </Link>
       </div>
@@ -344,10 +329,11 @@ function StockAlert({ lowCount, outCount, products }) {
             <li key={p.id} className="min-w-0 max-w-full">
               <Link
                 to={`/admin/products?search=${encodeURIComponent(p.name)}`}
-                className="flex items-center gap-2 max-w-full rounded-lg border border-[#ffd8c6] bg-white pl-3 pr-1.5 py-1 text-sm text-gray-800 hover:border-[#ffb796] transition"
+                className="flex items-center gap-2 max-w-full rounded-lg border border-red-200 bg-white pl-3 pr-1.5 py-1 text-sm text-gray-800 hover:border-red-300 transition"
               >
                 <span className="truncate">{p.name}</span>
-                <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-xs font-semibold tabular-nums ${p.stock <= 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                {/* Solid for sold out, tinted for the few left — both read as red. */}
+                <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-xs font-semibold tabular-nums ${p.stock <= 0 ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700'}`}>
                   {p.stock <= 0 ? 'Out' : `${p.stock} left`}
                 </span>
               </Link>
@@ -355,7 +341,7 @@ function StockAlert({ lowCount, outCount, products }) {
           ))}
           {more > 0 && (
             <li>
-              <Link to="/admin/products" className="flex items-center rounded-lg px-2 py-1 text-sm font-medium text-[#c8461a] hover:text-[#a2401a] transition">
+              <Link to="/admin/products" className="flex items-center rounded-lg px-2 py-1 text-sm font-medium text-red-600 hover:text-red-800 transition">
                 +{more.toLocaleString()} more
               </Link>
             </li>
