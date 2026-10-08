@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Package, Calendar, Megaphone, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
+import Switch from '../Switch';
 
 export default function NotificationsTab() {
   const { user, refreshUser } = useAuth();
@@ -45,7 +46,7 @@ export default function NotificationsTab() {
               <p className="text-sm font-semibold text-gray-800">{o.title}</p>
               <p className="text-xs text-gray-500 mt-0.5">{o.desc}</p>
             </div>
-            <Switch checked={prefs[o.key]} onChange={() => toggle(o.key)} />
+            <Switch checked={prefs[o.key]} onChange={() => toggle(o.key)} label={o.title} />
           </div>
         ))}
       </div>
@@ -54,19 +55,5 @@ export default function NotificationsTab() {
         {saved ? <Check className="w-4 h-4" /> : null} {saving ? 'Saving...' : saved ? 'Saved' : 'Save Preferences'}
       </button>
     </div>
-  );
-}
-
-function Switch({ checked, onChange }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onChange}
-      className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${checked ? 'bg-brand-orange' : 'bg-gray-300'}`}
-    >
-      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
-    </button>
   );
 }
