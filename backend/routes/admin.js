@@ -70,7 +70,13 @@ router.get('/dashboard', authorize('admin'), async (req, res) => {
   const revenueByMonth = salesByMonth.map(m => ({ ...m, services: serviceRevenueByMonth[m.month] || 0 }));
   const recentOrders = await db.prepare('SELECT o.*, u.first_name, u.last_name FROM orders o JOIN users u ON o.user_id=u.id ORDER BY o.created_at DESC LIMIT 5').all();
   const recentBookings = await db.prepare('SELECT b.*, s.name as service_name, u.first_name, u.last_name FROM bookings b JOIN services s ON b.service_id=s.id JOIN users u ON b.user_id=u.id ORDER BY b.created_at DESC LIMIT 5').all();
-  res.json({ stats, orderStatusBreakdown, bookingStatusBreakdown, salesByMonth: revenueByMonth, recentOrders, recentBookings });
+  // The products behind lowStockCount + outOfStockCount, emptiest first, for the dashboard's stock alert.
+  const lowStockProducts = await db.prepare(`
+    SELECT id, name, stock FROM products
+    WHERE stock <= 5 AND (archived IS NULL OR archived = 0)
+    ORDER BY stock ASC, name ASC LIMIT 8
+  `).all();
+  res.json({ stats, orderStatusBreakdown, bookingStatusBreakdown, salesByMonth: revenueByMonth, recentOrders, recentBookings, lowStockProducts });
 });
 
 // Users
