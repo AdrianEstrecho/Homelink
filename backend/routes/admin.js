@@ -1516,6 +1516,7 @@ router.put('/settings', authorize('admin'), async (req, res) => {
       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
     `).run(key, String(value));
   }
+  await getSiteSettings(); // refreshes the currency symbol emails are formatted with
   res.json({ message: 'Settings updated' });
 });
 

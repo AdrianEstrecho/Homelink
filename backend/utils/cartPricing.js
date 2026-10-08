@@ -1,8 +1,9 @@
 import db from '../db/database.js';
 import { getHolidayDiscount, validateVoucher, calculateDiscount } from './promos.js';
+import { getSiteSettings, orderCharges } from './siteSettings.js';
 
 // Validates stock/product availability and prices the cart, applying the active holiday
-// discount and an optional voucher. Throws an Error with a user-facing message on failure
+// discount and an optional voucher, then the shipping fee and tax from Platform Settings. Throws an Error with a user-facing message on failure
 // (missing product, insufficient stock, invalid voucher) so callers can 400 with err.message.
 export async function validateAndPriceCart(items, promoCode) {
   if (!items?.length) throw new Error('Cart is empty');
@@ -29,6 +30,7 @@ export async function validateAndPriceCart(items, promoCode) {
     appliedPromo = promoCode.toUpperCase();
   }
 
-  const total = Math.max(0, subtotal - discount);
-  return { orderItems, subtotal, discount, total, appliedPromo };
+  const merchandise = Math.max(0, subtotal - discount);
+  const { shippingFee, tax, taxRate, total } = orderCharges(merchandise, await getSiteSettings());
+  return { orderItems, subtotal, discount, shippingFee, tax, taxRate, total, appliedPromo };
 }

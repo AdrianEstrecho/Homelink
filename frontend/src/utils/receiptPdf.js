@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { paymentMethodLabel } from '../constants/paymentMethods';
+import { currencyCode } from '../api/client';
 
 const NAVY = '#0f2b5b';
 const ORANGE = '#ff6b35';
@@ -15,8 +16,8 @@ const CONTENT_WIDTH = WIDTH - MARGIN * 2;
 const RIGHT = WIDTH - MARGIN;
 const CENTER = WIDTH / 2;
 
-// jsPDF's standard fonts can't render the ₱ glyph, so PDFs spell out "PHP" instead.
-const pdfMoney = (n) => `PHP ${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 0 })}`;
+// jsPDF's standard fonts can't render a symbol like ₱, so PDFs spell out the currency code instead.
+const pdfMoney = (n) => `${currencyCode()} ${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 0 })}`;
 
 function capitalize(s) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
@@ -176,6 +177,18 @@ function drawReceipt(doc, order, person, personLabel) {
     doc.setTextColor('#16a34a');
     doc.text(`Discount${order.promo_code ? ` (${order.promo_code})` : ''}`, MARGIN, y);
     doc.text(`-${pdfMoney(order.discount)}`, RIGHT, y, { align: 'right' });
+    y += 14;
+  }
+
+  doc.setTextColor('#374151');
+  if (order.shipping_fee > 0) {
+    doc.text('Shipping', MARGIN, y);
+    doc.text(pdfMoney(order.shipping_fee), RIGHT, y, { align: 'right' });
+    y += 14;
+  }
+  if (order.tax > 0) {
+    doc.text(`Tax (${Number(order.tax_rate)}%)`, MARGIN, y);
+    doc.text(pdfMoney(order.tax), RIGHT, y, { align: 'right' });
     y += 14;
   }
 

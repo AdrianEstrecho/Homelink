@@ -664,6 +664,17 @@ await db.exec(`
   -- dropdowns, dashboards, COD settlement and revenue all keep working untouched — the same call
   -- GET /orders/my makes for 'returned'. Once set it closes the return window early, for good.
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
+
+  -- Shipping and tax as charged at checkout (utils/siteSettings.js orderCharges), so receipts and
+  -- refunds keep the order's own figures after an admin changes Platform Settings. total already
+  -- includes both. tax_rate is the percentage the tax was worked out at, for the receipt label.
+  -- pending_checkouts carries them across the PayMongo redirect, like the rest of the pricing.
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee DOUBLE PRECISION DEFAULT 0;
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax DOUBLE PRECISION DEFAULT 0;
+  ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION DEFAULT 0;
+  ALTER TABLE pending_checkouts ADD COLUMN IF NOT EXISTS shipping_fee DOUBLE PRECISION DEFAULT 0;
+  ALTER TABLE pending_checkouts ADD COLUMN IF NOT EXISTS tax DOUBLE PRECISION DEFAULT 0;
+  ALTER TABLE pending_checkouts ADD COLUMN IF NOT EXISTS tax_rate DOUBLE PRECISION DEFAULT 0;
 `);
 
 // Ports what getOrderTimeline() has always had to derive at read time: audit_logs is the only

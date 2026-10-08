@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { currencyCode } from '../api/client';
 import { formatDay, monthLabel, orderRef, periodLabel, reportFileBase, returnRef } from './supplierReport';
 
 const NAVY = '#0f2b5b';
@@ -18,10 +19,10 @@ const CONTENT_W = PAGE_W - MARGIN * 2;
 const FOOTER_SPACE = 48;
 const BOTTOM = PAGE_H - FOOTER_SPACE;
 
-// jsPDF's standard fonts can't render the ₱ glyph, so PDFs spell out "PHP" instead.
+// jsPDF's standard fonts can't render a symbol like ₱, so PDFs spell out the currency code instead.
 const num = (n, digits = 0) => Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const amount = (n) => num(n, 2);
-const pdfMoney = (n) => `PHP ${amount(n)}`;
+const pdfMoney = (n) => `${currencyCode()} ${amount(n)}`;
 
 function font(doc, style, size, color = INK) {
   doc.setFont('helvetica', style);
@@ -260,7 +261,7 @@ export function downloadSupplierReportPdf(report, preparedBy) {
     { label: 'Stock on hand', value: num(inventory.stockOnHand), sub: `${inventory.listed} listed · ${inventory.outOfStock} out of stock` },
   ], y);
 
-  y = sectionTitle(doc, 'Product performance', `${products.length} product${products.length === 1 ? '' : 's'} · amounts in PHP`, y);
+  y = sectionTitle(doc, 'Product performance', `${products.length} product${products.length === 1 ? '' : 's'} · amounts in ${currencyCode()}`, y);
   y = drawTable(doc, [
     { key: 'name', header: 'PRODUCT', width: 157, value: p => p.name, sub: p => [p.model, p.archived ? 'Archived' : p.status === 'inactive' ? 'Hidden' : null].filter(Boolean).join(' · ') },
     { key: 'price', header: 'PRICE', width: 60, align: 'right', value: p => amount(p.price) },
@@ -278,7 +279,7 @@ export function downloadSupplierReportPdf(report, preparedBy) {
     },
   });
 
-  y = sectionTitle(doc, 'Monthly summary', 'amounts in PHP', y);
+  y = sectionTitle(doc, 'Monthly summary', `amounts in ${currencyCode()}`, y);
   y = drawTable(doc, [
     { key: 'month', header: 'MONTH', width: 95, value: m => monthLabel(m.month) },
     { key: 'orders', header: 'ORDERS', width: 55, align: 'right', value: m => num(m.orders) },
@@ -289,7 +290,7 @@ export function downloadSupplierReportPdf(report, preparedBy) {
     { key: 'net_sales', header: 'NET SALES', width: 85, align: 'right', value: m => amount(m.net_sales) },
   ], months, y, { empty: 'No sales or returns in this period.' });
 
-  y = sectionTitle(doc, 'Sales ledger', `${sales.length} line${sales.length === 1 ? '' : 's'} · amounts in PHP`, y);
+  y = sectionTitle(doc, 'Sales ledger', `${sales.length} line${sales.length === 1 ? '' : 's'} · amounts in ${currencyCode()}`, y);
   y = drawTable(doc, [
     { header: 'DATE', width: 72, value: s => new Date(s.created_at).toLocaleDateString('en-PH') },
     { header: 'ORDER', width: 72, value: s => orderRef(s.order_id) },
@@ -300,7 +301,7 @@ export function downloadSupplierReportPdf(report, preparedBy) {
   ], sales, y, { empty: 'No sales in this period.' });
 
   if (returns.length) {
-    y = sectionTitle(doc, 'Returns received', `${returns.length} line${returns.length === 1 ? '' : 's'} · amounts in PHP`, y);
+    y = sectionTitle(doc, 'Returns received', `${returns.length} line${returns.length === 1 ? '' : 's'} · amounts in ${currencyCode()}`, y);
     y = drawTable(doc, [
       { header: 'RECEIVED', width: 72, value: r => new Date(r.received_at).toLocaleDateString('en-PH') },
       { header: 'RETURN', width: 82, value: r => returnRef(r.return_id), sub: r => `Order ${orderRef(r.order_id)}` },

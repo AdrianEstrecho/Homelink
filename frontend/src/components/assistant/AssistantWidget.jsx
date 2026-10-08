@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { X, Send, RotateCcw, ChevronRight, AlertCircle, ArrowRight } from 'lucide-react';
-import { api, formatPrice } from '../../api/client';
+import { api, formatPrice, currencySymbol } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import SafeImage from '../SafeImage';
 import ChatMarkdown from './ChatMarkdown';
@@ -10,9 +10,10 @@ import ChatMarkdown from './ChatMarkdown';
 const HISTORY_SENT = 16;
 const MAX_CHARS = 2000;
 
-const SUGGESTIONS = [
-  'Best CCTV setup for ₱10,000?',
-  'Aircon plus installation under ₱40,000',
+// A function so the amounts pick up the store's currency symbol, which loads after this module.
+const suggestionList = () => [
+  `Best CCTV setup for ${currencySymbol()}10,000?`,
+  `Aircon plus installation under ${currencySymbol()}40,000`,
   'Tell me about HomeLink',
   'What payment methods do you accept?',
 ];
@@ -101,7 +102,7 @@ export default function AssistantWidget({ hidden = false }) {
   const requestId = useRef(0);
 
   const isCustomer = user?.role === 'customer';
-  const suggestions = isCustomer ? [...SUGGESTIONS.slice(0, 3), 'Where is my latest order?'] : SUGGESTIONS;
+  const suggestions = isCustomer ? [...suggestionList().slice(0, 3), 'Where is my latest order?'] : suggestionList();
 
   // The chat button only appears once the backend confirms a Gemini key is configured.
   useEffect(() => {

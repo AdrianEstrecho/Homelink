@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateVoucher, getHolidayDiscount } from '../utils/promos.js';
+import { getStorefrontSettings } from '../utils/siteSettings.js';
 
 const router = Router();
 
@@ -16,6 +17,12 @@ router.get('/active', authenticate, async (req, res) => {
   const holiday = getHolidayDiscount();
   const vouchers = await db.prepare('SELECT code, discount_type, discount_value, min_order FROM vouchers WHERE active = 1 AND used_count < max_uses ORDER BY discount_value DESC LIMIT 5').all();
   res.json({ holiday, vouchers });
+});
+
+// Currency, shipping, tax and delivery estimate from Platform Settings, for pricing and labelling
+// the storefront. Public — every visitor needs the currency symbol before they've signed in.
+router.get('/storefront', async (req, res) => {
+  res.json(await getStorefrontSettings());
 });
 
 router.get('/about-hero', async (req, res) => {

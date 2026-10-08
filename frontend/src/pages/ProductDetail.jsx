@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useToast } from '../context/ToastContext';
+import { useSiteSettings } from '../context/SiteSettingsContext';
 import { useLoginPrompt } from '../hooks/useLoginPrompt';
 import { specEntries, toHighlights } from '../utils/catalogSpecs';
 import { flyToCart } from '../utils/flyToCart';
@@ -48,6 +49,7 @@ export default function ProductDetail() {
   const { addItem } = useCart();
   const { has, addItem: addWishlistItem, removeItem: removeWishlistItem } = useWishlist();
   const { showToast } = useToast();
+  const { deliveryEstimate, shippingFee, freeShippingThreshold } = useSiteSettings();
   const promptLogin = useLoginPrompt();
   const [reviews, setReviews] = useState(null);
   const [related, setRelated] = useState([]);
@@ -286,7 +288,7 @@ export default function ProductDetail() {
             <div className="grid grid-cols-3 gap-3 mb-6 text-center">
               <div className="rounded-xl bg-gray-50 border border-gray-100 px-2 py-3">
                 <Truck className="w-5 h-5 text-brand-teal mx-auto mb-1.5" />
-                <p className="text-xs text-gray-500 leading-tight">Local Delivery</p>
+                <p className="text-xs text-gray-500 leading-tight">{deliveryEstimate ? `Arrives in ${deliveryEstimate}` : 'Local Delivery'}</p>
               </div>
               <div className="rounded-xl bg-gray-50 border border-gray-100 px-2 py-3">
                 <ShieldCheck className="w-5 h-5 text-brand-teal mx-auto mb-1.5" />
@@ -381,6 +383,10 @@ export default function ProductDetail() {
                   leaving obvious dead space under the short ones. */}
               <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-7">
                 <InfoRow icon={Truck} title="Delivery">
+                  {deliveryEstimate && `Arrives in ${deliveryEstimate}. `}
+                  {shippingFee > 0 && (freeShippingThreshold > 0
+                    ? `Shipping is ${formatPrice(shippingFee)} per order, free on orders of ${formatPrice(freeShippingThreshold)} or more. `
+                    : `Shipping is a flat ${formatPrice(shippingFee)} per order. `)}
                   Delivered across Metro Manila and nearby provinces. Orders confirmed before 2PM are dispatched the next business day, and you can follow the driver on the live tracking map from your Orders page.
                 </InfoRow>
                 <InfoRow icon={ShieldCheck} title="Warranty">

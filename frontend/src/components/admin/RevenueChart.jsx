@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { formatPrice } from '../../api/client';
+import { formatPrice, currencySymbol } from '../../api/client';
 
 const WIDTH = 640;
 const HEIGHT = 220;
@@ -10,8 +10,8 @@ const PAD_BOTTOM = 26;
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function formatCompact(n) {
-  if (n >= 1000) return `₱${Math.round(n / 1000)}k`;
-  return `₱${Math.round(n)}`;
+  if (n >= 1000) return `${currencySymbol()}${Math.round(n / 1000)}k`;
+  return `${currencySymbol()}${Math.round(n)}`;
 }
 
 export default function RevenueChart({ data }) {

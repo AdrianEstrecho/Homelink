@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Search, X, ImageOff, UploadCloud, Info, FolderTree, Tag, ListChecks, Sparkles, ClipboardList, ShieldCheck, Wrench, Image as ImageIcon } from 'lucide-react';
-import { api, formatPrice } from '../../api/client';
+import { api, formatPrice, currencySymbol } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
 import FilterTab from '../../components/admin/FilterTab';
@@ -397,7 +397,7 @@ export default function AdminServices() {
 
               <Section icon={Tag} title="Pricing & Duration" description="The starting price quoted to customers, and how long a visit usually takes.">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="Base Price (₱)" required>
+                  <Field label={`Base Price (${currencySymbol()})`} required>
                     <input type="number" min="0" step="0.01" required value={form.basePrice} onChange={e => setForm(f => ({ ...f, basePrice: e.target.value }))} className="input-field" />
                   </Field>
                   <Field label="Discount (%)">

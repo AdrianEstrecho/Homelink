@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Search, X, ImageOff, UploadCloud, Info, FolderTree, Tag, ListChecks, Sparkles, ShieldCheck, Package, Image as ImageIcon } from 'lucide-react';
-import { api, formatPrice } from '../../api/client';
+import { api, formatPrice, currencySymbol } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
 import FilterTab from '../../components/admin/FilterTab';
@@ -457,7 +457,7 @@ export default function AdminProducts() {
 
               <Section icon={Tag} title="Pricing & Inventory" description="What it sells for and how many are on hand.">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Field label="Selling Price (₱)" required>
+                  <Field label={`Selling Price (${currencySymbol()})`} required>
                     <input type="number" min="0" step="0.01" required value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} className="input-field" />
                   </Field>
                   <Field label="Discount (%)">

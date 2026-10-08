@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { formatPrice } from '../../api/client';
+import { formatPrice, currencySymbol } from '../../api/client';
 
 // Monthly revenue as stacked columns, products under services, January through the current
 // month — later months haven't happened, so they're left off rather than drawn as zeros, and
@@ -17,9 +17,9 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const monthName = (m) => MONTHS[Number(m.slice(5, 7)) - 1];
 
 function compact(n) {
-  if (n >= 1e6) return `₱${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`;
-  if (n >= 1e3) return `₱${Math.round(n / 1e3)}k`;
-  return `₱${Math.round(n)}`;
+  if (n >= 1e6) return `${currencySymbol()}${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`;
+  if (n >= 1e3) return `${currencySymbol()}${Math.round(n / 1e3)}k`;
+  return `${currencySymbol()}${Math.round(n)}`;
 }
 
 // Round gridline spacing — 1, 2, 2.5 or 5 times a power of ten — picked so the tallest
