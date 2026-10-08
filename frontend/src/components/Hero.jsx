@@ -11,7 +11,7 @@ import HeroSky from './HeroSky';
 // the house can't be clicked or tabbed to.
 const CARDS_HIDDEN_AT = 0.8;
 
-// The hero sits right under the "10,000+ Homeowners Served" pill, so a
+// The hero sits right under the "Homeowners Served" pill, so a
 // "3.5 (2)" there undercuts it. Only well-established, well-rated scores are
 // shown here; the product page still shows every rating as-is.
 const HERO_MIN_REVIEWS = 5;
@@ -129,7 +129,43 @@ function HeroProductCard({ product, index, lit, tilt, onHoverChange }) {
   );
 }
 
-export default function Hero({ products = [] }) {
+// Fallback colours for buyers without a profile photo, one per avatar slot.
+const BUYER_GRADIENTS = [
+  'from-sky-400 to-brand-navy',
+  'from-amber-300 to-brand-orange',
+  'from-emerald-300 to-brand-teal',
+];
+
+// "N Homeowners Served" with the faces of real customers who've bought (GET
+// /customers/served). Its slot keeps the pill's height while that loads, so
+// the headline doesn't jump down when it arrives; with no buyers yet (or a
+// failed request) the slot just stays empty rather than showing a made-up count.
+function ServedPill({ served }) {
+  const count = served?.count ?? 0;
+  return (
+    <div className="h-[38px] mb-4">
+      {count > 0 && (
+        <div className="fade-up inline-flex items-center gap-2.5 bg-gradient-to-br from-white/[0.24] to-white/[0.06] backdrop-blur-md border border-white/25 rounded-full pl-2 pr-4 py-1.5 text-sm font-semibold text-white/90">
+          <span className="flex -space-x-2 shrink-0">
+            {served.buyers.map((b, i) => (
+              <span
+                key={i}
+                title={b.name}
+                className={`w-6 h-6 rounded-full ring-2 ring-white bg-gradient-to-br ${BUYER_GRADIENTS[i % BUYER_GRADIENTS.length]} flex items-center justify-center overflow-hidden text-[9px] font-bold text-white`}
+              >
+                {b.avatar ? <img src={b.avatar} alt="" className="w-full h-full object-cover" />
+                  : b.initials || <User className="w-3 h-3" />}
+              </span>
+            ))}
+          </span>
+          {count.toLocaleString()} {count === 1 ? 'Homeowner' : 'Homeowners'} Served
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Hero({ products = [], served = null }) {
   const wrapRef = useRef(null);
   const pinRef = useRef(null);
   // The background footage is near-invisible by design (see .hero-video), so
@@ -202,14 +238,7 @@ export default function Hero({ products = [] }) {
         <HeroSky pinRef={pinRef} />
         <div className="hero-horizon" aria-hidden="true" />
         <div className="hero-copy">
-          <div className="fade-up inline-flex items-center gap-2.5 bg-gradient-to-br from-white/[0.24] to-white/[0.06] backdrop-blur-md border border-white/25 rounded-full pl-2 pr-4 py-1.5 text-sm font-semibold text-white/90 mb-4" style={{ animationDelay: '0ms' }}>
-            <span className="flex -space-x-2 shrink-0">
-              <span className="w-6 h-6 rounded-full ring-2 ring-white bg-gradient-to-br from-sky-400 to-brand-navy flex items-center justify-center"><User className="w-3 h-3 text-white" /></span>
-              <span className="w-6 h-6 rounded-full ring-2 ring-white bg-gradient-to-br from-amber-300 to-brand-orange flex items-center justify-center"><User className="w-3 h-3 text-white" /></span>
-              <span className="w-6 h-6 rounded-full ring-2 ring-white bg-gradient-to-br from-emerald-300 to-brand-teal flex items-center justify-center"><User className="w-3 h-3 text-white" /></span>
-            </span>
-            10,000+ Homeowners Served
-          </div>
+          <ServedPill served={served} />
 
           <h1
             className="fade-up font-display font-extrabold tracking-tightest [word-spacing:0.12em] leading-[0.98] text-white mb-4 text-[clamp(2rem,5vw,3.75rem)]"

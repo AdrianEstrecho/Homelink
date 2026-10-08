@@ -79,6 +79,36 @@ app.get('/api/policies', async (req, res) => {
   res.json(await db.prepare('SELECT * FROM policies WHERE active = 1 ORDER BY sort_order').all());
 });
 
+// The home hero's "N Homeowners Served" pill: customers with at least one order or booking
+// that went through (not cancelled or refunded), plus three of them to show as avatars —
+// ones with a profile photo first, then the most recent. Only a first name and last initial
+// leave the server, never ids or contact details.
+app.get('/api/customers/served', async (req, res) => {
+  const rows = await db.prepare(`
+    WITH buyers AS (
+      SELECT user_id, MAX(created_at) AS last_at FROM (
+        SELECT user_id, created_at FROM orders WHERE status <> 'cancelled' AND payment_status <> 'refunded'
+        UNION ALL
+        SELECT user_id, created_at FROM bookings WHERE status <> 'cancelled' AND payment_status <> 'refunded'
+      ) t
+      GROUP BY user_id
+    )
+    SELECT u.first_name, u.last_name, u.avatar, COUNT(*) OVER () AS total
+    FROM buyers b JOIN users u ON u.id = b.user_id
+    WHERE u.role = 'customer' AND COALESCE(u.archived, 0) = 0
+    ORDER BY (u.avatar IS NOT NULL) DESC, b.last_at DESC
+    LIMIT 3
+  `).all();
+  res.json({
+    count: rows[0]?.total ?? 0,
+    buyers: rows.map(r => ({
+      name: `${r.first_name} ${(r.last_name || '').charAt(0)}.`.replace(/ \.$/, ''),
+      initials: `${r.first_name?.[0] || ''}${r.last_name?.[0] || ''}`.toUpperCase(),
+      avatar: r.avatar || null,
+    })),
+  });
+});
+
 app.use('/api/geo', geoRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
