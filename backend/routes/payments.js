@@ -66,7 +66,7 @@ async function finalizePendingCheckout(pending, req) {
 // up front — /status polls that until a payment shows up as paid.
 router.post('/checkout-session', authenticate, async (req, res) => {
   try {
-    const { items, shippingAddress, promoCode, paymentMethod } = req.body;
+    const { items, shippingAddress, promoCode, paymentMethod, buyNow } = req.body;
     if (!['card', 'gcash', 'qrph'].includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod must be "card", "gcash", or "qrph"' });
     }
@@ -85,13 +85,19 @@ router.post('/checkout-session', authenticate, async (req, res) => {
 
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     const frontendUrl = resolveFrontendUrl(req);
+    // A "Buy Now" checkout orders one product straight from its page, bypassing the cart. Both
+    // redirects carry that along so cancelling returns to the same single-item checkout (not
+    // the full cart), and a successful return knows not to clear the customer's cart.
+    const buyNowQuery = buyNow && orderItems.length === 1
+      ? `buy=${encodeURIComponent(orderItems[0].product.slug)}&qty=${orderItems[0].quantity}`
+      : '';
     const session = await createCheckoutSessionV2({
       amount: Math.round(total * 100),
       paymentMethodTypes: [paymentMethod],
       lineItemName: 'HomeLink order',
       description: `HomeLink order (checkout ${pendingId})`,
-      successUrl: `${frontendUrl}/checkout/return?pcid=${pendingId}`,
-      cancelUrl: `${frontendUrl}/checkout`,
+      successUrl: `${frontendUrl}/checkout/return?pcid=${pendingId}${buyNowQuery ? `&${buyNowQuery}` : ''}`,
+      cancelUrl: `${frontendUrl}/checkout${buyNowQuery ? `?${buyNowQuery}` : ''}`,
       billingName: `${user.first_name} ${user.last_name}`,
       billingEmail: user.email,
       referenceNumber: pendingId,

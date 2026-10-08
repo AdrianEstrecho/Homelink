@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Check, X, Lock, ShieldCheck, Truck, Sparkles, ShoppingBag, ArrowLeft } from 'lucide-react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { Check, X, Lock, ShieldCheck, Truck, Sparkles, ShoppingBag, ArrowLeft, Loader2 } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
 import { useSiteSettings } from '../context/SiteSettingsContext';
 import { orderCharges } from '../utils/orderCharges';
@@ -17,12 +18,40 @@ function calcDiscount(amount, promo) {
 }
 
 export default function Checkout() {
-  const { items, total: subtotal, clearCart } = useCart();
+  const cart = useCart();
+  const { refresh: refreshWishlist } = useWishlist();
   const { user } = useAuth();
   const settings = useSiteSettings();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const addressRef = useRef(null);
   const paymentRef = useRef(null);
+
+  // "Buy Now" from a product page lands here as ?buy=<slug>&qty=<n>: only that product is
+  // ordered, and the cart is left exactly as it was. It's carried in the URL (not router state)
+  // so PayMongo's cancel redirect can bring the customer back to this same single-item checkout.
+  const buySlug = searchParams.get('buy');
+  const buyQty = Math.max(1, parseInt(searchParams.get('qty'), 10) || 1);
+  const [buyNowProduct, setBuyNowProduct] = useState(null); // null = loading, false = unavailable
+
+  useEffect(() => {
+    if (!buySlug) return;
+    setBuyNowProduct(null);
+    api.get(`/products/${encodeURIComponent(buySlug)}`).then(setBuyNowProduct).catch(() => setBuyNowProduct(false));
+  }, [buySlug]);
+
+  const buyNowItem = buyNowProduct && buyNowProduct.stock > 0 ? {
+    productId: buyNowProduct.id,
+    name: buyNowProduct.name,
+    price: buyNowProduct.price,
+    image: buyNowProduct.image,
+    slug: buyNowProduct.slug,
+    stock: buyNowProduct.stock,
+    quantity: Math.min(buyQty, buyNowProduct.stock),
+  } : null;
+
+  const items = buySlug ? (buyNowItem ? [buyNowItem] : []) : cart.items;
+  const subtotal = buySlug ? (buyNowItem ? buyNowItem.price * buyNowItem.quantity : 0) : cart.total;
 
   const [activePromos, setActivePromos] = useState(null);
   const [promoInput, setPromoInput] = useState('');
@@ -105,7 +134,8 @@ export default function Checkout() {
           paymentMethod: pendingOrder.payment_method,
           promoCode: pendingOrder.promo_code || undefined,
         });
-        clearCart();
+        if (!buySlug) cart.clearCart();
+        refreshWishlist(); // the server drops ordered products from the wishlist
         setPendingOrder(null);
         setConfirmedOrder(order);
         return;
@@ -116,6 +146,7 @@ export default function Checkout() {
         shippingAddress: pendingOrder.shipping_address,
         paymentMethod: pendingOrder.payment_method,
         promoCode: pendingOrder.promo_code || undefined,
+        buyNow: Boolean(buySlug),
       });
       window.location.href = checkoutUrl;
     } catch (err) {
@@ -158,6 +189,25 @@ export default function Checkout() {
         personLabel="Billed To"
         onClose={() => { setPendingOrder(null); setError(''); }}
       />
+    );
+  }
+
+  if (buySlug && buyNowProduct === null) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-24 text-center">
+        <Loader2 className="w-10 h-10 text-brand-teal mx-auto animate-spin" />
+      </div>
+    );
+  }
+
+  if (buySlug && !buyNowItem) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-24 text-center">
+        <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+        <h2 className="font-display text-2xl font-bold text-brand-ink mb-2">This product isn't available</h2>
+        <p className="text-gray-500 mb-6">It may have sold out or been removed from the store.</p>
+        <Link to="/products" className="btn-primary">Browse Products</Link>
+      </div>
     );
   }
 
@@ -229,6 +279,9 @@ export default function Checkout() {
         <div className="lg:sticky lg:top-24">
           <div className="card p-6">
             <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400 mb-4">Order Summary</h2>
+            {buySlug && (
+              <p className="text-xs text-gray-400 -mt-2 mb-4">Buying this item only — your cart stays as it is.</p>
+            )}
 
             <div className="space-y-3 max-h-64 overflow-y-auto pr-1 -mr-1 mb-4">
               {items.map(i => (

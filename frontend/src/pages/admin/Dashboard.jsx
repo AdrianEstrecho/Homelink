@@ -298,11 +298,27 @@ function Ledger({ cells }) {
   );
 }
 
-// Products that have run out or are about to (5 or fewer left), emptiest first. Hidden while
-// every product is stocked; each name opens Products filtered to it so it can be restocked.
+// Products that have run out or are about to (5 or fewer left), emptiest first; each name opens
+// Products filtered to it so it can be restocked. While every product is stocked it stays as a
+// quiet one-line all-clear, so the admin can tell "nothing is low" from "the check is missing".
 function StockAlert({ lowCount, outCount, products }) {
   const total = lowCount + outCount;
-  if (total === 0) return null;
+  if (total === 0) {
+    return (
+      <section aria-label="Stock levels" className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-[#e4e8f0] bg-white px-4 py-3 sm:px-5 shadow-[0_1px_2px_rgba(15,43,91,0.04)]">
+        <span className="w-9 h-9 rounded-lg bg-brand-navy/[0.06] text-brand-navy flex items-center justify-center shrink-0" aria-hidden="true">
+          <PackageCheck className="w-[18px] h-[18px]" />
+        </span>
+        <div className="flex-1 min-w-[12rem]">
+          <h3 className="font-semibold text-gray-900">All products are well stocked</h3>
+          <p className="text-xs text-gray-400">No product is at 5 units or fewer — low stock will show here</p>
+        </div>
+        <Link to="/admin/products" className="inline-flex items-center gap-1 text-xs font-semibold text-brand-navy hover:text-brand-orange transition whitespace-nowrap">
+          View products <ArrowRight className="w-3 h-3" />
+        </Link>
+      </section>
+    );
+  }
   const summary = [
     outCount > 0 && `${outCount.toLocaleString()} out of stock`,
     lowCount > 0 && `${lowCount.toLocaleString()} running low`,

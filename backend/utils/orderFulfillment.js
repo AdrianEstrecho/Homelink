@@ -45,6 +45,14 @@ export async function fulfillOrder({
       await insertItem.run(uuid(), orderId, oi.product.id, oi.quantity, oi.price);
     }
 
+    // Bought means no longer wished-for. Add to Cart already drops an item from the wishlist,
+    // but Buy Now skips the cart and leaves the wishlist alone until the order is real — which
+    // is here, inside the transaction, so a refused order keeps the item saved.
+    const removeFromWishlist = tx.prepare('DELETE FROM wishlists WHERE user_id = ? AND product_id = ?');
+    for (const oi of orderItems) {
+      await removeFromWishlist.run(userId, oi.product.id);
+    }
+
     // The stock check and the deduction are one statement, so two checkouts racing for the last
     // units can't both pass. Products are updated in id order so two orders sharing products
     // always lock them the same way round and wait on each other instead of deadlocking.

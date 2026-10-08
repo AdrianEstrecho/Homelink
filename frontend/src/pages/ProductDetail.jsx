@@ -141,11 +141,11 @@ export default function ProductDetail() {
     setConfirmAddToCart(false);
   };
 
+  // Buy Now checks out just this product at the chosen quantity — it never goes through the
+  // cart, so whatever else is sitting in there is neither ordered nor cleared.
   const handleBuyNow = () => {
     if (user?.role !== 'customer') { promptLogin('Log in to continue to checkout.'); return; }
-    addItem(product, qty);
-    if (wishlisted) removeWishlistItem(product.id);
-    navigate('/checkout');
+    navigate(`/checkout?buy=${encodeURIComponent(product.slug)}&qty=${qty}`);
   };
 
   const handleWishlistToggle = () => {
