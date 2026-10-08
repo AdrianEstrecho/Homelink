@@ -33,13 +33,16 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Use /api/payments/checkout-session for card, GCash, or QR Ph checkout' });
     }
 
-    const { orderItems, subtotal, discount, total, appliedPromo } = await validateAndPriceCart(items, promoCode);
+    const { orderItems, subtotal, discount, shippingFee, tax, taxRate, total, appliedPromo } = await validateAndPriceCart(items, promoCode);
 
     const order = await fulfillOrder({
       userId: req.user.id,
       orderItems,
       subtotal,
       discount,
+      shippingFee,
+      tax,
+      taxRate,
       total,
       appliedPromo,
       promoCode,

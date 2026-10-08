@@ -1,3 +1,5 @@
+import { currencySymbol } from './siteSettings.js';
+
 // Raw SMTP (the original approach) is blocked outbound on Render regardless of plan, which
 // silently broke delivery in production while working fine locally. SendGrid's HTTP API was
 // tried next, but its free tier is a 60-day trial rather than a permanent plan. Brevo was
@@ -76,7 +78,7 @@ const PAYMENT_METHOD_LABELS = {
 
 const paymentMethodLabel = (method) => PAYMENT_METHOD_LABELS[method] || capitalize(method);
 
-const money = (n) => `₱${Number(n).toLocaleString('en-PH')}`;
+const money = (n) => `${currencySymbol()}${Number(n).toLocaleString('en-PH')}`;
 const frontendUrl = () => process.env.FRONTEND_URL || 'http://localhost:5173';
 const MONO = "'Courier New',Courier,monospace";
 
@@ -173,6 +175,13 @@ export function orderConfirmationEmail(order, items, user) {
       <td style="padding:6px 0;font-family:${MONO};font-size:12px;color:#16a34a">Discount${order.promo_code ? ` (${order.promo_code})` : ''}</td>
       <td style="padding:6px 0;text-align:right;font-family:${MONO};font-size:12px;color:#16a34a">-${money(order.discount)}</td>
     </tr>` : '';
+  const chargeRow = (label, amount) => `
+    <tr>
+      <td style="padding:6px 0;font-family:${MONO};font-size:12px;color:#4b5563">${label}</td>
+      <td style="padding:6px 0;text-align:right;font-family:${MONO};font-size:12px;color:#4b5563">${money(amount)}</td>
+    </tr>`;
+  const shippingRow = order.shipping_fee > 0 ? chargeRow('Shipping', order.shipping_fee) : '';
+  const taxRow = order.tax > 0 ? chargeRow(`Tax (${Number(order.tax_rate)}%)`, order.tax) : '';
 
   return sendEmail({
     to: user.email,
@@ -189,6 +198,8 @@ export function orderConfirmationEmail(order, items, user) {
           <td style="padding:6px 0;text-align:right;font-family:${MONO};font-size:12px;color:#4b5563">${money(order.subtotal)}</td>
         </tr>
         ${discountRow}
+        ${shippingRow}
+        ${taxRow}
         <tr>
           <td style="padding:10px 0 0;border-top:4px double #0f2b5b;font-weight:bold;font-family:${MONO};font-size:15px;color:#0f2b5b">TOTAL</td>
           <td style="padding:10px 0 0;border-top:4px double #0f2b5b;text-align:right;font-weight:bold;font-family:${MONO};font-size:15px;color:#ff6b35">${money(order.total)}</td>

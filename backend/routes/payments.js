@@ -45,6 +45,9 @@ async function finalizePendingCheckout(pending, req) {
     orderItems: orderItemsFromSnapshot(pending.items),
     subtotal: pending.subtotal,
     discount: pending.discount,
+    shippingFee: pending.shipping_fee,
+    tax: pending.tax,
+    taxRate: pending.tax_rate,
     total: pending.total,
     appliedPromo: pending.applied_promo,
     promoCode: pending.promo_code,
@@ -71,14 +74,14 @@ router.post('/checkout-session', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'That payment method is currently unavailable. Please choose another.' });
     }
 
-    const { orderItems, subtotal, discount, total, appliedPromo } = await validateAndPriceCart(items, promoCode);
+    const { orderItems, subtotal, discount, shippingFee, tax, taxRate, total, appliedPromo } = await validateAndPriceCart(items, promoCode);
     const pricedItems = orderItems.map(oi => ({ productId: oi.product.id, quantity: oi.quantity, price: oi.price }));
 
     const pendingId = uuid();
     await db.prepare(`
-      INSERT INTO pending_checkouts (id, user_id, items, subtotal, discount, total, payment_method, shipping_address, promo_code, applied_promo)
-      VALUES (?,?,?,?,?,?,?,?,?,?)
-    `).run(pendingId, req.user.id, JSON.stringify(pricedItems), subtotal, discount, total, paymentMethod, shippingAddress, promoCode || null, appliedPromo);
+      INSERT INTO pending_checkouts (id, user_id, items, subtotal, discount, shipping_fee, tax, tax_rate, total, payment_method, shipping_address, promo_code, applied_promo)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(pendingId, req.user.id, JSON.stringify(pricedItems), subtotal, discount, shippingFee, tax, taxRate, total, paymentMethod, shippingAddress, promoCode || null, appliedPromo);
 
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     const frontendUrl = resolveFrontendUrl(req);

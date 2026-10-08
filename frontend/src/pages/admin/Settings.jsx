@@ -52,7 +52,7 @@ export default function AdminSettings() {
 
         <div className="card p-6">
           <h3 className="font-semibold text-gray-900 mb-1">General</h3>
-          <p className="text-xs text-gray-400 mb-4">Currency and tax used for display across the storefront and admin panel.</p>
+          <p className="text-xs text-gray-400 mb-4">The currency only changes how prices are labelled — amounts aren&apos;t converted, and card, GCash and QR Ph payments are always charged in PHP. Tax is added at checkout on the goods after discounts, not on shipping.</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <label className="block">
               <span className="text-xs font-medium text-gray-500 mb-1 block">Currency Code</span>
@@ -71,7 +71,7 @@ export default function AdminSettings() {
 
         <div className="card p-6">
           <h3 className="font-semibold text-gray-900 mb-1">Shipping</h3>
-          <p className="text-xs text-gray-400 mb-4">Shipping fee and delivery estimate shown to customers.</p>
+          <p className="text-xs text-gray-400 mb-4">Added to every product order at checkout; services aren&apos;t charged shipping. Orders reaching the free shipping threshold (after discounts) ship free — leave it at 0 for no threshold. The delivery estimate shows on product pages and at checkout.</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <label className="block">
               <span className="text-xs font-medium text-gray-500 mb-1 block">Flat Shipping Fee</span>

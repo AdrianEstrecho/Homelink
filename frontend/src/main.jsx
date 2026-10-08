@@ -7,6 +7,7 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { ToastProvider } from './context/ToastContext';
+import { SiteSettingsProvider } from './context/SiteSettingsContext';
 import './index.css';
 import './motion.css';
 
@@ -16,15 +17,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <GoogleOAuthProvider clientId={googleClientId}>
-        <AuthProvider>
-          <CartProvider>
-            <WishlistProvider>
-              <ToastProvider>
-                <App />
-              </ToastProvider>
-            </WishlistProvider>
-          </CartProvider>
-        </AuthProvider>
+        <SiteSettingsProvider>
+          <AuthProvider>
+            <CartProvider>
+              <WishlistProvider>
+                <ToastProvider>
+                  <App />
+                </ToastProvider>
+              </WishlistProvider>
+            </CartProvider>
+          </AuthProvider>
+        </SiteSettingsProvider>
       </GoogleOAuthProvider>
     </BrowserRouter>
   </React.StrictMode>

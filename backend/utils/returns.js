@@ -108,14 +108,18 @@ export function returnEligibility(order, lines) {
 // order_items.price is the per-unit GROSS price, and orders.discount (holiday + voucher) is only
 // ever held at order level — cartPricing.js never apportions it to lines. So a plain qty * price
 // over-refunds anyone who used a voucher. Each line gives back its own share of the discount.
+// Tax was charged on the discounted goods, so each line also gets back the same share of it —
+// returning everything refunds the tax in full. Shipping isn't refunded: the delivery happened.
+// Mirrored in the frontend's ReturnRequestModal estimate.
 export function prorateRefund(selected, order) {
   const subtotal = Number(order.subtotal) || 0;
   const discount = Number(order.discount) || 0;
+  const tax = Number(order.tax) || 0;
 
   return selected.reduce((total, line) => {
     const lineTotal = line.quantity * line.unitPrice;
-    const share = subtotal > 0 ? (lineTotal / subtotal) * discount : 0;
-    return total + Math.max(0, lineTotal - share);
+    const ratio = subtotal > 0 ? lineTotal / subtotal : 0;
+    return total + Math.max(0, lineTotal - ratio * discount) + ratio * tax;
   }, 0);
 }
 

@@ -177,6 +177,18 @@ export default function OrderDetailsModal({
                 <span>-{formatPrice(order.discount)}</span>
               </div>
             )}
+            {order.shipping_fee > 0 && (
+              <div className="flex justify-between text-gray-600">
+                <span>Shipping</span>
+                <span>{formatPrice(order.shipping_fee)}</span>
+              </div>
+            )}
+            {order.tax > 0 && (
+              <div className="flex justify-between text-gray-600">
+                <span>Tax ({Number(order.tax_rate)}%)</span>
+                <span>{formatPrice(order.tax)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-bold text-base pt-2 border-t border-gray-100 print:border-double print:border-t-4 print:border-brand-navy print:text-brand-navy print:pt-3">
               <span>Total</span>
               <span className="text-brand-navy">{formatPrice(order.total)}</span>

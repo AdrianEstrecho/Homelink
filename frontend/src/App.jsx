@@ -7,6 +7,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PageTransitionOverlay, { arriveAfterReload } from './components/PageTransitionOverlay';
 import AssistantWidget from './components/assistant/AssistantWidget';
 import { PageTransitionProvider } from './context/PageTransitionContext';
+import { useSiteSettings } from './context/SiteSettingsContext';
 import NotFound from './pages/NotFound';
 import Home from './pages/Home';
 import Products from './pages/Products';
@@ -68,6 +69,8 @@ const AUTH_PATHS = ['/login', '/register', '/forgot-password', '/verify-reset-co
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  // Unused value — subscribing is the point, so a changed currency symbol redraws every price.
+  useSiteSettings();
   // Employee pages use the same AdminLayout shell (sidebar/topbar) as /admin/* —
   // both need the public Navbar/Footer hidden so the two shells don't stack.
   const isStaffSection = location.pathname.startsWith('/admin') || location.pathname.startsWith('/employee');

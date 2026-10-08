@@ -23,8 +23,18 @@ export const api = {
   delete: (path, body) => request(path, { method: 'DELETE', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }),
 };
 
+// The currency from Platform Settings. SiteSettingsContext sets these from the last visit's copy
+// before the first render and again once /promos/storefront answers, so formatPrice can stay a
+// plain function instead of every caller needing the settings hook.
+let currency = { symbol: '₱', code: 'PHP' };
+export function setCurrency({ symbol, code }) {
+  currency = { symbol: symbol || '₱', code: code || 'PHP' };
+}
+export const currencySymbol = () => currency.symbol;
+export const currencyCode = () => currency.code;
+
 export function formatPrice(n) {
-  return `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 0 })}`;
+  return `${currency.symbol}${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 0 })}`;
 }
 
 export function statusColor(status) {

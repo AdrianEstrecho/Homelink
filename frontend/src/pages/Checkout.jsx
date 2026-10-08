@@ -4,6 +4,8 @@ import { Check, X, Lock, ShieldCheck, Truck, Sparkles, ShoppingBag, ArrowLeft } 
 import { api, formatPrice } from '../api/client';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
+import { useSiteSettings } from '../context/SiteSettingsContext';
+import { orderCharges } from '../utils/orderCharges';
 import AddressPicker from '../components/AddressPicker';
 import PaymentMethodPicker from '../components/PaymentMethodPicker';
 import OrderDetailsModal from '../components/OrderDetailsModal';
@@ -17,6 +19,7 @@ function calcDiscount(amount, promo) {
 export default function Checkout() {
   const { items, total: subtotal, clearCart } = useCart();
   const { user } = useAuth();
+  const settings = useSiteSettings();
   const navigate = useNavigate();
   const addressRef = useRef(null);
   const paymentRef = useRef(null);
@@ -56,7 +59,10 @@ export default function Checkout() {
   const holidayPromo = activePromos?.holiday || null;
   const holidayAmt = calcDiscount(subtotal, holidayPromo);
   const voucherAmt = appliedPromo ? calcDiscount(subtotal - holidayAmt, appliedPromo) : 0;
-  const orderTotal = Math.max(0, subtotal - holidayAmt - voucherAmt);
+  const { shippingFee, tax, taxRate, total: orderTotal, toFreeShipping } =
+    orderCharges(Math.max(0, subtotal - holidayAmt - voucherAmt), settings);
+  // A store with no shipping fee set has nothing to say about shipping, not "Free" on every order.
+  const chargesShipping = Number(settings.shippingFee) > 0;
 
   // Step 1: build a receipt preview from what's already validated on the client — nothing is
   // sent to the server yet, so nothing is charged, no stock moves, and no email goes out.
@@ -75,6 +81,9 @@ export default function Checkout() {
       promo_code: appliedPromo?.code || null,
       subtotal,
       discount: holidayAmt + voucherAmt,
+      shipping_fee: shippingFee,
+      tax,
+      tax_rate: taxRate,
       total: orderTotal,
     });
   };
@@ -242,6 +251,18 @@ export default function Checkout() {
               {voucherAmt > 0 && (
                 <div className="flex justify-between text-green-600"><span>Promo ({appliedPromo.code})</span><span>-{formatPrice(voucherAmt)}</span></div>
               )}
+              {chargesShipping && (
+                <div className="flex justify-between text-gray-500">
+                  <span>Shipping</span>
+                  {shippingFee > 0 ? <span>{formatPrice(shippingFee)}</span> : <span className="text-green-600 font-medium">Free</span>}
+                </div>
+              )}
+              {tax > 0 && (
+                <div className="flex justify-between text-gray-500"><span>Tax ({taxRate}%)</span><span>{formatPrice(tax)}</span></div>
+              )}
+              {toFreeShipping != null && (
+                <p className="text-xs text-brand-teal">Add {formatPrice(toFreeShipping)} more for free shipping.</p>
+              )}
             </div>
 
             <div className="flex justify-between items-center font-bold text-lg mt-3 pt-3 border-t border-gray-200">
@@ -265,7 +286,7 @@ export default function Checkout() {
               </div>
               <div>
                 <Truck className="w-4 h-4 text-brand-teal mx-auto mb-1" />
-                <p className="text-[11px] text-gray-400 leading-tight">Fast Delivery</p>
+                <p className="text-[11px] text-gray-400 leading-tight">{settings.deliveryEstimate ? `Arrives in ${settings.deliveryEstimate}` : 'Fast Delivery'}</p>
               </div>
             </div>
           </div>

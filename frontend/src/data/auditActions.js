@@ -1,3 +1,4 @@
+import { currencySymbol } from '../api/client';
 import { formatTicketNo } from '../utils/ticketNumber';
 
 export const POSITION_LABELS = {
@@ -74,7 +75,7 @@ export const ACTION_META = {
   'booking.unassign': { category: 'update', page: 'bookings', describe: (d, nameOf) => `Unassigned from ${nameOf?.(d.fromEmployeeId) || '—'}` },
   'booking.cancel': { category: 'update', page: 'myBookings', describe: d => `${d.customerName || 'A customer'} cancelled their booking${d.reason ? ` — "${d.reason}"` : ''}` },
   'booking.needs_review': { category: 'update', page: 'serviceBooking', describe: d => `Flagged ${d.customerName ? `${d.customerName}'s` : 'a'} paid booking for review — ${d.reason}` },
-  'order.create': { category: 'create', page: 'checkout', describe: d => `${d.customerName || 'A customer'} placed an order for ${d.itemCount || ''} item${d.itemCount === 1 ? '' : 's'} (₱${Number(d.total || 0).toLocaleString('en-PH')})` },
+  'order.create': { category: 'create', page: 'checkout', describe: d => `${d.customerName || 'A customer'} placed an order for ${d.itemCount || ''} item${d.itemCount === 1 ? '' : 's'} (${currencySymbol()}${Number(d.total || 0).toLocaleString('en-PH')})` },
   'order.status_update': { category: 'update', page: 'orders', describe: d => `Status changed: ${d.from || '—'} → ${d.to}` },
   'order.cancel': { category: 'update', page: 'myOrders', describe: d => `${d.customerName || 'A customer'} cancelled their order${d.reason ? ` — "${d.reason}"` : ''}` },
   'order.complete': { category: 'create', page: 'myOrders', describe: d => `${d.customerName || 'A customer'} confirmed order #${d.orderRef} as completed — returns closed` },
@@ -87,7 +88,7 @@ export const ACTION_META = {
   // already paid for. Entries written before that existed carry no kind and read as returns,
   // which is what they were.
   'return.create': { category: 'create', page: 'myOrders', describe: d => (d.kind === 'cancellation'
-    ? `${d.customerName || 'A customer'} cancelled paid order #${d.orderRef} — refund of ${d.refundAmount != null ? `₱${Number(d.refundAmount).toLocaleString('en-PH')}` : 'the order total'} awaiting approval${d.reason ? ` ("${d.reason}")` : ''}`
+    ? `${d.customerName || 'A customer'} cancelled paid order #${d.orderRef} — refund of ${d.refundAmount != null ? `${currencySymbol()}${Number(d.refundAmount).toLocaleString('en-PH')}` : 'the order total'} awaiting approval${d.reason ? ` ("${d.reason}")` : ''}`
     : `${d.customerName || 'A customer'} requested a return on order #${d.orderRef} — ${d.itemCount} item${d.itemCount === 1 ? '' : 's'}${d.reason ? ` ("${d.reason}")` : ''}`) },
   'return.approve': { category: 'update', page: 'returns', describe: d => (d.kind === 'cancellation'
     ? `Approved refund ${d.returnRef} for ${d.customerName || 'a customer'} on cancelled order #${d.orderRef} — awaiting payout`

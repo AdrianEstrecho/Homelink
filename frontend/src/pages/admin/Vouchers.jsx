@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, Ticket } from 'lucide-react';
-import { api, formatPrice } from '../../api/client';
+import { api, formatPrice, currencySymbol } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Select from '../../components/Select';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -143,10 +143,10 @@ export default function AdminVouchers() {
           <FormField label="Discount type">
             <Select value={form.discountType} onChange={discountType => setForm({ ...form, discountType })} options={DISCOUNT_TYPE_OPTIONS} />
           </FormField>
-          <FormField label={form.discountType === 'percent' ? 'Discount (%)' : 'Discount (₱)'} required>
+          <FormField label={form.discountType === 'percent' ? 'Discount (%)' : `Discount (${currencySymbol()})`} required>
             <input type="number" min="0" required value={form.discountValue} onChange={e => setForm({ ...form, discountValue: e.target.value })} className="input-field" />
           </FormField>
-          <FormField label="Minimum order (₱)" hint="Leave blank for no minimum.">
+          <FormField label={`Minimum order (${currencySymbol()})`} hint="Leave blank for no minimum.">
             <input type="number" min="0" value={form.minOrder} onChange={e => setForm({ ...form, minOrder: e.target.value })} className="input-field" />
           </FormField>
           <FormField label="Max uses" hint="Leave blank for 100.">

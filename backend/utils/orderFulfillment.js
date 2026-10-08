@@ -20,7 +20,7 @@ import { logActivity } from './audit.js';
 // locked first, so when the webhook and the /status poll confirm the same payment at the same
 // moment, the second one waits and gets the first one's order back rather than a duplicate.
 export async function fulfillOrder({
-  userId, orderItems, subtotal, discount, total, appliedPromo, promoCode,
+  userId, orderItems, subtotal, discount, shippingFee = 0, tax = 0, taxRate = 0, total, appliedPromo, promoCode,
   paymentMethod, paymentStatus, shippingAddress, paymongoPaymentIntentId, paymongoPaymentId,
 }, actorReq, pendingCheckoutId = null) {
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
@@ -36,9 +36,9 @@ export async function fulfillOrder({
     const reviewReasons = [];
 
     await tx.prepare(`
-      INSERT INTO orders (id, user_id, subtotal, discount, total, payment_status, payment_method, shipping_address, promo_code, paymongo_payment_intent_id, paymongo_payment_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)
-    `).run(orderId, userId, subtotal, discount, total, paymentStatus, paymentMethod, shippingAddress || user.address, appliedPromo, paymongoPaymentIntentId || null, paymongoPaymentId || null);
+      INSERT INTO orders (id, user_id, subtotal, discount, shipping_fee, tax, tax_rate, total, payment_status, payment_method, shipping_address, promo_code, paymongo_payment_intent_id, paymongo_payment_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(orderId, userId, subtotal, discount, shippingFee, tax, taxRate, total, paymentStatus, paymentMethod, shippingAddress || user.address, appliedPromo, paymongoPaymentIntentId || null, paymongoPaymentId || null);
 
     const insertItem = tx.prepare('INSERT INTO order_items (id, order_id, product_id, quantity, price) VALUES (?,?,?,?,?)');
     for (const oi of orderItems) {
