@@ -257,9 +257,6 @@ export default function Checkout() {
                   {shippingFee > 0 ? <span>{formatPrice(shippingFee)}</span> : <span className="text-green-600 font-medium">Free</span>}
                 </div>
               )}
-              {tax > 0 && (
-                <div className="flex justify-between text-gray-500"><span>Tax ({taxRate}%)</span><span>{formatPrice(tax)}</span></div>
-              )}
               {toFreeShipping != null && (
                 <p className="text-xs text-brand-teal">Add {formatPrice(toFreeShipping)} more for free shipping.</p>
               )}
@@ -269,6 +266,9 @@ export default function Checkout() {
               <span className="text-brand-ink">Total</span>
               <span className="text-brand-navy">{formatPrice(orderTotal)}</span>
             </div>
+            {tax > 0 && (
+              <p className="text-right text-xs text-gray-400 mt-1">Includes {formatPrice(tax)} VAT ({taxRate}%)</p>
+            )}
 
             <button type="submit" className="btn-primary w-full py-3 mt-5">
               Place Order — {formatPrice(orderTotal)}

@@ -52,17 +52,20 @@ export async function getStorefrontSettings() {
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
-// Shipping and tax on a product order, given what the goods cost after discounts. Tax is charged
-// on those goods only, not on shipping. Shipping is waived once the goods reach the free-shipping
-// threshold; a threshold of 0 means there is none and the flat fee always applies. Mirrored in
-// the frontend's utils/orderCharges.js so the checkout summary matches what gets charged.
+// Shipping and VAT on a product order, given what the goods cost after discounts. Shipping is
+// waived once the goods reach the free-shipping threshold; a threshold of 0 means there is none
+// and the flat fee always applies. Prices and the shipping fee already include VAT, so it is
+// never added on top: tax is the VAT inside the total (total × rate / (100 + rate)), recorded so
+// receipts can show it. Mirrored in the frontend's utils/orderCharges.js so the checkout summary
+// matches what gets charged.
 export function orderCharges(merchandise, settings) {
   const fee = Math.max(0, Number(settings.shipping_fee) || 0);
   const threshold = Math.max(0, Number(settings.free_shipping_threshold) || 0);
   const taxRate = Math.max(0, Number(settings.tax_rate) || 0);
   const shippingFee = threshold > 0 && merchandise >= threshold ? 0 : fee;
-  const tax = round2(merchandise * taxRate / 100);
-  return { shippingFee, tax, taxRate, total: round2(merchandise + shippingFee + tax) };
+  const total = round2(merchandise + shippingFee);
+  const tax = round2(total * taxRate / (100 + taxRate));
+  return { shippingFee, tax, taxRate, total };
 }
 
 // The PayMongo-backed methods an admin can switch off in Platform Settings. Bank transfer and

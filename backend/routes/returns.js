@@ -45,7 +45,7 @@ async function existingReturnsFor(orderId) {
 // inside its window at all. Advisory — POST re-checks all of this under a row lock.
 router.get('/eligibility/:orderId', authenticate, async (req, res) => {
   const order = await db.prepare(
-    'SELECT id, status, created_at, delivered_at, completed_at, subtotal, discount, tax, payment_status FROM orders WHERE id = ? AND user_id = ?'
+    'SELECT id, status, created_at, delivered_at, completed_at, subtotal, discount, payment_status FROM orders WHERE id = ? AND user_id = ?'
   ).get(req.params.orderId, req.user.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
 
@@ -138,7 +138,7 @@ router.post('/', authenticate, async (req, res) => {
     // backstop — the restock is `stock + ?`, which cannot fail — so this lock is the only thing
     // standing between a double submit and inflated inventory.
     const order = await tx.prepare(
-      'SELECT id, status, created_at, delivered_at, completed_at, subtotal, discount, tax, payment_status FROM orders WHERE id = ? AND user_id = ? FOR UPDATE'
+      'SELECT id, status, created_at, delivered_at, completed_at, subtotal, discount, payment_status FROM orders WHERE id = ? AND user_id = ? FOR UPDATE'
     ).get(orderId, req.user.id);
     if (!order) return { notFound: true };
 
