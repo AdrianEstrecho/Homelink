@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
-import { ShieldCheck, Copy, Check, Banknote, Wallet } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ShieldCheck, Copy, Check, Banknote, Wallet, CreditCard, Plus, Loader2 } from 'lucide-react';
 import Select from './Select';
 import { api } from '../api/client';
 import { PAYMENT_METHODS } from '../constants/paymentMethods';
@@ -16,6 +17,23 @@ const sanitizeGcashNumber = (raw) => {
 
 const emptyCardForm = { cardNumber: '', expMonth: '', expYear: '', cvc: '' };
 const cardYearOptions = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() + i);
+
+// "4242424242424242" → "4242 4242 4242 4242" as it's typed.
+const formatCardNumber = (raw) => raw.replace(/\D/g, '').slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ');
+
+// A card stays valid through the last day of its expiry month.
+const isExpired = (month, year) => {
+  const now = new Date();
+  return year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth() + 1);
+};
+
+function RadioDot({ selected }) {
+  return (
+    <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition ${selected ? 'border-brand-orange' : 'border-gray-300'}`}>
+      {selected && <span className="w-2 h-2 rounded-full bg-brand-orange" />}
+    </span>
+  );
+}
 
 // Cash on delivery is only offered where there's a delivery to pay for, so it's opt-in per
 // page rather than part of the default list (the service booking form shares this picker).
@@ -40,6 +58,19 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
   const [cardForm, setCardForm] = useState(emptyCardForm);
   const [cardError, setCardError] = useState('');
 
+  // The same cards as the account's Payment tab. null until loaded; a failed load just means
+  // there's nothing to pick from, so the new-card form shows as it would for a first purchase.
+  const [savedCards, setSavedCards] = useState(null);
+  const [cardChoice, setCardChoice] = useState(null); // saved card id | 'new' | null (= default)
+  const [saveNewCard, setSaveNewCard] = useState(true);
+  useEffect(() => {
+    api.get('/payment-methods/my').then(setSavedCards).catch(() => setSavedCards([]));
+  }, []);
+
+  const usableCards = (savedCards || []).filter(c => !isExpired(Number(c.exp_month), Number(c.exp_year)));
+  const defaultCardId = (usableCards.find(c => c.is_default) || usableCards[0])?.id || 'new';
+  const selectedCard = cardChoice === 'new' || usableCards.some(c => c.id === cardChoice) ? cardChoice : defaultCardId;
+
   const [gcashNumber, setGcashNumber] = useState('');
   const [gcashError, setGcashError] = useState('');
 
@@ -55,17 +86,29 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
 
   // Card number/CVC and the GCash number are collected here for a complete-feeling checkout
   // page, but PayMongo's hosted page is what actually collects payment credentials — these
-  // values are validated for shape only and never sent anywhere (see handleConfirmOrder /
-  // startBookingPayment, which only forward `method`).
+  // values are validated for shape only and never sent to the payment flow (see
+  // handleConfirmOrder / startBookingPayment, which only forward `method`). Ticking "save this
+  // card" stores just its brand, last 4 and expiry, the same as adding one from the account's
+  // Payment tab, so it shows up as a saved card next time.
   useImperativeHandle(ref, () => ({
     validate: () => {
       if (method === 'card') {
+        if (savedCards === null) { setCardError('Still loading your saved cards — try again in a moment.'); return null; }
+        if (selectedCard !== 'new') { setCardError(''); return { method }; }
+
         const digits = cardForm.cardNumber.replace(/\D/g, '');
         if (digits.length < 12 || digits.length > 19) { setCardError('Enter a valid card number'); return null; }
         const month = Number(cardForm.expMonth), year = Number(cardForm.expYear);
         if (!month || month < 1 || month > 12 || !year) { setCardError('Enter a valid expiry date'); return null; }
+        if (isExpired(month, year)) { setCardError('This card has expired'); return null; }
         if (!/^\d{3,4}$/.test(cardForm.cvc)) { setCardError('Enter a valid CVC'); return null; }
         setCardError('');
+
+        const alreadySaved = savedCards.some(c => c.last4 === digits.slice(-4) && Number(c.exp_month) === month && Number(c.exp_year) === year);
+        if (saveNewCard && !alreadySaved) {
+          // Fire-and-forget: a card that fails to save shouldn't hold up the order itself.
+          api.post('/payment-methods', { cardNumber: digits, expMonth: month, expYear: year }).catch(() => {});
+        }
         return { method };
       }
       if (method === 'gcash') {
@@ -79,7 +122,7 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
       }
       return { method };
     },
-  }), [method, cardForm, gcashNumber]);
+  }), [method, cardForm, gcashNumber, savedCards, selectedCard, saveNewCard]);
 
   return (
     <div>
@@ -100,27 +143,99 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
 
       {method === 'card' && (
         <div className="mt-5 pt-5 border-t border-gray-100 space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1.5 text-gray-700">Card Number</label>
-            <input value={cardForm.cardNumber} onChange={e => setCardForm({ ...cardForm, cardNumber: e.target.value })} placeholder="1234 5678 9012 3456" className="input-field" inputMode="numeric" />
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700">Month</label>
-              <Select value={cardForm.expMonth} onChange={expMonth => setCardForm({ ...cardForm, expMonth })} placeholder="MM" options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: String(i + 1).padStart(2, '0') }))} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700">Year</label>
-              <Select value={cardForm.expYear} onChange={expYear => setCardForm({ ...cardForm, expYear })} placeholder="YYYY" options={cardYearOptions.map(y => ({ value: String(y), label: String(y) }))} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-gray-700">CVC</label>
-              <input value={cardForm.cvc} onChange={e => setCardForm({ ...cardForm, cvc: e.target.value.replace(/\D/g, '') })} placeholder="123" maxLength={4} className="input-field" inputMode="numeric" />
-            </div>
-          </div>
+          {savedCards === null ? (
+            <p className="flex items-center gap-2 text-sm text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading your saved cards…
+            </p>
+          ) : (
+            <>
+              {savedCards.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <p className="text-sm font-medium text-gray-700">Your cards</p>
+                    <Link to="/account?tab=payment" className="text-xs font-semibold text-brand-navy hover:text-brand-orange transition">Manage cards</Link>
+                  </div>
+                  <div role="radiogroup" aria-label="Choose a card" className="space-y-2.5">
+                    {savedCards.map(c => {
+                      const expired = isExpired(Number(c.exp_month), Number(c.exp_year));
+                      const selected = selectedCard === c.id;
+                      return (
+                        <label
+                          key={c.id}
+                          className={`flex items-center gap-3 p-3.5 rounded-xl border transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-orange ${
+                            expired ? 'border-gray-200 opacity-60 cursor-not-allowed'
+                              : selected ? 'border-brand-orange bg-brand-orange/5 cursor-pointer'
+                                : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                          }`}
+                        >
+                          <input type="radio" name="saved-card" className="sr-only" checked={selected} disabled={expired} onChange={() => { setCardChoice(c.id); setCardError(''); }} />
+                          <RadioDot selected={selected} />
+                          <span className="w-10 h-7 rounded-md bg-white border border-gray-200 flex items-center justify-center shrink-0">
+                            <CreditCard className="w-4 h-4 text-brand-navy" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-semibold text-brand-ink">{c.brand} •••• {c.last4}</span>
+                            <span className={`block text-xs ${expired ? 'text-red-600' : 'text-gray-500'}`}>
+                              {expired ? 'Expired' : 'Expires'} {String(c.exp_month).padStart(2, '0')}/{c.exp_year}
+                            </span>
+                          </span>
+                          {!!c.is_default && <span className="badge bg-brand-teal/15 text-brand-teal shrink-0">Default</span>}
+                        </label>
+                      );
+                    })}
+                    <label
+                      className={`flex items-center gap-3 p-3.5 rounded-xl border transition cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-orange ${
+                        selectedCard === 'new' ? 'border-brand-orange bg-brand-orange/5' : 'border-dashed border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <input type="radio" name="saved-card" className="sr-only" checked={selectedCard === 'new'} onChange={() => { setCardChoice('new'); setCardError(''); }} />
+                      <RadioDot selected={selectedCard === 'new'} />
+                      <span className="w-10 h-7 rounded-md bg-white border border-gray-200 flex items-center justify-center shrink-0">
+                        <Plus className="w-4 h-4 text-brand-orange" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-brand-ink">Add a new card</span>
+                        <span className="block text-xs text-gray-500">Visa, Mastercard, Amex & more</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {selectedCard === 'new' && (
+                <div className={`space-y-4 ${savedCards.length > 0 ? 'p-4 rounded-xl bg-gray-50 border border-gray-100' : ''}`}>
+                  <div>
+                    <label htmlFor="card-number" className="block text-sm font-medium mb-1.5 text-gray-700">Card Number</label>
+                    <input id="card-number" value={cardForm.cardNumber} onChange={e => { setCardForm({ ...cardForm, cardNumber: formatCardNumber(e.target.value) }); setCardError(''); }} placeholder="1234 5678 9012 3456" className="input-field tabular-nums" inputMode="numeric" autoComplete="cc-number" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5 text-gray-700">Month</label>
+                      <Select value={cardForm.expMonth} onChange={expMonth => { setCardForm({ ...cardForm, expMonth }); setCardError(''); }} placeholder="MM" options={Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: String(i + 1).padStart(2, '0') }))} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1.5 text-gray-700">Year</label>
+                      <Select value={cardForm.expYear} onChange={expYear => { setCardForm({ ...cardForm, expYear }); setCardError(''); }} placeholder="YYYY" options={cardYearOptions.map(y => ({ value: String(y), label: String(y) }))} />
+                    </div>
+                    <div>
+                      <label htmlFor="card-cvc" className="block text-sm font-medium mb-1.5 text-gray-700">CVC</label>
+                      <input id="card-cvc" value={cardForm.cvc} onChange={e => { setCardForm({ ...cardForm, cvc: e.target.value.replace(/\D/g, '') }); setCardError(''); }} placeholder="123" maxLength={4} className="input-field" inputMode="numeric" autoComplete="cc-csc" />
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input type="checkbox" checked={saveNewCard} onChange={e => setSaveNewCard(e.target.checked)} className="w-4 h-4 mt-0.5 rounded accent-brand-orange shrink-0" />
+                    <span className="text-sm text-gray-700">
+                      Save this card for next time
+                      <span className="block text-xs text-gray-400 mt-0.5">Only the card brand, last 4 digits and expiry are kept — never the full number or CVC.</span>
+                    </span>
+                  </label>
+                </div>
+              )}
+            </>
+          )}
           {cardError && <p className="text-red-600 text-sm">{cardError}</p>}
           <p className="flex items-center gap-1.5 text-xs text-gray-500">
-            <ShieldCheck className="w-3.5 h-3.5 text-brand-teal" /> You'll confirm this on a secure PayMongo page next — HomeLink never sees or stores your card number or CVC.
+            <ShieldCheck className="w-3.5 h-3.5 text-brand-teal shrink-0" /> You'll confirm this on a secure PayMongo page next — HomeLink never sees or stores your card number or CVC.
           </p>
         </div>
       )}
