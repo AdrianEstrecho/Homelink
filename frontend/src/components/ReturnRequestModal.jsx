@@ -39,12 +39,10 @@ export default function ReturnRequestModal({ order, onClose, onSubmitted }) {
   const selected = lines
     .filter((l) => picked[l.orderItemId] > 0)
     .map((l) => ({ ...l, quantity: picked[l.orderItemId] }));
-  // Same sum as the backend's prorateRefund: each line's share of the discount comes off and its
-  // share of the tax goes back. Shipping isn't refunded.
   const estimate = selected.reduce((sum, l) => {
     const lineTotal = l.quantity * l.unitPrice;
-    const ratio = order.subtotal > 0 ? lineTotal / order.subtotal : 0;
-    return sum + Math.max(0, lineTotal - ratio * (order.discount || 0)) + ratio * (Number(order.tax) || 0);
+    const share = order.subtotal > 0 ? (lineTotal / order.subtotal) * (order.discount || 0) : 0;
+    return sum + Math.max(0, lineTotal - share);
   }, 0);
 
   const toggle = (line) => setPicked((p) => ({

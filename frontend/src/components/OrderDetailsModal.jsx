@@ -183,16 +183,17 @@ export default function OrderDetailsModal({
                 <span>{formatPrice(order.shipping_fee)}</span>
               </div>
             )}
-            {order.tax > 0 && (
-              <div className="flex justify-between text-gray-600">
-                <span>Tax ({Number(order.tax_rate)}%)</span>
-                <span>{formatPrice(order.tax)}</span>
-              </div>
-            )}
             <div className="flex justify-between font-bold text-base pt-2 border-t border-gray-100 print:border-double print:border-t-4 print:border-brand-navy print:text-brand-navy print:pt-3">
               <span>Total</span>
               <span className="text-brand-navy">{formatPrice(order.total)}</span>
             </div>
+            {/* VAT is already inside the total, so it's noted under it rather than listed as a charge. */}
+            {order.tax > 0 && (
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>Includes VAT ({Number(order.tax_rate)}%)</span>
+                <span>{formatPrice(order.tax)}</span>
+              </div>
+            )}
           </div>
 
           <div className="hidden print:block text-center pt-4 border-t border-dashed border-gray-300 mt-4 font-mono">

@@ -52,7 +52,7 @@ export default function AdminSettings() {
 
         <div className="card p-6">
           <h3 className="font-semibold text-gray-900 mb-1">General</h3>
-          <p className="text-xs text-gray-400 mb-4">The currency only changes how prices are labelled — amounts aren&apos;t converted, and card, GCash and QR Ph payments are always charged in PHP. Tax is added at checkout on the goods after discounts, not on shipping.</p>
+          <p className="text-xs text-gray-400 mb-4">The currency only changes how prices are labelled — amounts aren&apos;t converted, and card, GCash and QR Ph payments are always charged in PHP. Product prices and the shipping fee already include VAT at this rate: checkout never adds it on top, and receipts show how much of the total is VAT.</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <label className="block">
               <span className="text-xs font-medium text-gray-500 mb-1 block">Currency Code</span>
@@ -63,7 +63,7 @@ export default function AdminSettings() {
               <input value={form.currency_symbol} onChange={e => set('currency_symbol', e.target.value)} className="input-field" placeholder="₱" />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-gray-500 mb-1 block">Tax Rate (%)</span>
+              <span className="text-xs font-medium text-gray-500 mb-1 block">VAT Rate (%), included in prices</span>
               <input type="number" step="0.01" min="0" value={form.tax_rate} onChange={e => set('tax_rate', e.target.value)} className="input-field" />
             </label>
           </div>

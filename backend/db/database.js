@@ -665,9 +665,10 @@ await db.exec(`
   -- GET /orders/my makes for 'returned'. Once set it closes the return window early, for good.
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 
-  -- Shipping and tax as charged at checkout (utils/siteSettings.js orderCharges), so receipts and
-  -- refunds keep the order's own figures after an admin changes Platform Settings. total already
-  -- includes both. tax_rate is the percentage the tax was worked out at, for the receipt label.
+  -- Shipping and VAT as charged at checkout (utils/siteSettings.js orderCharges), so receipts keep
+  -- the order's own figures after an admin changes Platform Settings. total includes shipping;
+  -- tax is the VAT already inside total, never added to it. tax_rate is the percentage it was
+  -- worked out at, for the receipt label.
   -- pending_checkouts carries them across the PayMongo redirect, like the rest of the pricing.
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_fee DOUBLE PRECISION DEFAULT 0;
   ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax DOUBLE PRECISION DEFAULT 0;

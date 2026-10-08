@@ -186,11 +186,6 @@ function drawReceipt(doc, order, person, personLabel) {
     doc.text(pdfMoney(order.shipping_fee), RIGHT, y, { align: 'right' });
     y += 14;
   }
-  if (order.tax > 0) {
-    doc.text(`Tax (${Number(order.tax_rate)}%)`, MARGIN, y);
-    doc.text(pdfMoney(order.tax), RIGHT, y, { align: 'right' });
-    y += 14;
-  }
 
   y += 4;
   totalRule(doc, y);
@@ -203,6 +198,17 @@ function drawReceipt(doc, order, person, personLabel) {
   doc.setTextColor(ORANGE);
   doc.text(pdfMoney(order.total), RIGHT, y, { align: 'right' });
   y += 24;
+
+  // VAT is already inside the total, so it's noted beneath it rather than listed as a charge.
+  if (order.tax > 0) {
+    y -= 6;
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(GRAY);
+    doc.text(`Includes VAT (${Number(order.tax_rate)}%)`, MARGIN, y);
+    doc.text(pdfMoney(order.tax), RIGHT, y, { align: 'right' });
+    y += 18;
+  }
 
   dashedRule(doc, y);
   y += 20;

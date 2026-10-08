@@ -4,14 +4,12 @@ import { Trash2, Plus, Minus, ShoppingBag, Lock, ShieldCheck, Truck } from 'luci
 import { formatPrice } from '../api/client';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
-import { useSiteSettings } from '../context/SiteSettingsContext';
 import Reveal from '../components/Reveal';
 import SafeImage from '../components/SafeImage';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Cart() {
   const { items, removeItem, updateQty, clearCart, total, count } = useCart();
-  const { taxRate } = useSiteSettings();
   const { showToast } = useToast();
   const [confirmClear, setConfirmClear] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
@@ -127,7 +125,7 @@ export default function Cart() {
                 <span className="font-medium text-brand-ink">{formatPrice(total)}</span>
               </div>
               <div className="flex justify-between text-gray-500">
-                <span>{taxRate > 0 ? 'Shipping & tax' : 'Shipping'}</span>
+                <span>Shipping</span>
                 <span className="text-xs text-gray-400">Calculated at checkout</span>
               </div>
             </div>

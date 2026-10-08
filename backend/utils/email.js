@@ -175,13 +175,17 @@ export function orderConfirmationEmail(order, items, user) {
       <td style="padding:6px 0;font-family:${MONO};font-size:12px;color:#16a34a">Discount${order.promo_code ? ` (${order.promo_code})` : ''}</td>
       <td style="padding:6px 0;text-align:right;font-family:${MONO};font-size:12px;color:#16a34a">-${money(order.discount)}</td>
     </tr>` : '';
-  const chargeRow = (label, amount) => `
+  const shippingRow = order.shipping_fee > 0 ? `
     <tr>
-      <td style="padding:6px 0;font-family:${MONO};font-size:12px;color:#4b5563">${label}</td>
-      <td style="padding:6px 0;text-align:right;font-family:${MONO};font-size:12px;color:#4b5563">${money(amount)}</td>
-    </tr>`;
-  const shippingRow = order.shipping_fee > 0 ? chargeRow('Shipping', order.shipping_fee) : '';
-  const taxRow = order.tax > 0 ? chargeRow(`Tax (${Number(order.tax_rate)}%)`, order.tax) : '';
+      <td style="padding:6px 0;font-family:${MONO};font-size:12px;color:#4b5563">Shipping</td>
+      <td style="padding:6px 0;text-align:right;font-family:${MONO};font-size:12px;color:#4b5563">${money(order.shipping_fee)}</td>
+    </tr>` : '';
+  // VAT is already inside the total, so it's noted under it rather than listed as a charge.
+  const vatRow = order.tax > 0 ? `
+    <tr>
+      <td style="padding:4px 0 0;font-family:${MONO};font-size:11px;color:#9ca3af">Includes VAT (${Number(order.tax_rate)}%)</td>
+      <td style="padding:4px 0 0;text-align:right;font-family:${MONO};font-size:11px;color:#9ca3af">${money(order.tax)}</td>
+    </tr>` : '';
 
   return sendEmail({
     to: user.email,
@@ -199,11 +203,11 @@ export function orderConfirmationEmail(order, items, user) {
         </tr>
         ${discountRow}
         ${shippingRow}
-        ${taxRow}
         <tr>
           <td style="padding:10px 0 0;border-top:4px double #0f2b5b;font-weight:bold;font-family:${MONO};font-size:15px;color:#0f2b5b">TOTAL</td>
           <td style="padding:10px 0 0;border-top:4px double #0f2b5b;text-align:right;font-weight:bold;font-family:${MONO};font-size:15px;color:#ff6b35">${money(order.total)}</td>
         </tr>
+        ${vatRow}
       </table>
       ${order.shipping_address ? `<p style="margin:16px 0 0;font-family:${MONO};font-size:12px"><strong>Shipping to:</strong> ${order.shipping_address}</p>` : ''}
       ${order.payment_method ? `<p style="margin:6px 0 0;font-family:${MONO};font-size:12px"><strong>Payment method:</strong> ${paymentMethodLabel(order.payment_method)}</p>` : ''}
