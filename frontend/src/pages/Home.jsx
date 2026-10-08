@@ -51,6 +51,7 @@ export default function Home() {
   const [faqs, setFaqs] = useState([]);
   const [openFaq, setOpenFaq] = useState(0);
   const [contact, setContact] = useState(DEFAULT_CONTACT);
+  const [served, setServed] = useState(null);
 
   // One request feeds both the hero's 8 floating cards and the Featured
   // section: the API's default sort is featured-first, so the featured rows
@@ -92,6 +93,7 @@ export default function Home() {
     loadReviews();
     api.get('/announcements').then(setAnnouncements).catch(() => {});
     api.get('/faqs').then(data => setFaqs(data.slice(0, 5))).catch(() => {});
+    api.get('/customers/served').then(setServed).catch(() => {});
     api.get('/promos/location')
       .then(data => setContact({ phone: data.phone || DEFAULT_CONTACT.phone, email: data.email || DEFAULT_CONTACT.email }))
       .catch(() => {});
@@ -106,7 +108,7 @@ export default function Home() {
   // sky-to-road street) → FAQ light → CTA navy.
   return (
     <div>
-      <Hero products={featured.data} />
+      <Hero products={featured.data} served={served} />
 
       {/* Stats bar — white, not navy, so the cloud band at the bottom of the
           hero fades into it rather than cutting hard from cloud-white into a
