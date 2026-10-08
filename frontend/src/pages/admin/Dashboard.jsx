@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users, ShoppingCart, Calendar, Wallet, ArrowRight, Check, Plus, Pencil, Trash2, LogIn, Archive,
-  Clock, PackageOpen, Truck, PackageCheck, CalendarCheck, Wrench, CircleCheckBig,
+  Clock, PackageOpen, Truck, PackageCheck, CalendarCheck, Wrench, CircleCheckBig, AlertTriangle,
 } from 'lucide-react';
 import { api, formatPrice, statusColor } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
@@ -50,7 +50,7 @@ export default function AdminDashboard() {
     );
   }
 
-  const { stats, orderStatusBreakdown, bookingStatusBreakdown, salesByMonth, recentOrders, recentBookings } = data;
+  const { stats, orderStatusBreakdown, bookingStatusBreakdown, salesByMonth, recentOrders, recentBookings, lowStockProducts } = data;
   const nameOf = (id) => {
     const match = staff.find(u => u.id === id);
     return match && `${match.first_name} ${match.last_name}`;
@@ -84,6 +84,8 @@ export default function AdminDashboard() {
 
   return (
     <AdminLayout title="Dashboard" subtitle={subtitle}>
+      <StockAlert lowCount={stats.lowStockCount ?? 0} outCount={stats.outOfStockCount ?? 0} products={lowStockProducts || []} />
+
       <Ledger
         cells={[
           { label: 'Total revenue', icon: Wallet, value: formatPrice(stats.revenue), note: 'Paid products and services, all time', className: 'col-span-6 lg:col-span-1' },
@@ -293,6 +295,58 @@ function Ledger({ cells }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// Products that have run out or are about to (5 or fewer left), emptiest first. Hidden while
+// every product is stocked; each name opens Products filtered to it so it can be restocked.
+function StockAlert({ lowCount, outCount, products }) {
+  const total = lowCount + outCount;
+  if (total === 0) return null;
+  const summary = [
+    outCount > 0 && `${outCount.toLocaleString()} out of stock`,
+    lowCount > 0 && `${lowCount.toLocaleString()} running low`,
+  ].filter(Boolean).join(' · ');
+  const more = total - products.length;
+  return (
+    <section aria-label="Low stock alert" className="mb-6 rounded-2xl border border-[#ffd8c6] bg-[#fff6f1] p-4 sm:p-5">
+      <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
+        <span className="w-9 h-9 rounded-lg bg-brand-orange/15 text-[#c8461a] flex items-center justify-center shrink-0" aria-hidden="true">
+          <AlertTriangle className="w-[18px] h-[18px]" />
+        </span>
+        <div className="flex-1 min-w-[12rem]">
+          <h3 className="font-semibold text-[#a2401a]">Low stock alert</h3>
+          <p className="text-xs text-[#a2401a]/80">{summary} — 5 or fewer units counts as low</p>
+        </div>
+        <Link to="/admin/products" className="inline-flex items-center gap-1 text-xs font-semibold text-[#c8461a] hover:text-[#a2401a] transition whitespace-nowrap pt-1">
+          Review stock <ArrowRight className="w-3 h-3" />
+        </Link>
+      </div>
+      {products.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-2 sm:pl-[3.25rem]">
+          {products.map(p => (
+            <li key={p.id} className="min-w-0 max-w-full">
+              <Link
+                to={`/admin/products?search=${encodeURIComponent(p.name)}`}
+                className="flex items-center gap-2 max-w-full rounded-lg border border-[#ffd8c6] bg-white pl-3 pr-1.5 py-1 text-sm text-gray-800 hover:border-[#ffb796] transition"
+              >
+                <span className="truncate">{p.name}</span>
+                <span className={`shrink-0 px-1.5 py-0.5 rounded-md text-xs font-semibold tabular-nums ${p.stock <= 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {p.stock <= 0 ? 'Out' : `${p.stock} left`}
+                </span>
+              </Link>
+            </li>
+          ))}
+          {more > 0 && (
+            <li>
+              <Link to="/admin/products" className="flex items-center rounded-lg px-2 py-1 text-sm font-medium text-[#c8461a] hover:text-[#a2401a] transition">
+                +{more.toLocaleString()} more
+              </Link>
+            </li>
+          )}
+        </ul>
+      )}
+    </section>
   );
 }
 
