@@ -3,6 +3,7 @@ import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { Loader2, XCircle } from 'lucide-react';
 import { api } from '../api/client';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
 import OrderDetailsModal from '../components/OrderDetailsModal';
 
@@ -16,8 +17,15 @@ const MAX_ATTEMPTS = 30;
 export default function CheckoutReturn() {
   const [searchParams] = useSearchParams();
   const pendingCheckoutId = searchParams.get('pcid');
+  // Set when this payment came from "Buy Now" — that order never included the cart, so the
+  // cart is left alone and a retry goes back to the same single-item checkout.
+  const buySlug = searchParams.get('buy');
+  const checkoutPath = buySlug
+    ? `/checkout?buy=${encodeURIComponent(buySlug)}&qty=${encodeURIComponent(searchParams.get('qty') || '1')}`
+    : '/checkout';
   const navigate = useNavigate();
   const { clearCart } = useCart();
+  const { refresh: refreshWishlist } = useWishlist();
   const { user } = useAuth();
 
   const [state, setState] = useState('processing'); // 'processing' | 'succeeded' | 'failed' | 'timeout'
@@ -36,7 +44,11 @@ export default function CheckoutReturn() {
         if (cancelled) return;
 
         if (result.status === 'succeeded') {
-          if (!clearedRef.current) { clearCart(); clearedRef.current = true; }
+          if (!clearedRef.current) {
+            if (!buySlug) clearCart();
+            refreshWishlist(); // the server drops ordered products from the wishlist
+            clearedRef.current = true;
+          }
           setOrder(result.order);
           setState('succeeded');
           return;
@@ -57,7 +69,7 @@ export default function CheckoutReturn() {
 
     poll();
     return () => { cancelled = true; };
-  }, [pendingCheckoutId, clearCart]);
+  }, [pendingCheckoutId, buySlug, clearCart, refreshWishlist]);
 
   if (state === 'succeeded' && order) {
     return (
@@ -89,7 +101,7 @@ export default function CheckoutReturn() {
           <XCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="font-display text-xl font-bold text-brand-ink mb-2">Payment didn't go through</h2>
           <p className="text-gray-500 mb-6">{errorMsg || "We couldn't confirm this payment. Your cart is still saved — you can try again."}</p>
-          <Link to="/checkout" className="btn-primary">Back to Checkout</Link>
+          <Link to={checkoutPath} className="btn-primary">Back to Checkout</Link>
         </>
       )}
 

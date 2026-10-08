@@ -37,7 +37,7 @@ export function WishlistProvider({ children }) {
   };
 
   return (
-    <WishlistContext.Provider value={{ items, count: items.length, has, addItem, removeItem }}>
+    <WishlistContext.Provider value={{ items, count: items.length, has, addItem, removeItem, refresh }}>
       {children}
     </WishlistContext.Provider>
   );
