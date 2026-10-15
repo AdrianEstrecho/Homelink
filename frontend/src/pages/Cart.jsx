@@ -9,8 +9,13 @@ import SafeImage from '../components/SafeImage';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Cart() {
-  const { items, removeItem, updateQty, clearCart, total, count } = useCart();
+  const {
+    items, removeItem, updateQty, clearCart, count,
+    toggleSelected, selectAll, selectedItems, selectedTotal, selectedCount,
+  } = useCart();
   const { showToast } = useToast();
+  const allSelected = items.length > 0 && selectedItems.length === items.length;
+  const someSelected = selectedItems.length > 0 && !allSelected;
   const [confirmClear, setConfirmClear] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
 
@@ -60,6 +65,20 @@ export default function Cart() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8 items-start">
         <div className="space-y-4">
+          <div className="card px-4 py-3 flex items-center justify-between gap-3">
+            <label className="flex items-center gap-3 text-sm font-medium text-brand-ink cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={el => { if (el) el.indeterminate = someSelected; }}
+                onChange={() => selectAll(!allSelected)}
+                className="w-5 h-5 rounded accent-brand-orange cursor-pointer"
+              />
+              Select all ({items.length})
+            </label>
+            <span className="text-xs text-gray-400">{selectedItems.length} of {items.length} selected</span>
+          </div>
+
           {items.map((item, i) => {
             const maxQty = item.stock ?? Infinity;
             const lowStock = item.stock != null && item.stock > 0 && item.stock <= 5;
@@ -67,7 +86,16 @@ export default function Cart() {
             return (
               <Reveal key={item.productId} delay={Math.min(i, 5) * 60} className="card p-4">
                 <div className="flex gap-4">
-                  <Link to={`/products/${item.slug}`} className="shrink-0">
+                  <label className="self-center shrink-0 p-1 -m-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={item.selected}
+                      onChange={() => toggleSelected(item.productId)}
+                      aria-label={`Select ${item.name} for checkout`}
+                      className="w-5 h-5 rounded accent-brand-orange cursor-pointer align-middle"
+                    />
+                  </label>
+                  <Link to={`/products/${item.slug}`} className={`shrink-0 transition-opacity ${item.selected ? '' : 'opacity-50'}`}>
                     <SafeImage src={item.image} alt={item.name} className="w-20 h-20 object-cover rounded-lg bg-gray-100" />
                   </Link>
                   <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -121,8 +149,8 @@ export default function Cart() {
 
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-gray-500">
-                <span>Subtotal ({count} item{count === 1 ? '' : 's'})</span>
-                <span className="font-medium text-brand-ink">{formatPrice(total)}</span>
+                <span>Subtotal ({selectedCount} item{selectedCount === 1 ? '' : 's'})</span>
+                <span className="font-medium text-brand-ink">{formatPrice(selectedTotal)}</span>
               </div>
               <div className="flex justify-between text-gray-500">
                 <span>Shipping</span>
@@ -132,10 +160,21 @@ export default function Cart() {
 
             <div className="flex justify-between items-center font-bold text-lg mt-4 pt-4 border-t border-gray-100">
               <span className="text-brand-ink">Total</span>
-              <span className="text-brand-navy">{formatPrice(total)}</span>
+              <span className="text-brand-navy">{formatPrice(selectedTotal)}</span>
             </div>
 
-            <Link to="/checkout" className="btn-primary w-full text-center block py-3 mt-5">Proceed to Checkout</Link>
+            {selectedItems.length > 0 ? (
+              <Link to="/checkout" className="btn-primary w-full text-center block py-3 mt-5">
+                Checkout ({selectedItems.length})
+              </Link>
+            ) : (
+              <>
+                <button type="button" disabled className="btn-primary w-full py-3 mt-5 opacity-50 cursor-not-allowed">
+                  Proceed to Checkout
+                </button>
+                <p className="text-center text-xs text-gray-400 mt-2">Select at least one item to check out.</p>
+              </>
+            )}
             <Link to="/products" className="block text-center text-sm text-brand-teal hover:underline mt-3">Continue Shopping</Link>
 
             <div className="grid grid-cols-3 gap-2 mt-5 pt-5 border-t border-gray-100 text-center">

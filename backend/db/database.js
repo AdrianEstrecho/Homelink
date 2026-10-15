@@ -418,9 +418,12 @@ await db.exec(`
     user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     product_id TEXT REFERENCES products(id) ON DELETE CASCADE,
     quantity INTEGER NOT NULL DEFAULT 1,
+    selected INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ DEFAULT now()
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_cart_items_user_product ON cart_items(user_id, product_id);
+  -- Whether the item is ticked for checkout — only selected items get ordered.
+  ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS selected INTEGER NOT NULL DEFAULT 1;
 
   CREATE TABLE IF NOT EXISTS support_messages (
     id TEXT PRIMARY KEY,

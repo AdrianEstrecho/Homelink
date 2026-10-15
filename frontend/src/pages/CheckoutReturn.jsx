@@ -24,7 +24,7 @@ export default function CheckoutReturn() {
     ? `/checkout?buy=${encodeURIComponent(buySlug)}&qty=${encodeURIComponent(searchParams.get('qty') || '1')}`
     : '/checkout';
   const navigate = useNavigate();
-  const { clearCart } = useCart();
+  const { removeItems } = useCart();
   const { refresh: refreshWishlist } = useWishlist();
   const { user } = useAuth();
 
@@ -45,7 +45,8 @@ export default function CheckoutReturn() {
 
         if (result.status === 'succeeded') {
           if (!clearedRef.current) {
-            if (!buySlug) clearCart();
+            // Only what this order bought leaves the cart — unselected items stay for later.
+            if (!buySlug) removeItems(result.order.items.map(i => i.product_id));
             refreshWishlist(); // the server drops ordered products from the wishlist
             clearedRef.current = true;
           }
@@ -69,7 +70,7 @@ export default function CheckoutReturn() {
 
     poll();
     return () => { cancelled = true; };
-  }, [pendingCheckoutId, buySlug, clearCart, refreshWishlist]);
+  }, [pendingCheckoutId, buySlug, removeItems, refreshWishlist]);
 
   if (state === 'succeeded' && order) {
     return (

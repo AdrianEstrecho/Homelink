@@ -6,8 +6,8 @@ const CartContext = createContext(null);
 
 function withAddedItem(prev, product, qty) {
   const existing = prev.find(i => i.productId === product.id);
-  if (existing) return prev.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + qty } : i);
-  return [...prev, { productId: product.id, name: product.name, price: product.price, image: product.image, slug: product.slug, quantity: qty, stock: product.stock }];
+  if (existing) return prev.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + qty, selected: true } : i);
+  return [...prev, { productId: product.id, name: product.name, price: product.price, image: product.image, slug: product.slug, quantity: qty, stock: product.stock, selected: true }];
 }
 
 export function CartProvider({ children }) {
@@ -47,17 +47,47 @@ export function CartProvider({ children }) {
     api.put(`/cart/${productId}`, { quantity }).then(setItems).catch(refresh);
   };
 
+  // Removes several lines at once — what an order just bought — leaving the rest of the cart.
+  const removeItems = (productIds) => {
+    if (!isAccountCart || !productIds.length) return;
+    const ids = new Set(productIds);
+    setItems(prev => prev.filter(i => !ids.has(i.productId)));
+    api.delete('/cart', { productIds }).then(setItems).catch(refresh);
+  };
+
   const clearCart = () => {
     if (!isAccountCart) { setItems([]); return; }
     setItems([]);
     api.delete('/cart').catch(refresh);
   };
 
+  // Ticks or unticks items for checkout; only selected items are ordered.
+  const setSelected = (productIds, selected) => {
+    if (!isAccountCart || !productIds.length) return;
+    const ids = new Set(productIds);
+    setItems(prev => prev.map(i => ids.has(i.productId) ? { ...i, selected } : i));
+    api.put('/cart/selection', { productIds, selected }).then(setItems).catch(refresh);
+  };
+
+  const toggleSelected = (productId) => {
+    const item = items.find(i => i.productId === productId);
+    if (item) setSelected([productId], !item.selected);
+  };
+
+  const selectAll = (selected) => setSelected(items.map(i => i.productId), selected);
+
   const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
+  const selectedItems = items.filter(i => i.selected);
+  const selectedTotal = selectedItems.reduce((s, i) => s + i.price * i.quantity, 0);
+  const selectedCount = selectedItems.reduce((s, i) => s + i.quantity, 0);
+
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQty, clearCart, total, count }}>
+    <CartContext.Provider value={{
+      items, addItem, removeItem, removeItems, updateQty, clearCart, total, count,
+      toggleSelected, selectAll, selectedItems, selectedTotal, selectedCount,
+    }}>
       {children}
     </CartContext.Provider>
   );

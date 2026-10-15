@@ -50,8 +50,9 @@ export default function Checkout() {
     quantity: Math.min(buyQty, buyNowProduct.stock),
   } : null;
 
-  const items = buySlug ? (buyNowItem ? [buyNowItem] : []) : cart.items;
-  const subtotal = buySlug ? (buyNowItem ? buyNowItem.price * buyNowItem.quantity : 0) : cart.total;
+  // From the cart, only the items ticked on the cart page are ordered; the rest stay behind.
+  const items = buySlug ? (buyNowItem ? [buyNowItem] : []) : cart.selectedItems;
+  const subtotal = buySlug ? (buyNowItem ? buyNowItem.price * buyNowItem.quantity : 0) : cart.selectedTotal;
 
   const [activePromos, setActivePromos] = useState(null);
   const [promoInput, setPromoInput] = useState('');
@@ -134,7 +135,7 @@ export default function Checkout() {
           paymentMethod: pendingOrder.payment_method,
           promoCode: pendingOrder.promo_code || undefined,
         });
-        if (!buySlug) cart.clearCart();
+        if (!buySlug) cart.removeItems(order.items.map(i => i.product_id));
         refreshWishlist(); // the server drops ordered products from the wishlist
         setPendingOrder(null);
         setConfirmedOrder(order);
@@ -157,7 +158,7 @@ export default function Checkout() {
   };
 
   // Show the receipt — with its own confirmation banner — before sending the customer
-  // anywhere else. Checked ahead of the empty-cart guard below, since clearCart() just ran
+  // anywhere else. Checked ahead of the empty-cart guard below, since removeItems() just ran
   // and would otherwise make that guard hijack this render with "your cart is empty".
   // Leaving replaces this /checkout entry rather than pushing /orders on top of it — the
   // checkout session is over, so there's nothing left here to come back to; without
@@ -207,6 +208,17 @@ export default function Checkout() {
         <h2 className="font-display text-2xl font-bold text-brand-ink mb-2">This product isn't available</h2>
         <p className="text-gray-500 mb-6">It may have sold out or been removed from the store.</p>
         <Link to="/products" className="btn-primary">Browse Products</Link>
+      </div>
+    );
+  }
+
+  if (items.length === 0 && cart.items.length > 0) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-24 text-center">
+        <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+        <h2 className="font-display text-2xl font-bold text-brand-ink mb-2">No items selected</h2>
+        <p className="text-gray-500 mb-6">Tick the items you want to buy in your cart, then check out.</p>
+        <Link to="/cart" className="btn-primary">Back to Cart</Link>
       </div>
     );
   }

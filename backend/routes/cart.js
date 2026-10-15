@@ -7,7 +7,7 @@ const router = Router();
 
 async function getCart(userId) {
   const rows = await db.prepare(`
-    SELECT ci.quantity, p.id as product_id, p.name, p.price, p.image, p.slug, p.stock
+    SELECT ci.quantity, ci.selected, p.id as product_id, p.name, p.price, p.image, p.slug, p.stock
     FROM cart_items ci
     JOIN products p ON ci.product_id = p.id
     WHERE ci.user_id = ? AND (p.archived IS NULL OR p.archived = 0) AND (p.status IS NULL OR p.status = 'active')
@@ -21,6 +21,7 @@ async function getCart(userId) {
     slug: r.slug,
     stock: r.stock,
     quantity: r.quantity,
+    selected: r.selected !== 0,
   }));
 }
 
@@ -38,12 +39,27 @@ router.post('/', authenticate, async (req, res) => {
 
   const existing = await db.prepare('SELECT id, quantity FROM cart_items WHERE user_id = ? AND product_id = ?').get(req.user.id, productId);
   if (existing) {
-    await db.prepare('UPDATE cart_items SET quantity = ? WHERE id = ?').run(existing.quantity + qty, existing.id);
+    // Adding it again means the customer wants it, so it's ticked for checkout even if it wasn't.
+    await db.prepare('UPDATE cart_items SET quantity = ?, selected = 1 WHERE id = ?').run(existing.quantity + qty, existing.id);
   } else {
     await db.prepare('INSERT INTO cart_items (id, user_id, product_id, quantity) VALUES (?,?,?,?)').run(uuid(), req.user.id, productId, qty);
   }
 
   res.status(201).json(await getCart(req.user.id));
+});
+
+// Ticks or unticks items for checkout. Registered ahead of PUT /:productId so "selection"
+// isn't taken for a product id.
+router.put('/selection', authenticate, async (req, res) => {
+  const { productIds, selected } = req.body;
+  if (!Array.isArray(productIds) || typeof selected !== 'boolean') {
+    return res.status(400).json({ error: 'productIds and selected are required' });
+  }
+  if (productIds.length) {
+    await db.prepare('UPDATE cart_items SET selected = ? WHERE user_id = ? AND product_id = ANY(?)')
+      .run(selected ? 1 : 0, req.user.id, productIds);
+  }
+  res.json(await getCart(req.user.id));
 });
 
 router.put('/:productId', authenticate, async (req, res) => {
@@ -66,7 +82,13 @@ router.delete('/:productId', authenticate, async (req, res) => {
   res.json(await getCart(req.user.id));
 });
 
+// With productIds, removes just those (what an order took out of the cart); without, empties it.
 router.delete('/', authenticate, async (req, res) => {
+  const productIds = req.body?.productIds;
+  if (Array.isArray(productIds)) {
+    await db.prepare('DELETE FROM cart_items WHERE user_id = ? AND product_id = ANY(?)').run(req.user.id, productIds);
+    return res.json(await getCart(req.user.id));
+  }
   await db.prepare('DELETE FROM cart_items WHERE user_id = ?').run(req.user.id);
   res.json([]);
 });
