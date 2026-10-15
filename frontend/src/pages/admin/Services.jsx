@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Search, X, ImageOff, UploadCloud, Info, FolderTree, Tag, ListChecks, Sparkles, ClipboardList, ShieldCheck, Wrench, Image as ImageIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Search, X, ImageOff, UploadCloud, Info, FolderTree, Tag, ListChecks, Sparkles, ClipboardList, ShieldCheck, Wrench, Loader2, Image as ImageIcon } from 'lucide-react';
 import { api, formatPrice, currencySymbol } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
@@ -129,6 +129,7 @@ export default function AdminServices() {
   const [categoryPromptOpen, setCategoryPromptOpen] = useState(false);
   const [confirmArchiveId, setConfirmArchiveId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [myRequests, setMyRequests] = useState([]);
   const fileInputRef = useRef(null);
 
@@ -228,6 +229,7 @@ export default function AdminServices() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
     setError('');
 
     // A value typed without a label would silently vanish on save, and two rows sharing a
@@ -260,6 +262,7 @@ export default function AdminServices() {
       highlights: form.highlights.map(r => r.value.trim()).filter(Boolean),
       requirements: form.requirements.map(r => r.value.trim()).filter(Boolean),
     };
+    setSaving(true);
     try {
       const result = editingId
         ? await api.put(`/admin/services/${editingId}`, payload)
@@ -270,6 +273,8 @@ export default function AdminServices() {
       loadMyRequests();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -351,7 +356,7 @@ export default function AdminServices() {
         )}
       </div>
 
-      <Modal open={showForm} onClose={cancelForm} size="xl" as="form" onSubmit={handleSubmit}>
+      <Modal open={showForm} onClose={cancelForm} dismissible={!saving} size="xl" as="form" onSubmit={handleSubmit} aria-busy={saving}>
             <ModalHeader
               icon={Wrench}
               title={editingId ? 'Edit service' : 'Add a new service'}
@@ -532,9 +537,11 @@ export default function AdminServices() {
             </ModalBody>
 
             <ModalFooter>
-              <button type="button" onClick={cancelForm} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
-              <button type="submit" className={`${modalButton.base} ${modalButton.primary}`}>
-                {isGeneralStaff ? 'Submit for approval' : editingId ? 'Save changes' : 'Save service'}
+              <button type="button" onClick={cancelForm} disabled={saving} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
+              <button type="submit" disabled={saving} className={`${modalButton.base} ${modalButton.primary}`}>
+                {saving
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {isGeneralStaff ? 'Submitting…' : 'Saving…'}</>
+                  : isGeneralStaff ? 'Submit for approval' : editingId ? 'Save changes' : 'Save service'}
               </button>
             </ModalFooter>
       </Modal>

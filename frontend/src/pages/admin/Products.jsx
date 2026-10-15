@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Search, X, ImageOff, UploadCloud, Info, FolderTree, Tag, ListChecks, Sparkles, ShieldCheck, Package, Image as ImageIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, Archive, ArchiveRestore, Search, X, ImageOff, UploadCloud, Info, FolderTree, Tag, ListChecks, Sparkles, ShieldCheck, Package, Loader2, Image as ImageIcon } from 'lucide-react';
 import { api, formatPrice, currencySymbol } from '../../api/client';
 import AdminLayout from '../../components/AdminLayout';
 import Modal, { ModalBody, ModalFooter, ModalHeader, modalButton } from '../../components/Modal';
@@ -100,6 +100,7 @@ export default function AdminProducts() {
   const [confirmArchiveId, setConfirmArchiveId] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [myRequests, setMyRequests] = useState([]);
   const fileInputRef = useRef(null);
 
@@ -228,6 +229,7 @@ export default function AdminProducts() {
   // change request — nothing goes live until a clerk reviews it — so it skips the extra step.
   const handleFormSubmit = (e) => {
     e.preventDefault();
+    if (saving) return;
     setError('');
     if (!form.mainCategoryId) { setError('Select a main category.'); return; }
 
@@ -273,6 +275,7 @@ export default function AdminProducts() {
     } else {
       payload.stock = Number(form.stock);
     }
+    setSaving(true);
     try {
       const result = editingId
         ? await api.put(`/admin/products/${editingId}`, payload)
@@ -283,6 +286,8 @@ export default function AdminProducts() {
       loadMyRequests();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -376,7 +381,7 @@ export default function AdminProducts() {
       </div>
 
 
-      <Modal open={showForm} onClose={cancelForm} size="xl" as="form" onSubmit={handleFormSubmit}>
+      <Modal open={showForm} onClose={cancelForm} dismissible={!saving} size="xl" as="form" onSubmit={handleFormSubmit} aria-busy={saving}>
             <ModalHeader
               icon={Package}
               title={editingId ? 'Edit product' : 'Add a new product'}
@@ -609,9 +614,11 @@ export default function AdminProducts() {
             </ModalBody>
 
             <ModalFooter>
-              <button type="button" onClick={cancelForm} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
-              <button type="submit" className={`${modalButton.base} ${modalButton.primary}`}>
-                {isGeneralStaff ? 'Submit for approval' : editingId ? 'Save changes' : 'Save product'}
+              <button type="button" onClick={cancelForm} disabled={saving} className={`${modalButton.base} ${modalButton.secondary}`}>Cancel</button>
+              <button type="submit" disabled={saving} className={`${modalButton.base} ${modalButton.primary}`}>
+                {saving
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> {isGeneralStaff ? 'Submitting…' : 'Saving…'}</>
+                  : isGeneralStaff ? 'Submit for approval' : editingId ? 'Save changes' : 'Save product'}
               </button>
             </ModalFooter>
       </Modal>
