@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CreditCard, Plus, Star, Trash2, X, ShieldCheck } from 'lucide-react';
 import { api } from '../../api/client';
 import Select from '../Select';
+import ConfirmDialog from '../ConfirmDialog';
 
 const emptyForm = { cardNumber: '', expMonth: '', expYear: '' };
 
@@ -11,6 +12,7 @@ export default function PaymentTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [removeTarget, setRemoveTarget] = useState(null);
 
   const load = () => api.get('/payment-methods/my').then(setMethods).catch(() => setMethods([]));
   useEffect(() => { load(); }, []);
@@ -34,8 +36,9 @@ export default function PaymentTab() {
     }
   };
 
-  const remove = async (id) => {
-    if (!confirm('Remove this payment method?')) return;
+  const handleConfirmRemove = async () => {
+    const { id } = removeTarget;
+    setRemoveTarget(null);
     await api.delete(`/payment-methods/${id}`);
     load();
   };
@@ -121,12 +124,23 @@ export default function PaymentTab() {
                 {!m.is_default && (
                   <button onClick={() => setDefault(m.id)} title="Set as default" className="p-2 text-gray-400 hover:text-brand-orange transition"><Star className="w-4 h-4" /></button>
                 )}
-                <button onClick={() => remove(m.id)} title="Remove" className="p-2 text-gray-400 hover:text-red-600 transition"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => setRemoveTarget(m)} title="Remove" className="p-2 text-gray-400 hover:text-red-600 transition"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!removeTarget}
+        icon={Trash2}
+        title="Remove this card?"
+        message={removeTarget ? `${removeTarget.brand} •••• ${removeTarget.last4} will be removed from your payment methods. This can't be undone.` : ''}
+        confirmLabel="Remove"
+        tone="delete"
+        onConfirm={handleConfirmRemove}
+        onCancel={() => setRemoveTarget(null)}
+      />
     </div>
   );
 }

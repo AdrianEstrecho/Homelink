@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { MapPin, Plus, Star, Pencil, Trash2, X } from 'lucide-react';
 import { api } from '../../api/client';
 import AddressFormFields, { emptyAddressForm as emptyForm } from '../AddressFormFields';
+import ConfirmDialog from '../ConfirmDialog';
 
 export default function AddressesTab() {
   const [addresses, setAddresses] = useState(null);
@@ -10,6 +11,7 @@ export default function AddressesTab() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [removeTarget, setRemoveTarget] = useState(null);
 
   const load = () => api.get('/addresses/my').then(setAddresses).catch(() => setAddresses([]));
   useEffect(() => { load(); }, []);
@@ -42,8 +44,9 @@ export default function AddressesTab() {
     }
   };
 
-  const remove = async (id) => {
-    if (!confirm('Delete this address?')) return;
+  const handleConfirmRemove = async () => {
+    const { id } = removeTarget;
+    setRemoveTarget(null);
     await api.delete(`/addresses/${id}`);
     load();
   };
@@ -106,12 +109,23 @@ export default function AddressesTab() {
                   <button onClick={() => setDefault(a.id)} title="Set as default" className="p-2 text-gray-400 hover:text-brand-orange transition"><Star className="w-4 h-4" /></button>
                 )}
                 <button onClick={() => startEdit(a)} title="Edit" className="p-2 text-gray-400 hover:text-brand-navy transition"><Pencil className="w-4 h-4" /></button>
-                <button onClick={() => remove(a.id)} title="Delete" className="p-2 text-gray-400 hover:text-red-600 transition"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => setRemoveTarget(a)} title="Delete" className="p-2 text-gray-400 hover:text-red-600 transition"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!removeTarget}
+        icon={Trash2}
+        title="Delete this address?"
+        message={removeTarget ? `"${removeTarget.label}" will be removed from your saved addresses. This can't be undone.` : ''}
+        confirmLabel="Delete"
+        tone="delete"
+        onConfirm={handleConfirmRemove}
+        onCancel={() => setRemoveTarget(null)}
+      />
     </div>
   );
 }
