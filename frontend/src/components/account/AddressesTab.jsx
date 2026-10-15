@@ -45,9 +45,11 @@ export default function AddressesTab() {
   };
 
   const handleConfirmRemove = async () => {
-    const { id } = removeTarget;
-    setRemoveTarget(null);
-    await api.delete(`/addresses/${id}`);
+    try {
+      await api.delete(`/addresses/${removeTarget.id}`);
+    } finally {
+      setRemoveTarget(null);
+    }
     load();
   };
 
@@ -122,6 +124,7 @@ export default function AddressesTab() {
         title="Delete this address?"
         message={removeTarget ? `"${removeTarget.label}" will be removed from your saved addresses. This can't be undone.` : ''}
         confirmLabel="Delete"
+        busyLabel="Deleting…"
         tone="delete"
         onConfirm={handleConfirmRemove}
         onCancel={() => setRemoveTarget(null)}

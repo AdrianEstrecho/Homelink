@@ -444,6 +444,7 @@ export default function AdminCMS() {
         title="Delete this item?"
         message={pendingDelete ? `"${pendingDelete.label}" will be removed. This cannot be undone.` : ''}
         confirmLabel="Delete"
+        busyLabel="Deleting…"
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
       />

@@ -151,7 +151,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
   const deleteForever = (id) => runAction(() => api.delete(`/admin/users/${id}`), 'Deletion request submitted for admin approval.');
 
   const confirmArchive = () => { archiveUser(confirmArchiveId); setConfirmArchiveId(null); };
-  const confirmDelete = () => { deleteForever(confirmDeleteId); setConfirmDeleteId(null); };
+  const confirmDelete = async () => { await deleteForever(confirmDeleteId); setConfirmDeleteId(null); };
 
   const promote = async (id, position) => {
     setPromotingId(null);
@@ -190,6 +190,7 @@ export default function UserManagementPanel({ roleTabs, title, subtitle }) {
         title={isAdmin ? (deleteTarget?.role === 'admin' ? 'Permanently delete this administrator?' : 'Permanently delete this user?') : 'Request permanent deletion?'}
         message={deleteMessage}
         confirmLabel={isAdmin ? 'Delete' : 'Request Deletion'}
+        busyLabel={isAdmin ? 'Deleting…' : 'Submitting…'}
         onConfirm={confirmDelete}
         onCancel={() => setConfirmDeleteId(null)}
       />

@@ -78,7 +78,7 @@ export default function AdminVouchers() {
       setPageError(err.message);
     }
   };
-  const confirmDelete = () => { setNotice(''); setPageError(''); remove(confirmDeleteId); setConfirmDeleteId(null); };
+  const confirmDelete = async () => { setNotice(''); setPageError(''); await remove(confirmDeleteId); setConfirmDeleteId(null); };
 
   return (
     <AdminLayout title="Voucher Management" subtitle="Create and manage discount vouchers for customers.">
@@ -89,6 +89,7 @@ export default function AdminVouchers() {
         title={isAdmin ? 'Delete this voucher?' : 'Request deletion of this voucher?'}
         message={isAdmin ? 'This cannot be undone.' : 'An inventory clerk will need to approve this before the voucher is removed.'}
         confirmLabel={isAdmin ? 'Delete' : 'Request Deletion'}
+        busyLabel={isAdmin ? 'Deleting…' : 'Submitting…'}
         onConfirm={confirmDelete}
         onCancel={() => setConfirmDeleteId(null)}
       />

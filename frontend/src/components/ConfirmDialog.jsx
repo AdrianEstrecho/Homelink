@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import Modal, { ModalFooter, ModalTitle, modalButton } from './Modal';
 
 // Tones reuse the same category colors as the admin activity feed
@@ -20,6 +22,8 @@ export default function ConfirmDialog({
   title,
   message,
   confirmLabel = 'Confirm',
+  // Shown beside the spinner while an async onConfirm runs (e.g. "Deleting…").
+  busyLabel,
   cancelLabel = 'Cancel',
   tone = 'delete',
   onConfirm,
@@ -31,8 +35,23 @@ export default function ConfirmDialog({
   // Callers stack a confirmation over another dialog by passing a higher z-[n] class.
   const zIndex = Number(zIndexClass.match(/\d+/)?.[0]) || 100;
 
+  // An onConfirm that returns a promise keeps the dialog locked — spinner on, both buttons
+  // off, no dismissing — until it settles, so a slow request can't be fired twice or walked
+  // away from mid-way. The caller still decides when to close, once its request is done.
+  const [pending, setPending] = useState(null);
+  useEffect(() => { if (!open) setPending(null); }, [open]);
+  const busy = open && !!pending;
+
+  const handleConfirm = () => {
+    if (busy) return;
+    const result = onConfirm?.();
+    if (typeof result?.then !== 'function') return;
+    setPending(result);
+    result.finally(() => setPending(p => (p === result ? null : p)));
+  };
+
   return (
-    <Modal open={open} onClose={onCancel} size="sm" role="alertdialog" zIndex={zIndex}>
+    <Modal open={open} onClose={onCancel} dismissible={!busy} size="sm" role="alertdialog" zIndex={zIndex} aria-busy={busy}>
       <div className="px-6 pt-6 pb-5 flex flex-col items-center text-center sm:flex-row sm:items-start sm:text-left gap-4">
         {Icon && (
           <span className={`w-12 h-12 rounded-full ring-8 flex items-center justify-center shrink-0 ${iconClass}`} aria-hidden="true">
@@ -45,11 +64,11 @@ export default function ConfirmDialog({
         </div>
       </div>
       <ModalFooter>
-        <button type="button" onClick={onCancel} autoFocus={cautious} className={`${modalButton.base} ${modalButton.secondary}`}>
+        <button type="button" onClick={onCancel} disabled={busy} autoFocus={cautious} className={`${modalButton.base} ${modalButton.secondary}`}>
           {cancelLabel}
         </button>
-        <button type="button" onClick={onConfirm} autoFocus={!cautious} className={`${modalButton.base} ${confirmClass}`}>
-          {confirmLabel}
+        <button type="button" onClick={handleConfirm} disabled={busy} autoFocus={!cautious} className={`${modalButton.base} ${confirmClass}`}>
+          {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> {busyLabel || confirmLabel}</> : confirmLabel}
         </button>
       </ModalFooter>
     </Modal>

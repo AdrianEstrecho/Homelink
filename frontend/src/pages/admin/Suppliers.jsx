@@ -74,7 +74,9 @@ export default function Suppliers() {
     load();
     loadMyRequests();
   };
-  const confirmDelete = () => { remove(confirmDeleteId); setConfirmDeleteId(null); };
+  const confirmDelete = async () => {
+    try { await remove(confirmDeleteId); } finally { setConfirmDeleteId(null); }
+  };
 
   return (
     <AdminLayout title="Supplier Management" subtitle="Manage vendors and material suppliers. Partners get their own sales report.">
@@ -85,6 +87,7 @@ export default function Suppliers() {
         title={isAdmin ? 'Delete this supplier?' : 'Request deletion of this supplier?'}
         message={isAdmin ? 'This cannot be undone.' : 'An admin will need to approve this before the supplier is removed.'}
         confirmLabel={isAdmin ? 'Delete' : 'Request Deletion'}
+        busyLabel={isAdmin ? 'Deleting…' : 'Submitting…'}
         onConfirm={confirmDelete}
         onCancel={() => setConfirmDeleteId(null)}
       />

@@ -249,6 +249,7 @@ export default function Approvals() {
         title="Reject this request?"
         message={rejectTarget ? describePayload(rejectTarget, currentOf(rejectTarget)) : ''}
         confirmLabel="Reject"
+        busyLabel="Rejecting…"
         onConfirm={() => reject(confirmRejectId)}
         onCancel={() => setConfirmRejectId(null)}
       />

@@ -306,7 +306,7 @@ export default function AdminProducts() {
   };
 
   const confirmArchive = () => { archive(confirmArchiveId); setConfirmArchiveId(null); };
-  const confirmDelete = () => { setNotice(''); setPageError(''); remove(confirmDeleteId); setConfirmDeleteId(null); };
+  const confirmDelete = async () => { setNotice(''); setPageError(''); await remove(confirmDeleteId); setConfirmDeleteId(null); };
 
   return (
     <AdminLayout title="Products" subtitle="View and manage your product catalog.">
@@ -336,6 +336,7 @@ export default function AdminProducts() {
         title={isAdmin ? 'Permanently delete this product?' : 'Request deletion of this product?'}
         message={isAdmin ? 'This cannot be undone.' : 'An inventory clerk will need to approve this before the product is removed.'}
         confirmLabel={isAdmin ? 'Delete' : 'Request Deletion'}
+        busyLabel={isAdmin ? 'Deleting…' : 'Submitting…'}
         onConfirm={confirmDelete}
         onCancel={() => setConfirmDeleteId(null)}
       />

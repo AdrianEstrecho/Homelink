@@ -37,9 +37,11 @@ export default function PaymentTab() {
   };
 
   const handleConfirmRemove = async () => {
-    const { id } = removeTarget;
-    setRemoveTarget(null);
-    await api.delete(`/payment-methods/${id}`);
+    try {
+      await api.delete(`/payment-methods/${removeTarget.id}`);
+    } finally {
+      setRemoveTarget(null);
+    }
     load();
   };
 
@@ -137,6 +139,7 @@ export default function PaymentTab() {
         title="Remove this card?"
         message={removeTarget ? `${removeTarget.brand} •••• ${removeTarget.last4} will be removed from your payment methods. This can't be undone.` : ''}
         confirmLabel="Remove"
+        busyLabel="Removing…"
         tone="delete"
         onConfirm={handleConfirmRemove}
         onCancel={() => setRemoveTarget(null)}
