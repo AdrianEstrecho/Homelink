@@ -4,7 +4,7 @@ import db from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
-import { createCheckoutSessionV2, retrieveCheckoutSession, verifyWebhookSignature } from '../utils/paymongo.js';
+import { createCheckoutSessionV2, retrieveCheckoutSession, createPaymentIntent, attachPaymentIntent, retrievePaymentIntent, verifyWebhookSignature } from '../utils/paymongo.js';
 import { resolveFrontendUrl } from '../utils/frontendUrl.js';
 import { getEnabledGatewayMethods } from '../utils/siteSettings.js';
 import { finalizePendingBooking } from './bookings.js';
@@ -58,15 +58,97 @@ async function finalizePendingCheckout(pending, req) {
   }, req || { user: { id: pending.user_id }, ip: null }, pending.id);
 }
 
-// Card, GCash, and QR Ph all go through PayMongo's hosted Checkout Session (v2) — the browser
-// is sent straight to PayMongo's checkout_url, which collects the actual payment details (card
-// number, GCash login, QR scan) itself. We never see or store raw card/GCash credentials this
-// way, which keeps HomeLink out of PCI-DSS scope entirely. v2 defers creating the underlying
-// payment intent until the customer actually pays, so only the checkout_session_id is known
-// up front — /status polls that until a payment shows up as paid.
+// Prices the cart server-side and stashes it in pending_checkouts — the real order can't be
+// created until PayMongo confirms the charge.
+async function createPendingCheckout(req, paymentMethod) {
+  const { items, shippingAddress, promoCode } = req.body;
+  const { orderItems, subtotal, discount, shippingFee, tax, taxRate, total, appliedPromo } = await validateAndPriceCart(items, promoCode);
+  const pricedItems = orderItems.map(oi => ({ productId: oi.product.id, quantity: oi.quantity, price: oi.price }));
+
+  const pendingId = uuid();
+  await db.prepare(`
+    INSERT INTO pending_checkouts (id, user_id, items, subtotal, discount, shipping_fee, tax, tax_rate, total, payment_method, shipping_address, promo_code, applied_promo)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(pendingId, req.user.id, JSON.stringify(pricedItems), subtotal, discount, shippingFee, tax, taxRate, total, paymentMethod, shippingAddress, promoCode || null, appliedPromo);
+
+  return { pendingId, orderItems, total };
+}
+
+// A "Buy Now" checkout orders one product straight from its page, bypassing the cart. Every
+// redirect carries that along so cancelling returns to the same single-item checkout (not the
+// full cart), and a successful return knows not to clear the customer's cart.
+function buyNowQueryFor(buyNow, orderItems) {
+  return buyNow && orderItems.length === 1
+    ? `buy=${encodeURIComponent(orderItems[0].product.slug)}&qty=${orderItems[0].quantity}`
+    : '';
+}
+
+// A card entered on our own checkout page is charged right here, with no stop at PayMongo's
+// hosted page. The browser has already turned the card details into a PayMongo payment method
+// using the public key (frontend/src/api/paymongo.js), so the card number and CVC never reach
+// this server — only that payment method's id does. Most cards are charged on the spot and the
+// order comes back in this same response. A card whose bank asks for 3-D Secure gets a
+// redirectUrl to the bank's page instead, which lands back on /checkout/return to be polled.
+router.post('/card-payment', authenticate, async (req, res) => {
+  try {
+    const { paymentMethodId, buyNow } = req.body;
+    if (!paymentMethodId) return res.status(400).json({ error: 'paymentMethodId is required' });
+    if (!(await getEnabledGatewayMethods()).includes('card')) {
+      return res.status(400).json({ error: 'Card payments are currently unavailable. Please choose another method.' });
+    }
+
+    const { pendingId, orderItems, total } = await createPendingCheckout(req, 'card');
+    const buyNowQuery = buyNowQueryFor(buyNow, orderItems);
+
+    const intent = await createPaymentIntent({
+      amount: Math.round(total * 100),
+      description: `HomeLink order (checkout ${pendingId})`,
+      metadata: { pending_checkout_id: pendingId, user_id: req.user.id },
+      idempotencyKey: pendingId,
+    });
+    await db.prepare('UPDATE pending_checkouts SET paymongo_payment_intent_id = ? WHERE id = ?').run(intent.id, pendingId);
+
+    let outcome;
+    try {
+      outcome = await attachPaymentIntent(intent.id, {
+        paymentMethodId,
+        returnUrl: `${resolveFrontendUrl(req)}/checkout/return?pcid=${pendingId}${buyNowQuery ? `&${buyNowQuery}` : ''}`,
+      });
+    } catch (err) {
+      // PayMongo refused the attach outright, so nothing was charged.
+      await db.prepare("UPDATE pending_checkouts SET status = 'failed' WHERE id = ? AND status = 'pending'").run(pendingId);
+      throw err;
+    }
+
+    if (outcome.status === 'succeeded') {
+      const pending = await db.prepare('SELECT * FROM pending_checkouts WHERE id = ?').get(pendingId);
+      const order = await finalizePendingCheckout(pending, req);
+      return res.status(201).json({ status: 'succeeded', order });
+    }
+    if (outcome.status === 'awaiting_next_action' && outcome.redirectUrl) {
+      return res.json({ status: 'requires_action', pendingCheckoutId: pendingId, redirectUrl: outcome.redirectUrl });
+    }
+    if (outcome.status === 'processing') {
+      return res.json({ status: 'processing', pendingCheckoutId: pendingId });
+    }
+
+    // awaiting_payment_method: the card was declined.
+    await db.prepare("UPDATE pending_checkouts SET status = 'failed' WHERE id = ? AND status = 'pending'").run(pendingId);
+    res.status(402).json({ error: outcome.errorMessage || 'Your card was declined. Please check the details or try another card.' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GCash and QR Ph (and a saved card, which HomeLink only knows the last 4 digits of) go through
+// PayMongo's hosted Checkout Session (v2) — the browser is sent straight to PayMongo's
+// checkout_url, which collects the actual payment details (card number, GCash login, QR scan)
+// itself. v2 defers creating the underlying payment intent until the customer actually pays,
+// so only the checkout_session_id is known up front — /status polls that until a payment
+// shows up as paid.
 router.post('/checkout-session', authenticate, async (req, res) => {
   try {
-    const { items, shippingAddress, promoCode, paymentMethod, buyNow } = req.body;
+    const { paymentMethod, buyNow } = req.body;
     if (!['card', 'gcash', 'qrph'].includes(paymentMethod)) {
       return res.status(400).json({ error: 'paymentMethod must be "card", "gcash", or "qrph"' });
     }
@@ -74,23 +156,11 @@ router.post('/checkout-session', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'That payment method is currently unavailable. Please choose another.' });
     }
 
-    const { orderItems, subtotal, discount, shippingFee, tax, taxRate, total, appliedPromo } = await validateAndPriceCart(items, promoCode);
-    const pricedItems = orderItems.map(oi => ({ productId: oi.product.id, quantity: oi.quantity, price: oi.price }));
-
-    const pendingId = uuid();
-    await db.prepare(`
-      INSERT INTO pending_checkouts (id, user_id, items, subtotal, discount, shipping_fee, tax, tax_rate, total, payment_method, shipping_address, promo_code, applied_promo)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `).run(pendingId, req.user.id, JSON.stringify(pricedItems), subtotal, discount, shippingFee, tax, taxRate, total, paymentMethod, shippingAddress, promoCode || null, appliedPromo);
+    const { pendingId, orderItems, total } = await createPendingCheckout(req, paymentMethod);
 
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     const frontendUrl = resolveFrontendUrl(req);
-    // A "Buy Now" checkout orders one product straight from its page, bypassing the cart. Both
-    // redirects carry that along so cancelling returns to the same single-item checkout (not
-    // the full cart), and a successful return knows not to clear the customer's cart.
-    const buyNowQuery = buyNow && orderItems.length === 1
-      ? `buy=${encodeURIComponent(orderItems[0].product.slug)}&qty=${orderItems[0].quantity}`
-      : '';
+    const buyNowQuery = buyNowQueryFor(buyNow, orderItems);
     const session = await createCheckoutSessionV2({
       amount: Math.round(total * 100),
       paymentMethodTypes: [paymentMethod],
@@ -124,6 +194,22 @@ router.get('/status/:pendingCheckoutId', authenticate, async (req, res) => {
     }
     if (pending.status === 'failed') {
       return res.json({ status: 'failed' });
+    }
+
+    // An inline card payment (/card-payment) has no checkout session, only its own payment
+    // intent — polled here after the customer comes back from their bank's 3-D Secure page.
+    if (!pending.paymongo_checkout_session_id) {
+      if (!pending.paymongo_payment_intent_id) return res.json({ status: 'failed' });
+      const intent = await retrievePaymentIntent(pending.paymongo_payment_intent_id);
+      if (intent.status === 'succeeded') {
+        const order = await finalizePendingCheckout(pending, req);
+        return res.json({ status: 'succeeded', order });
+      }
+      if (intent.status === 'awaiting_payment_method') {
+        await db.prepare("UPDATE pending_checkouts SET status = 'failed' WHERE id = ? AND status = 'pending'").run(pending.id);
+        return res.json({ status: 'failed', error: intent.errorMessage || 'Your bank didn\'t approve this payment.' });
+      }
+      return res.json({ status: 'processing' });
     }
 
     const session = await retrieveCheckoutSession(pending.paymongo_checkout_session_id);

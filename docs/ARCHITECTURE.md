@@ -21,7 +21,7 @@ flowchart TB
         ORDERS["Orders & Bookings service<br/>cart, checkout, scheduling, fulfillment"]
         ADMIN["Admin & Employee service<br/>user mgmt, reports, technician assignment"]
         SUPPORT["Support & Notifications service<br/>messages, tickets, notifications, reviews, wishlist"]
-        PAY["Payments service<br/>PayMongo Checkout Sessions + webhook"]
+        PAY["Payments service<br/>PayMongo Payment Intents, Checkout Sessions + webhook"]
     end
 
     DB[("PostgreSQL<br/>hosted on Supabase")]
@@ -80,8 +80,10 @@ flowchart TB
 - **Resend** — order/booking confirmation emails, password reset, verification codes
 - **Google Maps** — renders the business location on the customer site
 - **Google OAuth** — social sign-in alongside email/password
-- **PayMongo** — hosted Checkout Sessions for card, GCash, and QR Ph payments, plus a webhook
-  (`POST /api/payments/webhook`) for payment status confirmation
+- **PayMongo** — a card entered at product checkout is charged right on the checkout page
+  (tokenized in the browser with the public key, then charged via a Payment Intent); GCash, QR Ph,
+  saved cards, and service bookings use hosted Checkout Sessions. A webhook
+  (`POST /api/payments/webhook`) also confirms payment status
 
 ## Deployments
 

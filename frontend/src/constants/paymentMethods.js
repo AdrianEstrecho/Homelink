@@ -1,7 +1,8 @@
 import { CreditCard, Smartphone, Landmark, QrCode, Banknote } from 'lucide-react';
 
-// `gateway: true` means the customer is handed off to PayMongo's hosted page and the order is
-// only created once the charge is confirmed; the rest collect money outside the app, so their
+// `gateway: true` means the money goes through PayMongo (a new card is charged on the checkout
+// page itself, the others on PayMongo's hosted page) and the order is only created once the
+// charge is confirmed; the rest collect money outside the app, so their
 // order is created immediately with payment_status 'pending' (see backend/routes/orders.js).
 //
 // `deliveryOnly` methods are hidden wherever nothing is being delivered — the same picker

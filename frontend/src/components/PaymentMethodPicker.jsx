@@ -41,7 +41,10 @@ function RadioDot({ selected }) {
 // Gateway methods (card, GCash, QR Ph) can each be switched off in admin Platform Settings.
 // Until that list loads — or if it fails to — all of them show; the backend rejects a disabled
 // one at /checkout-session either way.
-const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber = 2, allowCashOnDelivery = false }, ref) {
+//
+// `chargeCardHere` is for pages that charge a newly entered card on the spot (product checkout)
+// rather than sending the customer to PayMongo's hosted page to type it in again.
+const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber = 2, allowCashOnDelivery = false, chargeCardHere = false }, ref) {
   const [enabledGateway, setEnabledGateway] = useState(null);
   useEffect(() => {
     api.get('/payments/methods').then(r => setEnabledGateway(r.gateway)).catch(() => {});
@@ -84,12 +87,13 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
     }).catch(() => {});
   };
 
-  // Card number/CVC and the GCash number are collected here for a complete-feeling checkout
-  // page, but PayMongo's hosted page is what actually collects payment credentials — these
-  // values are validated for shape only and never sent to the payment flow (see
-  // handleConfirmOrder / startBookingPayment, which only forward `method`). Ticking "save this
-  // card" stores just its brand, last 4 and expiry, the same as adding one from the account's
-  // Payment tab, so it shows up as a saved card next time.
+  // With `chargeCardHere`, a new card's details are handed back to the page, which tokenizes
+  // them straight to PayMongo and charges them without a redirect (see Checkout's
+  // handleConfirmOrder). Otherwise — and always for a saved card, since HomeLink only keeps its
+  // last 4 digits — the card number/CVC and the GCash number are validated for shape only, and
+  // PayMongo's hosted page collects the real credentials. Ticking "save this card" stores just
+  // its brand, last 4 and expiry, the same as adding one from the account's Payment tab, so it
+  // shows up as a saved card next time.
   useImperativeHandle(ref, () => ({
     validate: () => {
       if (method === 'card') {
@@ -109,7 +113,7 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
           // Fire-and-forget: a card that fails to save shouldn't hold up the order itself.
           api.post('/payment-methods', { cardNumber: digits, expMonth: month, expYear: year }).catch(() => {});
         }
-        return { method };
+        return chargeCardHere ? { method, card: { cardNumber: digits, expMonth: month, expYear: year, cvc: cardForm.cvc } } : { method };
       }
       if (method === 'gcash') {
         const digits = gcashNumber.replace(/\s/g, '');
@@ -122,7 +126,7 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
       }
       return { method };
     },
-  }), [method, cardForm, gcashNumber, savedCards, selectedCard, saveNewCard]);
+  }), [method, cardForm, gcashNumber, savedCards, selectedCard, saveNewCard, chargeCardHere]);
 
   return (
     <div>
@@ -235,7 +239,12 @@ const PaymentMethodPicker = forwardRef(function PaymentMethodPicker({ stepNumber
           )}
           {cardError && <p className="text-red-600 text-sm">{cardError}</p>}
           <p className="flex items-center gap-1.5 text-xs text-gray-500">
-            <ShieldCheck className="w-3.5 h-3.5 text-brand-teal shrink-0" /> You'll confirm this on a secure PayMongo page next — HomeLink never sees or stores your card number or CVC.
+            <ShieldCheck className="w-3.5 h-3.5 text-brand-teal shrink-0" />
+            {chargeCardHere && selectedCard === 'new'
+              ? 'Your card is charged securely through PayMongo — HomeLink never stores your card number or CVC.'
+              : chargeCardHere
+                ? 'You\'ll re-enter this card on a secure PayMongo page next — HomeLink only keeps its last 4 digits, never the full number.'
+                : 'You\'ll confirm this on a secure PayMongo page next — HomeLink never sees or stores your card number or CVC.'}
           </p>
         </div>
       )}

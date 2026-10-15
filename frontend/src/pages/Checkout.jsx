@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Check, X, Lock, ShieldCheck, Truck, Sparkles, ShoppingBag, ArrowLeft, Loader2 } from 'lucide-react';
 import { api, formatPrice } from '../api/client';
+import { canChargeCardsInline, createCardPaymentMethod } from '../api/paymongo';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +27,9 @@ export default function Checkout() {
   const [searchParams] = useSearchParams();
   const addressRef = useRef(null);
   const paymentRef = useRef(null);
+  // A newly entered card, held between the review and "Confirm & place order" — a ref rather
+  // than state so the card number never ends up in the receipt preview's order object.
+  const cardRef = useRef(null);
 
   // "Buy Now" from a product page lands here as ?buy=<slug>&qty=<n>: only that product is
   // ordered, and the cart is left exactly as it was. It's carried in the URL (not router state)
@@ -104,6 +108,7 @@ export default function Checkout() {
     if (!payment) return;
 
     setError('');
+    cardRef.current = payment.card || null;
     setPendingOrder({
       items: items.map(i => ({ id: i.productId, name: i.name, image: i.image, price: i.price, quantity: i.quantity })),
       shipping_address: selectedAddress.fullAddress,
@@ -120,14 +125,45 @@ export default function Checkout() {
 
   // Step 2: only now does the order actually get placed. Bank transfer and cash on delivery
   // create the order immediately (payment_status 'pending' — settled later by a staff member
-  // verifying the deposit, or by the order being marked delivered). Card, GCash, and QR Ph
-  // all hand off to PayMongo's hosted Checkout Session — PayMongo's own page collects the
-  // actual payment details, so the order itself is only created once PayMongo confirms the
-  // charge went through (via /checkout/return after the redirect back).
+  // verifying the deposit, or by the order being marked delivered). A newly entered card is
+  // charged right here: tokenized straight to PayMongo, then charged by our backend, which
+  // returns the finished order — no PayMongo page in between, unless the card's bank asks for
+  // 3-D Secure. GCash, QR Ph, and a saved card hand off to PayMongo's hosted Checkout Session,
+  // so their order is only created once PayMongo confirms the charge (via /checkout/return).
   const handleConfirmOrder = async () => {
     setPlacingOrder(true);
     setError('');
     try {
+      if (pendingOrder.payment_method === 'card' && cardRef.current) {
+        const paymentMethodId = await createCardPaymentMethod({
+          ...cardRef.current,
+          billing: user ? { name: `${user.firstName} ${user.lastName}`, email: user.email } : undefined,
+        });
+        const result = await api.post('/payments/card-payment', {
+          items: pendingOrder.items.map(i => ({ productId: i.id, quantity: i.quantity })),
+          shippingAddress: pendingOrder.shipping_address,
+          promoCode: pendingOrder.promo_code || undefined,
+          buyNow: Boolean(buySlug),
+          paymentMethodId,
+        });
+
+        if (result.status === 'succeeded') {
+          cardRef.current = null;
+          if (!buySlug) cart.removeItems(result.order.items.map(i => i.product_id));
+          refreshWishlist(); // the server drops ordered products from the wishlist
+          setPendingOrder(null);
+          setConfirmedOrder(result.order);
+        } else if (result.redirectUrl) {
+          // The card's bank wants 3-D Secure — CheckoutReturn picks up once it sends them back.
+          window.location.href = result.redirectUrl;
+        } else {
+          const params = new URLSearchParams({ pcid: result.pendingCheckoutId });
+          if (buySlug) { params.set('buy', buySlug); params.set('qty', String(pendingOrder.items[0].quantity)); }
+          navigate(`/checkout/return?${params}`, { replace: true });
+        }
+        return;
+      }
+
       if (isOfflinePayment(pendingOrder.payment_method)) {
         const order = await api.post('/orders', {
           items: pendingOrder.items.map(i => ({ productId: i.id, quantity: i.quantity })),
@@ -249,7 +285,7 @@ export default function Checkout() {
           </section>
 
           <section className="card p-6">
-            <PaymentMethodPicker ref={paymentRef} stepNumber={2} allowCashOnDelivery />
+            <PaymentMethodPicker ref={paymentRef} stepNumber={2} allowCashOnDelivery chargeCardHere={canChargeCardsInline} />
           </section>
 
           <section className="card p-6">

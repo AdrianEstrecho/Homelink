@@ -74,6 +74,55 @@ export async function retrieveCheckoutSession(checkoutSessionId) {
   };
 }
 
+// Card payments made on our own checkout page (no hosted page) use a plain payment intent
+// instead: create it here, attach the payment method the browser already created with the
+// public key, and read the outcome straight off the attach response.
+export async function createPaymentIntent({ amount, description, metadata, idempotencyKey }) {
+  const intent = await paymongoFetch('/v1/payment_intents', {
+    method: 'POST',
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+    body: JSON.stringify({
+      data: {
+        attributes: {
+          amount,
+          currency: 'PHP',
+          capture_type: 'automatic',
+          payment_method_allowed: ['card'],
+          payment_method_options: { card: { request_three_d_secure: 'any' } },
+          description,
+          metadata,
+        },
+      },
+    }),
+  });
+  return { id: intent.id };
+}
+
+// PayMongo has no "failed" status on an intent: a declined card sends it back to
+// awaiting_payment_method with the reason in last_payment_error. `redirectUrl` is set when the
+// card's bank wants 3-D Secure first (status awaiting_next_action).
+function intentOutcome(intent) {
+  const { status, next_action: nextAction, last_payment_error: lastError } = intent.attributes;
+  return {
+    status,
+    redirectUrl: nextAction?.redirect?.url || null,
+    errorMessage: typeof lastError === 'string' ? lastError : lastError?.failed_message || null,
+  };
+}
+
+// Attaching with the secret key needs no client_key — that's only for public-key callers.
+export async function attachPaymentIntent(paymentIntentId, { paymentMethodId, returnUrl }) {
+  const intent = await paymongoFetch(`/v1/payment_intents/${paymentIntentId}/attach`, {
+    method: 'POST',
+    body: JSON.stringify({ data: { attributes: { payment_method: paymentMethodId, return_url: returnUrl } } }),
+  });
+  return intentOutcome(intent);
+}
+
+export async function retrievePaymentIntent(paymentIntentId) {
+  return intentOutcome(await paymongoFetch(`/v1/payment_intents/${paymentIntentId}`, { method: 'GET' }));
+}
+
 export function verifyWebhookSignature(rawBody, signatureHeader, secret) {
   if (!signatureHeader || !secret) return false;
 
