@@ -6,10 +6,15 @@ import { authenticate } from '../middleware/auth.js';
 const router = Router();
 
 async function getCart(userId) {
+  // The category is the top-level one (a "Split Type" item files under "Air Conditioners"),
+  // which is what the cart page filters by.
   const rows = await db.prepare(`
-    SELECT ci.quantity, ci.selected, p.id as product_id, p.name, p.price, p.image, p.slug, p.stock
+    SELECT ci.quantity, ci.selected, p.id as product_id, p.name, p.price, p.image, p.slug, p.stock,
+      COALESCE(pc.name, c.name) as category_name, COALESCE(pc.slug, c.slug) as category_slug
     FROM cart_items ci
     JOIN products p ON ci.product_id = p.id
+    LEFT JOIN categories c ON p.category_id = c.id
+    LEFT JOIN categories pc ON c.parent_id = pc.id
     WHERE ci.user_id = ? AND (p.archived IS NULL OR p.archived = 0) AND (p.status IS NULL OR p.status = 'active')
     ORDER BY ci.created_at DESC
   `).all(userId);
@@ -20,6 +25,8 @@ async function getCart(userId) {
     image: r.image,
     slug: r.slug,
     stock: r.stock,
+    categoryName: r.category_name,
+    categorySlug: r.category_slug,
     quantity: r.quantity,
     selected: r.selected !== 0,
   }));

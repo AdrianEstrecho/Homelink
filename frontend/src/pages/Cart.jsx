@@ -1,23 +1,71 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Trash2, Plus, Minus, ShoppingBag, Lock, ShieldCheck, Truck } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingBag, Lock, ShieldCheck, Truck, LayoutGrid } from 'lucide-react';
 import { formatPrice } from '../api/client';
 import { useCart } from '../context/CartContext';
 import { useToast } from '../context/ToastContext';
+import { getCategoryIcon } from '../constants/categoryIcons';
 import Reveal from '../components/Reveal';
 import SafeImage from '../components/SafeImage';
+import Checkbox from '../components/Checkbox';
 import ConfirmDialog from '../components/ConfirmDialog';
+
+const OTHER = { slug: 'other', name: 'Other' };
+const categoryOf = (item) => (item.categorySlug ? { slug: item.categorySlug, name: item.categoryName } : OTHER);
+
+// The categories present in the cart, A–Z with "Other" (uncategorised products) last.
+function cartCategories(items) {
+  const bySlug = new Map();
+  for (const item of items) {
+    const { slug, name } = categoryOf(item);
+    const entry = bySlug.get(slug) || { slug, name, count: 0 };
+    entry.count += 1;
+    bySlug.set(slug, entry);
+  }
+  return [...bySlug.values()].sort((a, b) =>
+    (a.slug === OTHER.slug) - (b.slug === OTHER.slug) || a.name.localeCompare(b.name));
+}
+
+function FilterChip({ icon: Icon, label, count, active, onClick }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`shrink-0 inline-flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-full border text-sm font-medium whitespace-nowrap transition outline-none focus-visible:ring-2 focus-visible:ring-brand-orange/40 ${
+        active
+          ? 'bg-brand-orange border-brand-orange text-white shadow-sm shadow-brand-orange/30'
+          : 'bg-white border-gray-200 text-gray-600 hover:border-brand-orange/50 hover:text-brand-ink'
+      }`}
+    >
+      <Icon className="w-4 h-4" />
+      {label}
+      <span className={`min-w-[1.25rem] px-1.5 rounded-full text-xs font-semibold leading-5 ${active ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'}`}>
+        {count}
+      </span>
+    </button>
+  );
+}
 
 export default function Cart() {
   const {
     items, removeItem, updateQty, clearCart, count,
-    toggleSelected, selectAll, selectedItems, selectedTotal, selectedCount,
+    setSelected, toggleSelected, selectedItems, selectedTotal, selectedCount,
   } = useCart();
   const { showToast } = useToast();
-  const allSelected = items.length > 0 && selectedItems.length === items.length;
-  const someSelected = selectedItems.length > 0 && !allSelected;
   const [confirmClear, setConfirmClear] = useState(false);
   const [removeTarget, setRemoveTarget] = useState(null);
+  const [filter, setFilter] = useState('');
+
+  const categories = cartCategories(items);
+  // Falls back to "All" once the last item of the filtered category is removed.
+  const activeFilter = categories.some(c => c.slug === filter) ? filter : '';
+  const visibleItems = activeFilter ? items.filter(i => categoryOf(i).slug === activeFilter) : items;
+  const visibleSelected = visibleItems.filter(i => i.selected).length;
+  const allSelected = visibleItems.length > 0 && visibleSelected === visibleItems.length;
+  const someSelected = visibleSelected > 0 && !allSelected;
+  // Filtering only hides items -- ticked ones in other categories still go to checkout.
+  const hiddenSelected = selectedItems.length - visibleSelected;
 
   const handleConfirmRemove = () => {
     const item = removeTarget;
@@ -65,34 +113,53 @@ export default function Cart() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8 items-start">
         <div className="space-y-4">
+          {categories.length > 1 && (
+            <div role="group" aria-label="Filter cart by category" className="flex gap-2 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
+              <FilterChip icon={LayoutGrid} label="All" count={items.length} active={!activeFilter} onClick={() => setFilter('')} />
+              {categories.map(c => (
+                <FilterChip
+                  key={c.slug}
+                  icon={getCategoryIcon(c.slug)}
+                  label={c.name}
+                  count={c.count}
+                  active={activeFilter === c.slug}
+                  onClick={() => setFilter(c.slug)}
+                />
+              ))}
+            </div>
+          )}
+
           <div className="card px-4 py-3 flex items-center justify-between gap-3">
             <label className="flex items-center gap-3 text-sm font-medium text-brand-ink cursor-pointer select-none">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={allSelected}
-                ref={el => { if (el) el.indeterminate = someSelected; }}
-                onChange={() => selectAll(!allSelected)}
-                className="w-5 h-5 rounded accent-brand-orange cursor-pointer"
+                indeterminate={someSelected}
+                onChange={() => setSelected(visibleItems.map(i => i.productId), !allSelected)}
               />
-              Select all ({items.length})
+              Select all ({visibleItems.length})
             </label>
-            <span className="text-xs text-gray-400">{selectedItems.length} of {items.length} selected</span>
+            <span className="text-xs text-gray-400 text-right">
+              {visibleSelected} of {visibleItems.length} selected
+              {hiddenSelected > 0 && <span className="block sm:inline"><span className="hidden sm:inline"> · </span>{hiddenSelected} more in other categories</span>}
+            </span>
           </div>
 
-          {items.map((item, i) => {
+          {visibleItems.map((item, i) => {
             const maxQty = item.stock ?? Infinity;
             const lowStock = item.stock != null && item.stock > 0 && item.stock <= 5;
 
             return (
-              <Reveal key={item.productId} delay={Math.min(i, 5) * 60} className="card p-4">
+              <Reveal
+                key={item.productId}
+                delay={Math.min(i, 5) * 60}
+                className={`card p-4 ${item.selected ? 'border-brand-orange/40 ring-1 ring-brand-orange/15' : ''}`}
+              >
                 <div className="flex gap-4">
-                  <label className="self-center shrink-0 p-1 -m-1 cursor-pointer">
-                    <input
-                      type="checkbox"
+                  <label className="self-center shrink-0 p-2 -m-2 cursor-pointer">
+                    <Checkbox
                       checked={item.selected}
                       onChange={() => toggleSelected(item.productId)}
                       aria-label={`Select ${item.name} for checkout`}
-                      className="w-5 h-5 rounded accent-brand-orange cursor-pointer align-middle"
                     />
                   </label>
                   <Link to={`/products/${item.slug}`} className={`shrink-0 transition-opacity ${item.selected ? '' : 'opacity-50'}`}>
@@ -100,6 +167,7 @@ export default function Cart() {
                   </Link>
                   <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400 mb-0.5">{categoryOf(item).name}</p>
                       <Link to={`/products/${item.slug}`} className="font-semibold text-brand-ink hover:text-brand-orange transition line-clamp-2">
                         {item.name}
                       </Link>

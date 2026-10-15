@@ -74,8 +74,6 @@ export function CartProvider({ children }) {
     if (item) setSelected([productId], !item.selected);
   };
 
-  const selectAll = (selected) => setSelected(items.map(i => i.productId), selected);
-
   const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
@@ -86,7 +84,7 @@ export function CartProvider({ children }) {
   return (
     <CartContext.Provider value={{
       items, addItem, removeItem, removeItems, updateQty, clearCart, total, count,
-      toggleSelected, selectAll, selectedItems, selectedTotal, selectedCount,
+      setSelected, toggleSelected, selectedItems, selectedTotal, selectedCount,
     }}>
       {children}
     </CartContext.Provider>
