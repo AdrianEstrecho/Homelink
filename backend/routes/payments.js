@@ -25,7 +25,7 @@ function orderItemsFromSnapshot(itemsJson) {
   return JSON.parse(itemsJson).map(i => ({ product: { id: i.productId }, quantity: i.quantity, price: i.price }));
 }
 
-async function finalizePendingCheckout(pending, req) {
+export async function finalizePendingCheckout(pending, req) {
   if (pending.order_id) {
     const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(pending.order_id);
     const items = await db.prepare(`

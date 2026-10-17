@@ -27,8 +27,10 @@ import wishlistRoutes from './routes/wishlist.js';
 import cartRoutes from './routes/cart.js';
 import paymentRoutes, { paymongoWebhookHandler } from './routes/payments.js';
 import assistantRoutes from './routes/assistant.js';
+import appReturnRoutes from './routes/appReturn.js';
 import db from './db/database.js';
 import { MOBILE_ORIGINS } from './utils/frontendUrl.js';
+import { reconcilePendingPayments } from './utils/paymentReconciliation.js';
 
 dotenv.config();
 
@@ -129,6 +131,7 @@ app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/assistant', assistantRoutes);
+app.use('/api/app-return', appReturnRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
@@ -136,3 +139,8 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => console.log(`HomeLink API running on http://localhost:${PORT}`));
+
+// Backstop for PayMongo payments nothing confirmed (no webhook, customer closed the app
+// before its status poll landed): finalize them so they still become orders and bookings.
+// Admin's order, booking and dashboard pages also run it on load.
+setInterval(() => reconcilePendingPayments({ waitMs: 0 }), 2 * 60 * 1000).unref();

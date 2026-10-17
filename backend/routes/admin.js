@@ -14,9 +14,17 @@ import { orderStatusEmail, bookingConfirmedEmail, bookingStatusEmail, returnDeci
 import { returnRef, caseRef, RETURN_KINDS } from '../utils/returns.js';
 import { shapeProduct, shapeService, normalizeSpecifications, normalizeStringList } from '../utils/catalogShape.js';
 import { SETTINGS_DEFAULTS, getSiteSettings } from '../utils/siteSettings.js';
+import { reconcilePendingPayments } from '../utils/paymentReconciliation.js';
 
 const router = Router();
 router.use(authenticate);
+
+// A PayMongo payment the customer finished but nothing confirmed yet is turned into its order
+// or booking first, so it's already in the list staff are about to see.
+router.get(['/dashboard', '/orders', '/bookings'], async (req, res, next) => {
+  await reconcilePendingPayments();
+  next();
+});
 
 async function getRevenueStats() {
   const orderRevenue = await db.prepare("SELECT COALESCE(SUM(total),0) as t FROM orders WHERE payment_status='paid'").get();
