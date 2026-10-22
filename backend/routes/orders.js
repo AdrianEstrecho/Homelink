@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.js';
 import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
 import { releaseOrderStock } from '../utils/orderStock.js';
+import { sendCheckoutError } from '../utils/checkoutStock.js';
 import {
   getReturnableTotals, getReturnCounts, canReturnOrder, returnWindowClosesAt,
   cancellationNeedsRefund, caseRef, hasLiveReturn,
@@ -53,7 +54,7 @@ router.post('/', authenticate, async (req, res) => {
 
     res.status(201).json(order);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendCheckoutError(res, err);
   }
 });
 

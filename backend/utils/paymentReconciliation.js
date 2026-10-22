@@ -1,6 +1,7 @@
 import db from '../db/database.js';
 import { retrieveCheckoutSession, retrievePaymentIntent } from './paymongo.js';
-import { finalizePendingCheckout } from '../routes/payments.js';
+import { HOLD_MINUTES } from './checkoutStock.js';
+import { finalizePendingCheckout, settleUnpaidCheckout } from '../routes/payments.js';
 import { finalizePendingBooking } from '../routes/bookings.js';
 
 // A PayMongo payment only becomes a real order or booking once something confirms it: the
@@ -60,10 +61,36 @@ async function sweep(table, finalize) {
   return finalized;
 }
 
+// A checkout holds its units for HOLD_MINUTES (checkoutStock.js); PayMongo's sessions never run
+// out by themselves, so past that this ends it the way backing out does. A paid one becomes its
+// order instead, and one with a payment still going through keeps its hold until a later sweep.
+// Same oldest-checked-first rotation as sweep(), so a stuck one can't block the rest.
+async function releaseExpiredHolds() {
+  const rows = await db.prepare(`
+    SELECT * FROM pending_checkouts
+    WHERE stock_held = 1 AND status = 'pending' AND created_at < now() - interval '${HOLD_MINUTES} minutes'
+    ORDER BY reconciled_at ASC NULLS FIRST, created_at ASC LIMIT ${BATCH}
+  `).all();
+  if (!rows.length) return 0;
+  await db.prepare('UPDATE pending_checkouts SET reconciled_at = now() WHERE id = ANY(?)').run(rows.map((r) => r.id));
+
+  let closed = 0;
+  for (const pending of rows) {
+    try {
+      if ((await settleUnpaidCheckout(pending, 'expired')).status === 'failed') closed++;
+    } catch (err) {
+      console.error(`[payment reconcile] hold ${pending.id}:`, err.message);
+    }
+  }
+  return closed;
+}
+
 async function run() {
   const orders = await sweep('pending_checkouts', finalizePendingCheckout);
   const bookings = await sweep('pending_bookings', finalizePendingBooking);
+  const expired = await releaseExpiredHolds();
   if (orders || bookings) console.log(`[payment reconcile] finalized ${orders} order(s), ${bookings} booking(s)`);
+  if (expired) console.log(`[payment reconcile] closed ${expired} unpaid checkout(s) and put their stock back`);
 }
 
 /**

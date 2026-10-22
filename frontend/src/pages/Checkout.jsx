@@ -24,7 +24,7 @@ export default function Checkout() {
   const { user } = useAuth();
   const settings = useSiteSettings();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const addressRef = useRef(null);
   const paymentRef = useRef(null);
   // A newly entered card, held between the review and "Confirm & place order" — a ref rather
@@ -72,6 +72,29 @@ export default function Checkout() {
   useEffect(() => {
     api.get('/promos/active').then(setActivePromos).catch(() => setActivePromos({ holiday: null, vouchers: [] }));
   }, []);
+
+  // PayMongo's cancel link lands here as ?pcid=<checkout>. Ending that checkout puts the stock it
+  // was holding back on sale now, not when the hold runs out. The server asks PayMongo first, so a
+  // payment that did land still turns into the order here.
+  const cancelledId = searchParams.get('pcid');
+  useEffect(() => {
+    if (!cancelledId) return;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('pcid');
+      return next;
+    }, { replace: true });
+    api.post(`/payments/cancel/${cancelledId}`, {}).then((res) => {
+      if (res.status === 'succeeded' && res.order) {
+        if (!buySlug) cart.removeItems(res.order.items.map(i => i.product_id));
+        refreshWishlist(); // the server drops ordered products from the wishlist
+        setConfirmedOrder(res.order);
+      } else if (res.status === 'processing') {
+        setError("Payment wasn't completed. If you did pay, the order will show up in My Orders in a few minutes.");
+      }
+    }).catch(() => {}); // the hold runs out on its own
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cancelledId]);
 
   const handleApplyPromo = async () => {
     if (!promoInput.trim()) return;
@@ -188,6 +211,11 @@ export default function Checkout() {
       window.location.href = checkoutUrl;
     } catch (err) {
       setError(err.message);
+      // Another customer confirmed first and got the stock: bring this page's counts up to date.
+      if (err.code === 'insufficient_stock') {
+        if (buySlug) api.get(`/products/${encodeURIComponent(buySlug)}`).then(setBuyNowProduct).catch(() => setBuyNowProduct(false));
+        else cart.refresh();
+      }
     } finally {
       setPlacingOrder(false);
     }

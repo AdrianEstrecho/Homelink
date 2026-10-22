@@ -68,10 +68,18 @@ export async function retrieveCheckoutSession(checkoutSessionId) {
   const payments = session.attributes.payments || [];
   return {
     id: session.id,
+    // 'active' or 'expired'. A session never expires by itself, only through expireCheckoutSession.
+    status: session.attributes.status,
     paid: payments.some(p => p.attributes.status === 'paid'),
     paymentIntentId: session.attributes.payment_intent?.id || null,
     payments,
   };
+}
+
+// Closes a session so it can't take a payment any more. PayMongo refuses (400) while the session
+// is paid or a payment on it is still going through, so once this succeeds nobody can pay it.
+export async function expireCheckoutSession(checkoutSessionId) {
+  await paymongoFetch(`/v1/checkout_sessions/${checkoutSessionId}/expire`, { method: 'POST' });
 }
 
 // Card payments made on our own checkout page (no hosted page) use a plain payment intent

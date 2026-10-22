@@ -3,6 +3,7 @@ import db, { withTransaction } from '../db/database.js';
 import { applyVoucherUse } from './promos.js';
 import { orderConfirmationEmail } from './email.js';
 import { logActivity } from './audit.js';
+import { outOfStockError } from './checkoutStock.js';
 
 // The single place an order actually gets created: inserts the order + line items, deducts
 // stock, spends the voucher (only now that the order is real — a failed card charge upstream
@@ -15,6 +16,10 @@ import { logActivity } from './audit.js';
 // already captured: an unpaid (bank transfer) order is refused and rolled back, while a paid
 // PayMongo order is still created — stock goes down to 0, never below — and flagged
 // needs_review so staff can restock or refund instead of the customer's payment being stranded.
+// That second case is rare now: a PayMongo checkout takes its units when the customer confirms
+// (checkoutStock.js), so its order normally finds them already set aside and deducts nothing.
+// Only a checkout whose hold was handed back (a 3-D Secure card that came back after the hold
+// ran out) still has to find stock here.
 //
 // pendingCheckoutId (PayMongo path only) is claimed inside that same transaction: its row is
 // locked first, so when the webhook and the /status poll confirm the same payment at the same
@@ -27,9 +32,11 @@ export async function fulfillOrder({
   const paid = paymentStatus === 'paid';
 
   const { orderId, alreadyCreated, reviewReasons } = await withTransaction(async (tx) => {
+    let stockHeld = false;
     if (pendingCheckoutId) {
-      const pending = await tx.prepare('SELECT order_id FROM pending_checkouts WHERE id = ? FOR UPDATE').get(pendingCheckoutId);
+      const pending = await tx.prepare('SELECT order_id, stock_held FROM pending_checkouts WHERE id = ? FOR UPDATE').get(pendingCheckoutId);
       if (pending?.order_id) return { orderId: pending.order_id, alreadyCreated: true, reviewReasons: [] };
+      stockHeld = Boolean(pending?.stock_held);
     }
 
     const orderId = uuid();
@@ -60,25 +67,28 @@ export async function fulfillOrder({
     // The stock check and the deduction are one statement, so two checkouts racing for the last
     // units can't both pass. Products are updated in id order so two orders sharing products
     // always lock them the same way round and wait on each other instead of deadlocking.
-    const deductStock = tx.prepare('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?');
-    const byProductId = [...orderItems].sort((a, b) => a.product.id.localeCompare(b.product.id));
-    for (const oi of byProductId) {
-      const { changes } = await deductStock.run(oi.quantity, oi.product.id, oi.quantity);
-      if (changes) continue;
+    // A checkout that still holds its units took them off the shelf already, at confirmation.
+    if (!stockHeld) {
+      const deductStock = tx.prepare('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?');
+      const byProductId = [...orderItems].sort((a, b) => a.product.id.localeCompare(b.product.id));
+      for (const oi of byProductId) {
+        const { changes } = await deductStock.run(oi.quantity, oi.product.id, oi.quantity);
+        if (changes) continue;
 
-      const product = await tx.prepare('SELECT name, stock FROM products WHERE id = ? FOR UPDATE').get(oi.product.id);
-      if (!paid) throw new Error(`Insufficient stock for ${product?.name || 'an item in your cart'}`);
-      // The order takes whatever is left and the rest is a shortfall for staff to restock or
-      // refund. Only the units actually taken come off the count, and the shortfall is recorded on
-      // the line, so cancelling this order later credits back what it took and nothing more
-      // (orderStock.js). GREATEST floors a legacy negative count at 0, which the stock >= 0 check
-      // would otherwise refuse.
-      const taken = Math.min(Math.max(product?.stock ?? 0, 0), oi.quantity);
-      await tx.prepare('UPDATE products SET stock = GREATEST(stock - ?, 0) WHERE id = ?').run(taken, oi.product.id);
-      // Restocked in the moment between the two statements: the line got all its units after all.
-      if (taken === oi.quantity) continue;
-      await tx.prepare('UPDATE order_items SET stock_shortfall = ? WHERE id = ?').run(oi.quantity - taken, itemIds.get(oi));
-      reviewReasons.push(`${product?.name || 'A product'}: ordered ${oi.quantity}, only ${taken} left when payment completed`);
+        const product = await tx.prepare('SELECT name, stock FROM products WHERE id = ? FOR UPDATE').get(oi.product.id);
+        if (!paid) throw outOfStockError({ id: oi.product.id, name: product?.name || 'an item in your cart' }, product?.stock);
+        // The order takes whatever is left and the rest is a shortfall for staff to restock or
+        // refund. Only the units actually taken come off the count, and the shortfall is recorded on
+        // the line, so cancelling this order later credits back what it took and nothing more
+        // (orderStock.js). GREATEST floors a legacy negative count at 0, which the stock >= 0 check
+        // would otherwise refuse.
+        const taken = Math.min(Math.max(product?.stock ?? 0, 0), oi.quantity);
+        await tx.prepare('UPDATE products SET stock = GREATEST(stock - ?, 0) WHERE id = ?').run(taken, oi.product.id);
+        // Restocked in the moment between the two statements: the line got all its units after all.
+        if (taken === oi.quantity) continue;
+        await tx.prepare('UPDATE order_items SET stock_shortfall = ? WHERE id = ?').run(oi.quantity - taken, itemIds.get(oi));
+        reviewReasons.push(`${product?.name || 'A product'}: ordered ${oi.quantity}, only ${taken} left when payment completed`);
+      }
     }
 
     if (promoCode && !(await applyVoucherUse(promoCode, tx))) {
@@ -92,7 +102,8 @@ export async function fulfillOrder({
       await tx.prepare('UPDATE orders SET needs_review = 1, review_reason = ? WHERE id = ?').run(reviewReasons.join('; '), orderId);
     }
     if (pendingCheckoutId) {
-      await tx.prepare("UPDATE pending_checkouts SET status = 'succeeded', order_id = ? WHERE id = ?").run(orderId, pendingCheckoutId);
+      // The hold is spent: its units now belong to this order, which cancelling releases instead.
+      await tx.prepare("UPDATE pending_checkouts SET status = 'succeeded', order_id = ?, stock_held = 0 WHERE id = ?").run(orderId, pendingCheckoutId);
     }
 
     return { orderId, alreadyCreated: false, reviewReasons };

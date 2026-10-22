@@ -412,6 +412,15 @@ await db.exec(`
   ALTER TABLE pending_checkouts ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMPTZ;
   ALTER TABLE pending_bookings ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMPTZ;
 
+  -- A PayMongo checkout takes its units off the shelf when the customer confirms the order,
+  -- not when the payment lands (utils/checkoutStock.js), so whoever confirms first gets the
+  -- stock. stock_held is 1 while those units are spoken for: paying spends the hold, and backing
+  -- out, failing or timing out hands it back. failure_reason says which one ended a 'failed'
+  -- checkout, for the message the customer sees.
+  ALTER TABLE pending_checkouts ADD COLUMN IF NOT EXISTS stock_held INTEGER DEFAULT 0;
+  ALTER TABLE pending_checkouts ADD COLUMN IF NOT EXISTS failure_reason TEXT;
+  CREATE INDEX IF NOT EXISTS idx_pending_checkouts_held ON pending_checkouts(created_at) WHERE stock_held = 1;
+
   CREATE TABLE IF NOT EXISTS vouchers (
     id TEXT PRIMARY KEY,
     code TEXT UNIQUE NOT NULL,

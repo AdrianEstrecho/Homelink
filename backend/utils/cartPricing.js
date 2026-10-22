@@ -1,6 +1,7 @@
 import db from '../db/database.js';
 import { getHolidayDiscount, validateVoucher, calculateDiscount } from './promos.js';
 import { getSiteSettings, orderCharges } from './siteSettings.js';
+import { outOfStockError } from './checkoutStock.js';
 
 // Validates stock/product availability and prices the cart, applying the active holiday
 // discount and an optional voucher, then the shipping fee and tax from Platform Settings. Throws an Error with a user-facing message on failure
@@ -13,7 +14,7 @@ export async function validateAndPriceCart(items, promoCode) {
   for (const item of items) {
     const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(item.productId);
     if (!product) throw new Error(`Product not found: ${item.productId}`);
-    if (product.stock < item.quantity) throw new Error(`Insufficient stock for ${product.name}`);
+    if (product.stock < item.quantity) throw outOfStockError(product, product.stock);
     subtotal += product.price * item.quantity;
     orderItems.push({ product, quantity: item.quantity, price: product.price });
   }

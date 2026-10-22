@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
-import db from '../db/database.js';
+import db, { withTransaction } from '../db/database.js';
 import { authenticate } from '../middleware/auth.js';
 import { validateAndPriceCart } from '../utils/cartPricing.js';
 import { fulfillOrder } from '../utils/orderFulfillment.js';
-import { createCheckoutSessionV2, retrieveCheckoutSession, createPaymentIntent, attachPaymentIntent, retrievePaymentIntent, verifyWebhookSignature } from '../utils/paymongo.js';
+import { holdStock, releaseHeldStock, closeCheckout, checkoutFailureMessage, sendCheckoutError } from '../utils/checkoutStock.js';
+import { createCheckoutSessionV2, retrieveCheckoutSession, expireCheckoutSession, createPaymentIntent, attachPaymentIntent, retrievePaymentIntent, verifyWebhookSignature } from '../utils/paymongo.js';
 import { resolveFrontendUrl } from '../utils/frontendUrl.js';
 import { getEnabledGatewayMethods } from '../utils/siteSettings.js';
 import { finalizePendingBooking } from './bookings.js';
@@ -35,7 +36,8 @@ export async function finalizePendingCheckout(pending, req) {
     return { ...order, items };
   }
 
-  // Stock (or the voucher's last use) may have run out between /checkout-session and now —
+  // The units were set aside when the customer confirmed (checkoutStock.js), but the voucher's
+  // last use, or the stock of a checkout whose hold was handed back, may have run out since —
   // payment can take minutes on PayMongo's hosted page. The charge is already captured, so
   // fulfillOrder still creates the order and flags it needs_review rather than stranding a
   // customer who already paid. Passing pending.id also makes it mark this checkout succeeded in
@@ -58,18 +60,95 @@ export async function finalizePendingCheckout(pending, req) {
   }, req || { user: { id: pending.user_id }, ip: null }, pending.id);
 }
 
-// Prices the cart server-side and stashes it in pending_checkouts — the real order can't be
-// created until PayMongo confirms the charge.
+async function rememberPaymentIntent(pending, paymentIntentId) {
+  if (!paymentIntentId || paymentIntentId === pending.paymongo_payment_intent_id) return;
+  await db.prepare('UPDATE pending_checkouts SET paymongo_payment_intent_id = ? WHERE id = ?').run(paymentIntentId, pending.id);
+  pending.paymongo_payment_intent_id = paymentIntentId;
+}
+
+// Ends a checkout the customer didn't pay for and puts its units back on sale. PayMongo is asked
+// first, so this never undoes a real payment: a paid checkout becomes its order instead, and a
+// session PayMongo won't expire because a payment on it is still going through keeps its hold.
+// A checkout is only marked failed once PayMongo can't take a payment for it any more.
+//
+// reason is why it's ending: 'cancelled' (the customer came back without paying), 'replaced'
+// (they started another checkout), 'expired' (the hold ran out, see paymentReconciliation.js) or
+// 'payment_failed' (PayMongo's webhook). Answers in /status's shape.
+export async function settleUnpaidCheckout(pending, reason, req = null) {
+  if (pending.status === 'succeeded') return { status: 'succeeded', order: await finalizePendingCheckout(pending, req) };
+  if (pending.status === 'failed') return { status: 'failed', error: checkoutFailureMessage(pending.failure_reason) };
+
+  if (pending.paymongo_checkout_session_id) {
+    const sessionId = pending.paymongo_checkout_session_id;
+    let session = await retrieveCheckoutSession(sessionId);
+    if (!session.paid && session.status !== 'expired') {
+      try {
+        await expireCheckoutSession(sessionId);
+        session = { ...session, status: 'expired' };
+      } catch {
+        // Refused: it was paid a moment ago, or a payment on it is still going through.
+        session = await retrieveCheckoutSession(sessionId);
+      }
+    }
+    if (session.paid) {
+      await rememberPaymentIntent(pending, session.paymentIntentId);
+      return { status: 'succeeded', order: await finalizePendingCheckout(pending, req) };
+    }
+    if (session.status !== 'expired') return { status: 'processing' };
+
+    await closeCheckout(pending.id, reason);
+    return { status: 'failed', error: checkoutFailureMessage(reason) };
+  }
+
+  if (pending.paymongo_payment_intent_id) {
+    const intent = await retrievePaymentIntent(pending.paymongo_payment_intent_id);
+    if (intent.status === 'succeeded') return { status: 'succeeded', order: await finalizePendingCheckout(pending, req) };
+    // Declined. A checkout never tries its card again; retrying starts a new checkout.
+    if (intent.status === 'awaiting_payment_method' && intent.errorMessage) {
+      await closeCheckout(pending.id, 'declined');
+      return { status: 'failed', error: intent.errorMessage };
+    }
+  }
+
+  // A card payment intent can't be called off the way a session can, and a checkout with nothing
+  // at PayMongo yet may still be getting its session, so these stay open and only their units go
+  // back on sale. If one is paid after all, its order still gets made, from whatever stock is left.
+  await releaseHeldStock(pending.id);
+  return { status: 'processing' };
+}
+
+// A checkout this customer left unpaid (backed out of PayMongo's page, closed it, or never
+// finished a 3-D Secure page) still holds its units, so it's ended before a new one starts.
+// Otherwise retrying the same order would be refused against the customer's own hold.
+async function settleOwnUnpaidCheckouts(req) {
+  const held = await db.prepare("SELECT * FROM pending_checkouts WHERE user_id = ? AND status = 'pending' AND stock_held = 1").all(req.user.id);
+  for (const pending of held) {
+    try {
+      await settleUnpaidCheckout(pending, 'replaced', req);
+    } catch (err) {
+      console.error(`[checkout] couldn't end checkout ${pending.id}:`, err.message);
+    }
+  }
+}
+
+// Prices the cart server-side, sets its units aside and stashes it in pending_checkouts — the
+// real order can't be created until PayMongo confirms the charge. The units are taken now, when
+// the customer confirms, so whoever confirms first gets them and anyone after is told what's
+// left before PayMongo charges them (checkoutStock.js).
 async function createPendingCheckout(req, paymentMethod) {
   const { items, shippingAddress, promoCode } = req.body;
+  await settleOwnUnpaidCheckouts(req);
   const { orderItems, subtotal, discount, shippingFee, tax, taxRate, total, appliedPromo } = await validateAndPriceCart(items, promoCode);
   const pricedItems = orderItems.map(oi => ({ productId: oi.product.id, quantity: oi.quantity, price: oi.price }));
 
   const pendingId = uuid();
-  await db.prepare(`
-    INSERT INTO pending_checkouts (id, user_id, items, subtotal, discount, shipping_fee, tax, tax_rate, total, payment_method, shipping_address, promo_code, applied_promo)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-  `).run(pendingId, req.user.id, JSON.stringify(pricedItems), subtotal, discount, shippingFee, tax, taxRate, total, paymentMethod, shippingAddress, promoCode || null, appliedPromo);
+  await withTransaction(async (tx) => {
+    await holdStock(tx, pricedItems);
+    await tx.prepare(`
+      INSERT INTO pending_checkouts (id, user_id, items, subtotal, discount, shipping_fee, tax, tax_rate, total, payment_method, shipping_address, promo_code, applied_promo, stock_held)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)
+    `).run(pendingId, req.user.id, JSON.stringify(pricedItems), subtotal, discount, shippingFee, tax, taxRate, total, paymentMethod, shippingAddress, promoCode || null, appliedPromo);
+  });
 
   return { pendingId, orderItems, total };
 }
@@ -100,12 +179,18 @@ router.post('/card-payment', authenticate, async (req, res) => {
     const { pendingId, orderItems, total } = await createPendingCheckout(req, 'card');
     const buyNowQuery = buyNowQueryFor(buyNow, orderItems);
 
-    const intent = await createPaymentIntent({
-      amount: Math.round(total * 100),
-      description: `HomeLink order (checkout ${pendingId})`,
-      metadata: { pending_checkout_id: pendingId, user_id: req.user.id },
-      idempotencyKey: pendingId,
-    });
+    let intent;
+    try {
+      intent = await createPaymentIntent({
+        amount: Math.round(total * 100),
+        description: `HomeLink order (checkout ${pendingId})`,
+        metadata: { pending_checkout_id: pendingId, user_id: req.user.id },
+        idempotencyKey: pendingId,
+      });
+    } catch (err) {
+      await closeCheckout(pendingId, 'gateway_error');
+      throw err;
+    }
     await db.prepare('UPDATE pending_checkouts SET paymongo_payment_intent_id = ? WHERE id = ?').run(intent.id, pendingId);
 
     let outcome;
@@ -116,7 +201,7 @@ router.post('/card-payment', authenticate, async (req, res) => {
       });
     } catch (err) {
       // PayMongo refused the attach outright, so nothing was charged.
-      await db.prepare("UPDATE pending_checkouts SET status = 'failed' WHERE id = ? AND status = 'pending'").run(pendingId);
+      await closeCheckout(pendingId, 'declined');
       throw err;
     }
 
@@ -133,10 +218,10 @@ router.post('/card-payment', authenticate, async (req, res) => {
     }
 
     // awaiting_payment_method: the card was declined.
-    await db.prepare("UPDATE pending_checkouts SET status = 'failed' WHERE id = ? AND status = 'pending'").run(pendingId);
+    await closeCheckout(pendingId, 'declined');
     res.status(402).json({ error: outcome.errorMessage || 'Your card was declined. Please check the details or try another card.' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendCheckoutError(res, err);
   }
 });
 
@@ -158,28 +243,37 @@ router.post('/checkout-session', authenticate, async (req, res) => {
 
     const { pendingId, orderItems, total } = await createPendingCheckout(req, paymentMethod);
 
-    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
     const frontendUrl = resolveFrontendUrl(req);
     const buyNowQuery = buyNowQueryFor(buyNow, orderItems);
-    const session = await createCheckoutSessionV2({
-      amount: Math.round(total * 100),
-      paymentMethodTypes: [paymentMethod],
-      lineItemName: 'HomeLink order',
-      description: `HomeLink order (checkout ${pendingId})`,
-      successUrl: `${frontendUrl}/checkout/return?pcid=${pendingId}${buyNowQuery ? `&${buyNowQuery}` : ''}`,
-      cancelUrl: `${frontendUrl}/checkout${buyNowQuery ? `?${buyNowQuery}` : ''}`,
-      billingName: `${user.first_name} ${user.last_name}`,
-      billingEmail: user.email,
-      referenceNumber: pendingId,
-      metadata: { pending_checkout_id: pendingId, user_id: req.user.id },
-      idempotencyKey: pendingId,
-    });
+    const pcidQuery = `pcid=${pendingId}${buyNowQuery ? `&${buyNowQuery}` : ''}`;
+    let session;
+    try {
+      const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+      session = await createCheckoutSessionV2({
+        amount: Math.round(total * 100),
+        paymentMethodTypes: [paymentMethod],
+        lineItemName: 'HomeLink order',
+        description: `HomeLink order (checkout ${pendingId})`,
+        successUrl: `${frontendUrl}/checkout/return?${pcidQuery}`,
+        // The checkout page sees pcid and calls /cancel, which puts the held units back on sale
+        // straight away rather than after the hold runs out.
+        cancelUrl: `${frontendUrl}/checkout?${pcidQuery}`,
+        billingName: `${user.first_name} ${user.last_name}`,
+        billingEmail: user.email,
+        referenceNumber: pendingId,
+        metadata: { pending_checkout_id: pendingId, user_id: req.user.id },
+        idempotencyKey: pendingId,
+      });
+    } catch (err) {
+      await closeCheckout(pendingId, 'gateway_error');
+      throw err;
+    }
 
     await db.prepare('UPDATE pending_checkouts SET paymongo_checkout_session_id = ? WHERE id = ?').run(session.id, pendingId);
 
     res.status(201).json({ pendingCheckoutId: pendingId, checkoutUrl: session.checkoutUrl });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    sendCheckoutError(res, err);
   }
 });
 
@@ -193,7 +287,7 @@ router.get('/status/:pendingCheckoutId', authenticate, async (req, res) => {
       return res.json({ status: 'succeeded', order });
     }
     if (pending.status === 'failed') {
-      return res.json({ status: 'failed' });
+      return res.json({ status: 'failed', error: checkoutFailureMessage(pending.failure_reason) });
     }
 
     // An inline card payment (/card-payment) has no checkout session, only its own payment
@@ -206,7 +300,7 @@ router.get('/status/:pendingCheckoutId', authenticate, async (req, res) => {
         return res.json({ status: 'succeeded', order });
       }
       if (intent.status === 'awaiting_payment_method') {
-        await db.prepare("UPDATE pending_checkouts SET status = 'failed' WHERE id = ? AND status = 'pending'").run(pending.id);
+        await closeCheckout(pending.id, 'declined');
         return res.json({ status: 'failed', error: intent.errorMessage || 'Your bank didn\'t approve this payment.' });
       }
       return res.json({ status: 'processing' });
@@ -225,6 +319,19 @@ router.get('/status/:pendingCheckoutId', authenticate, async (req, res) => {
     // attempt in place rather than bouncing them back to us, so there's no reliable "failed"
     // signal to poll for here. The frontend's own poll cap handles abandonment gracefully.
     return res.json({ status: 'processing' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// The customer came back from PayMongo without paying: its cancel link, or the APK's payment tab
+// closed. Their held units go back on sale now instead of when the hold runs out — unless the
+// checkout turns out to be paid, or a payment on it is still going through. Answers like /status.
+router.post('/cancel/:pendingCheckoutId', authenticate, async (req, res) => {
+  try {
+    const pending = await db.prepare('SELECT * FROM pending_checkouts WHERE id = ? AND user_id = ?').get(req.params.pendingCheckoutId, req.user.id);
+    if (!pending) return res.status(404).json({ error: 'Checkout not found' });
+    res.json(await settleUnpaidCheckout(pending, 'cancelled', req));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -286,9 +393,11 @@ export async function paymongoWebhookHandler(req, res) {
 
       if (eventType === 'payment.paid') {
         await (pendingCheckout ? finalizePendingCheckout(pending, null) : finalizePendingBooking(pending, null));
+      } else if (pendingCheckout) {
+        // Also hands its held units back, once PayMongo can't take a payment for it any more.
+        await settleUnpaidCheckout(pending, 'payment_failed', null);
       } else {
-        const table = pendingCheckout ? 'pending_checkouts' : 'pending_bookings';
-        await db.prepare(`UPDATE ${table} SET status = 'failed' WHERE id = ?`).run(pending.id);
+        await db.prepare("UPDATE pending_bookings SET status = 'failed' WHERE id = ?").run(pending.id);
       }
     }
 
