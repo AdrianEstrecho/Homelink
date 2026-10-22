@@ -49,11 +49,17 @@ function portalMismatch(user, portal) {
   };
 }
 
+// Every route that looks an account up by email goes through this. Phone keyboards often add a
+// trailing space after autocompleting an address, and the signup code is stored under the trimmed
+// email, so an untrimmed lookup at /register used to reject a valid code as "invalid or expired".
+function normalizeEmail(email) {
+  return typeof email === 'string' ? email.trim().toLowerCase() : '';
+}
+
 router.post('/send-verification-code', async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email is required' });
-    const normalized = email.toLowerCase().trim();
+    const normalized = normalizeEmail(req.body.email);
+    if (!normalized) return res.status(400).json({ error: 'Email is required' });
 
     const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(normalized);
     if (existing) return res.status(400).json({ error: 'Email already registered' });
@@ -65,7 +71,15 @@ router.post('/send-verification-code', async (req, res) => {
       ON CONFLICT (email) DO UPDATE SET code_hash = EXCLUDED.code_hash, expires_at = EXCLUDED.expires_at
     `).run(normalized, hashVerificationCode(code), expires);
 
-    signupVerificationEmail(normalized, code).catch((emailErr) => console.error(`Failed to send verification email to ${normalized}:`, emailErr.message));
+    // Awaited, unlike the other emails here: signing up can't go any further without this code,
+    // so if it can't be sent (provider down, daily sending limit reached) the person has to hear
+    // about it now rather than wait on an email that is never coming.
+    try {
+      await signupVerificationEmail(normalized, code);
+    } catch (emailErr) {
+      console.error(`Failed to send verification email to ${normalized}:`, emailErr.message);
+      return res.status(502).json({ error: "We couldn't send a code to that email right now. Please try again in a few minutes, or sign up with Google instead." });
+    }
 
     res.json({ message: 'Verification code sent' });
   } catch (err) {
@@ -75,8 +89,9 @@ router.post('/send-verification-code', async (req, res) => {
 
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, phone, address, acceptedTerms, code } = req.body;
-    if (!email || !password || !firstName || !lastName) {
+    const { password, firstName, lastName, phone, address, acceptedTerms, code } = req.body;
+    const normalized = normalizeEmail(req.body.email);
+    if (!normalized || !password || !firstName || !lastName) {
       return res.status(400).json({ error: 'Required fields missing' });
     }
     if (!acceptedTerms) {
@@ -86,7 +101,6 @@ router.post('/register', async (req, res) => {
     const passwordError = validatePasswordStrength(password);
     if (passwordError) return res.status(400).json({ error: passwordError });
 
-    const normalized = email.toLowerCase();
     const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(normalized);
     if (existing) return res.status(400).json({ error: 'Email already registered' });
 
@@ -101,10 +115,10 @@ router.post('/register', async (req, res) => {
     await db.prepare('DELETE FROM signup_verifications WHERE email = ?').run(normalized);
 
     sendEmail({
-      to: email,
+      to: normalized,
       subject: 'Welcome to HomeLink!',
       html: `<div style="font-family:Arial"><h2>Welcome to HomeLink, ${firstName}!</h2><p>Your account has been created. Start shopping for home improvement products and book professional services today.</p></div>`,
-    }).catch((emailErr) => console.error(`Failed to send welcome email to ${email}:`, emailErr.message));
+    }).catch((emailErr) => console.error(`Failed to send welcome email to ${normalized}:`, emailErr.message));
 
     const token = signAuthToken({ id, email: normalized, role: 'customer', position: null });
     const created = await db.prepare('SELECT created_at FROM users WHERE id = ?').get(id);
@@ -113,14 +127,21 @@ router.post('/register', async (req, res) => {
       user: { id, email: normalized, firstName, lastName, role: 'customer', createdAt: created.created_at, notifyOrders: true, notifyBookings: true, notifyPromotions: true, twoFactorEnabled: false },
     });
   } catch (err) {
+    // A double-tapped Create Account sends two requests that both pass the "already registered"
+    // check above before either inserts; the second one then trips the unique email index.
+    if (err.code === '23505') return res.status(400).json({ error: 'Email already registered' });
     res.status(500).json({ error: err.message });
   }
 });
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, password, portal } = req.body;
-    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
+    const { password, portal } = req.body;
+    const email = normalizeEmail(req.body.email);
+    if (!email || typeof password !== 'string' || !password) {
+      return res.status(400).json({ error: 'Enter your email and password' });
+    }
+    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email);
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -155,7 +176,7 @@ router.post('/verify-2fa', async (req, res) => {
     if (!email || !code) return res.status(400).json({ error: 'Email and code are required' });
 
     const user = await db.prepare('SELECT * FROM users WHERE email = ? AND two_factor_code = ? AND two_factor_code_expires > ?')
-      .get(email.toLowerCase(), hashVerificationCode(code), new Date().toISOString());
+      .get(normalizeEmail(email), hashVerificationCode(code), new Date().toISOString());
     if (!user) return res.status(400).json({ error: 'This code is invalid or has expired' });
     if (user.archived) {
       return res.status(401).json({ error: 'This account has been archived. Contact an administrator.' });
@@ -269,7 +290,7 @@ router.post('/verify-reset-code', async (req, res) => {
     if (!email || !code) return res.status(400).json({ error: 'Email and code are required' });
 
     const user = await db.prepare('SELECT id FROM users WHERE email = ? AND reset_token = ? AND reset_token_expires > ?')
-      .get(email.toLowerCase(), hashVerificationCode(code), new Date().toISOString());
+      .get(normalizeEmail(email), hashVerificationCode(code), new Date().toISOString());
     if (!user) return res.status(400).json({ error: 'This code is invalid or has expired' });
 
     res.json({ message: 'Code verified' });
@@ -287,7 +308,7 @@ router.post('/reset-password', async (req, res) => {
     if (passwordError) return res.status(400).json({ error: passwordError });
 
     const user = await db.prepare('SELECT * FROM users WHERE email = ? AND reset_token = ? AND reset_token_expires > ?')
-      .get(email.toLowerCase(), hashVerificationCode(code), new Date().toISOString());
+      .get(normalizeEmail(email), hashVerificationCode(code), new Date().toISOString());
     if (!user) return res.status(400).json({ error: 'This code is invalid or has expired' });
 
     const hash = await bcrypt.hash(password, 10);

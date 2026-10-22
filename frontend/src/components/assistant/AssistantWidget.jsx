@@ -145,9 +145,10 @@ export default function AssistantWidget({ hidden = false }) {
     setLoading(true);
     setError(null);
     try {
+      // An AI reply routinely takes longer than the "taking longer than usual" banner waits.
       const { reply, items } = await api.post('/assistant/chat', {
         messages: history.slice(-HISTORY_SENT).map(({ role, content }) => ({ role, content })),
-      });
+      }, { expectSlow: true });
       if (id === requestId.current) {
         setMessages([...history, { role: 'assistant', content: reply, items }]);
         setAnswered(true);

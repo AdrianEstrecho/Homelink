@@ -12,13 +12,14 @@ function sortedItems(items) {
   return [...items].sort((a, b) => a.product_id.localeCompare(b.product_id));
 }
 
-// How many units of each line are still out with the customer: what they ordered, minus anything
-// an approved return has already brought back. A received return has ALREADY put its units on the
-// shelf, so cancelling the order afterwards must not credit them a second time. Lines that are
-// fully returned net to zero and drop out entirely.
+// How many units of each line are still off the shelf because of this order: what was ordered,
+// minus any shortfall (units a paid order was short at checkout, which never came off the shelf —
+// see fulfillOrder), minus anything an approved return has already brought back. A received return
+// has ALREADY put its units on the shelf, so cancelling the order afterwards must not credit them a
+// second time. Lines that net to zero drop out entirely.
 const OUTSTANDING_ITEMS_SQL = `
   SELECT oi.product_id, p.name,
-         oi.quantity - COALESCE(r.returned, 0) AS quantity
+         oi.quantity - COALESCE(oi.stock_shortfall, 0) - COALESCE(r.returned, 0) AS quantity
   FROM order_items oi
   JOIN products p ON p.id = oi.product_id
   LEFT JOIN LATERAL (

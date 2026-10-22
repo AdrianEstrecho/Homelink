@@ -31,6 +31,7 @@ import appReturnRoutes from './routes/appReturn.js';
 import db from './db/database.js';
 import { MOBILE_ORIGINS } from './utils/frontendUrl.js';
 import { reconcilePendingPayments } from './utils/paymentReconciliation.js';
+import { clearResponseCache } from './utils/responseCache.js';
 
 dotenv.config();
 
@@ -119,6 +120,13 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/returns', returnRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/promos', promoRoutes);
+// Products, services and categories only change through staff routes, so any staff write empties
+// the public catalog cache (utils/responseCache.js) once it has finished — the next storefront
+// load then reads the edit instead of a copy from up to 30 seconds earlier.
+app.use('/api/admin', (req, res, next) => {
+  if (req.method !== 'GET') res.on('finish', clearResponseCache);
+  next();
+});
 app.use('/api/admin', adminRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/addresses', addressRoutes);
@@ -135,7 +143,16 @@ app.use('/api/app-return', appReturnRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
+  if (res.headersSent) return next(err);
+  // The database layer (db/database.js) tags "couldn't reach the database" with a readable message.
+  if (err.code === 'db_unavailable') return res.status(503).json({ error: err.message, code: err.code });
   res.status(500).json({ error: 'Internal server error' });
+});
+
+// Node exits on a promise rejection nobody handled, which would take every customer's session down
+// over one missed .catch() (a fire-and-forget email, a background sweep). Log it and keep serving.
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
 });
 
 app.listen(PORT, () => console.log(`HomeLink API running on http://localhost:${PORT}`));

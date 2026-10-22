@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
+import ServiceStatusBanner from './components/ServiceStatusBanner';
 import PageTransitionOverlay, { arriveAfterReload } from './components/PageTransitionOverlay';
 import AssistantWidget from './components/assistant/AssistantWidget';
 import { PageTransitionProvider } from './context/PageTransitionContext';
@@ -215,6 +216,8 @@ export default function App() {
       {/* Mounted on the auth pages too (just hidden), so a guest the assistant sends off to log in
           comes back to the same conversation. */}
       {!isStaffSection && <AssistantWidget hidden={isAuthSection} />}
+      {/* Everywhere, staff pages included: an unreachable server breaks those just the same. */}
+      <ServiceStatusBanner />
     </div>
     </PageTransitionProvider>
   );

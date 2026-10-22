@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/database.js';
 import { shapeProduct } from '../utils/catalogShape.js';
+import { cachedJson } from '../utils/responseCache.js';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ const SORT_COLUMNS = {
   featured: 'p.featured DESC, p.name ASC',
 };
 
-router.get('/categories', async (req, res) => {
+router.get('/categories', cachedJson(async () => {
   const categories = await db.prepare(`
     SELECT c.*, (
       SELECT COUNT(*) FROM products p
@@ -25,10 +26,10 @@ router.get('/categories', async (req, res) => {
     ) as product_count
     FROM categories c WHERE c.parent_id IS NULL ORDER BY c.name
   `).all();
-  res.json(categories);
-});
+  return { json: categories };
+}));
 
-router.get('/', async (req, res) => {
+router.get('/', cachedJson(async (req) => {
   const { category, search, featured, sort, meta } = req.query;
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
@@ -57,19 +58,19 @@ router.get('/', async (req, res) => {
   // Callers that just render a fixed slice (the homepage strip, related products) keep the
   // plain array they already expect; ?meta=1 opts into the envelope a pager needs, since the
   // page count can't be derived from a truncated array.
-  if (meta !== '1' && meta !== 'true') return res.json(shaped);
+  if (meta !== '1' && meta !== 'true') return { json: shaped };
 
   const row = await db.prepare(`SELECT COUNT(*) as total FROM products p ${where}`).get(...params);
-  res.json({ products: shaped, total: Number(row.total), limit, offset });
-});
+  return { json: { products: shaped, total: Number(row.total), limit, offset } };
+}));
 
-router.get('/:slug', async (req, res) => {
+router.get('/:slug', cachedJson(async (req) => {
   const product = await db.prepare(`
     SELECT p.*, c.name as category_name, c.slug as category_slug, ${RATING_COLUMNS}
     FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.slug = ? AND (p.archived IS NULL OR p.archived = 0) AND (p.status IS NULL OR p.status = 'active')
   `).get(req.params.slug);
-  if (!product) return res.status(404).json({ error: 'Product not found' });
-  res.json(shapeProduct(product));
-});
+  if (!product) return { status: 404, json: { error: 'Product not found' } };
+  return { json: shapeProduct(product) };
+}));
 
 export default router;

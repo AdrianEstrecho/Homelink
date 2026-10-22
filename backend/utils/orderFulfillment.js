@@ -41,8 +41,12 @@ export async function fulfillOrder({
     `).run(orderId, userId, subtotal, discount, shippingFee, tax, taxRate, total, paymentStatus, paymentMethod, shippingAddress || user.address, appliedPromo, paymongoPaymentIntentId || null, paymongoPaymentId || null);
 
     const insertItem = tx.prepare('INSERT INTO order_items (id, order_id, product_id, quantity, price) VALUES (?,?,?,?,?)');
+    // Kept per line so a stock shortfall below can be recorded on the line it actually hit.
+    const itemIds = new Map();
     for (const oi of orderItems) {
-      await insertItem.run(uuid(), orderId, oi.product.id, oi.quantity, oi.price);
+      const itemId = uuid();
+      itemIds.set(oi, itemId);
+      await insertItem.run(itemId, orderId, oi.product.id, oi.quantity, oi.price);
     }
 
     // Bought means no longer wished-for. Add to Cart already drops an item from the wishlist,
@@ -64,8 +68,17 @@ export async function fulfillOrder({
 
       const product = await tx.prepare('SELECT name, stock FROM products WHERE id = ? FOR UPDATE').get(oi.product.id);
       if (!paid) throw new Error(`Insufficient stock for ${product?.name || 'an item in your cart'}`);
-      await tx.prepare('UPDATE products SET stock = 0 WHERE id = ?').run(oi.product.id);
-      reviewReasons.push(`${product?.name || 'A product'}: ordered ${oi.quantity}, only ${Math.max(product?.stock ?? 0, 0)} left when payment completed`);
+      // The order takes whatever is left and the rest is a shortfall for staff to restock or
+      // refund. Only the units actually taken come off the count, and the shortfall is recorded on
+      // the line, so cancelling this order later credits back what it took and nothing more
+      // (orderStock.js). GREATEST floors a legacy negative count at 0, which the stock >= 0 check
+      // would otherwise refuse.
+      const taken = Math.min(Math.max(product?.stock ?? 0, 0), oi.quantity);
+      await tx.prepare('UPDATE products SET stock = GREATEST(stock - ?, 0) WHERE id = ?').run(taken, oi.product.id);
+      // Restocked in the moment between the two statements: the line got all its units after all.
+      if (taken === oi.quantity) continue;
+      await tx.prepare('UPDATE order_items SET stock_shortfall = ? WHERE id = ?').run(oi.quantity - taken, itemIds.get(oi));
+      reviewReasons.push(`${product?.name || 'A product'}: ordered ${oi.quantity}, only ${taken} left when payment completed`);
     }
 
     if (promoCode && !(await applyVoucherUse(promoCode, tx))) {

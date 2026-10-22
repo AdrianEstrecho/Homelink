@@ -1,26 +1,59 @@
-const API = import.meta.env.VITE_API_URL || '/api';
+import { API_BASE as API, trackRequest, reportReachable, reportUnreachable } from './serverStatus';
 
-async function request(path, options = {}) {
+const UNREACHABLE_MESSAGE = "We can't reach HomeLink right now. Check your internet connection, then try again in a moment.";
+const UNAVAILABLE_MESSAGE = 'HomeLink is temporarily unavailable. Please try again in a moment.';
+
+function failure(message, code, data = {}) {
+  const err = new Error(message);
+  if (code) err.code = code;
+  // The whole body, for errors that carry more than a message (e.g. wrong_portal's `portal`).
+  err.data = data;
+  return err;
+}
+
+async function request(path, options = {}, { expectSlow } = {}) {
   const token = localStorage.getItem('homelink_token');
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${API}${path}`, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(data.error || 'Request failed');
-    if (data.code) err.code = data.code;
-    // The whole body, for errors that carry more than a message (e.g. wrong_portal's `portal`).
-    err.data = data;
-    throw err;
+
+  const answered = trackRequest({ expectSlow });
+  let res;
+  try {
+    res = await fetch(`${API}${path}`, { ...options, headers });
+  } catch (err) {
+    answered();
+    if (err?.name === 'AbortError') throw err;
+    // fetch only rejects when no response arrived at all: offline, DNS, the server not
+    // answering, or a CORS-blocked error page. The browser's own wording ("Failed to fetch")
+    // means nothing to a customer.
+    reportUnreachable();
+    throw failure(UNREACHABLE_MESSAGE, 'network');
   }
-  return data;
+  answered();
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    // Every error the API itself sends is JSON. A 5xx that isn't came from whatever sits in
+    // front of it (Render's proxy while the server restarts or is down), not from HomeLink.
+    if (data === null && res.status >= 500) {
+      reportUnreachable();
+      throw failure(UNAVAILABLE_MESSAGE, 'unavailable');
+    }
+    reportReachable();
+    const fallback = res.status >= 500 ? 'Something went wrong on our end. Please try again.' : 'Request failed';
+    throw failure(data?.error || fallback, data?.code, data ?? {});
+  }
+  reportReachable();
+  return data ?? {};
 }
 
+// opts.expectSlow: for requests that are slow by nature (the AI assistant), so they don't
+// trigger the "taking longer than usual" banner.
 export const api = {
-  get: (path) => request(path),
-  post: (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) }),
-  put: (path, body) => request(path, { method: 'PUT', body: JSON.stringify(body) }),
-  delete: (path, body) => request(path, { method: 'DELETE', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }),
+  get: (path, opts) => request(path, {}, opts),
+  post: (path, body, opts) => request(path, { method: 'POST', body: JSON.stringify(body) }, opts),
+  put: (path, body, opts) => request(path, { method: 'PUT', body: JSON.stringify(body) }, opts),
+  delete: (path, body, opts) => request(path, { method: 'DELETE', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }, opts),
 };
 
 // The currency from Platform Settings. SiteSettingsContext sets these from the last visit's copy

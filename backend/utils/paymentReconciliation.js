@@ -29,13 +29,19 @@ async function isPaid(pending) {
   return intent.status === 'succeeded';
 }
 
+// Abandoned checkouts stay 'pending' for the whole lookback, so a busy hour can leave more of them
+// than one batch holds. Picking the ones checked longest ago (never-checked first), and stamping
+// each pick, walks the sweep through all of them in turn; picking the newest every time would
+// leave an older paid checkout stuck behind a wall of newer abandoned ones and never finalized.
 async function sweep(table, finalize) {
   const rows = await db.prepare(`
     SELECT * FROM ${table}
     WHERE status = 'pending' AND created_at > now() - interval '${LOOKBACK}'
       AND (paymongo_checkout_session_id IS NOT NULL OR paymongo_payment_intent_id IS NOT NULL)
-    ORDER BY created_at DESC LIMIT ${BATCH}
+    ORDER BY reconciled_at ASC NULLS FIRST, created_at DESC LIMIT ${BATCH}
   `).all();
+  if (!rows.length) return 0;
+  await db.prepare(`UPDATE ${table} SET reconciled_at = now() WHERE id = ANY(?)`).run(rows.map((r) => r.id));
 
   let finalized = 0;
   for (const pending of rows) {

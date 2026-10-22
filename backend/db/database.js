@@ -23,7 +23,58 @@ pg.types.setTypeParser(1700, (val) => parseFloat(val));
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  // Supabase's session pooler only has a limited number of server connections, shared by
+  // everything that connects (this server, local dev, scripts), so this stays at pg's default.
+  max: 10,
+  // Without a cap, a request waiting for a free connection waits forever when the database is
+  // unreachable. 30s is well past the queue a burst of simultaneous checkouts builds up.
+  connectionTimeoutMillis: 30_000,
+  // Each new connection is a TLS handshake across the Pacific (Render in Oregon, Supabase in
+  // Seoul), so keep idle ones around longer than pg's 10s default to ride out short lulls.
+  idleTimeoutMillis: 30_000,
+  keepAlive: true,
 });
+
+// The pooler closes idle connections from its side now and then, and drops all of them when
+// Supabase restarts. pg reports that as an 'error' event on the pool, and an 'error' event with no
+// listener throws, which would take the whole API down over a connection nobody was using. The
+// pool has already thrown the broken client away; logging it is all that's left to do.
+pool.on('error', (err) => console.error('[db] idle connection dropped:', err.message));
+
+// Errors that mean the database couldn't be reached at all (network drop, Supabase restarting,
+// the pool wait above timing out, the pooler out of connections) rather than a problem with the
+// query itself.
+const CONNECTION_ERROR_CODES = new Set([
+  'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'EPIPE',
+  '08000', '08001', '08003', '08004', '08006', '53300', '57P01', '57P02', '57P03',
+]);
+const CONNECTION_ERROR_MESSAGE = /timeout exceeded when trying to connect|connection terminated|connection error|max clients reached|remaining connection slots/i;
+
+function isConnectionError(err) {
+  return CONNECTION_ERROR_CODES.has(err?.code) || CONNECTION_ERROR_MESSAGE.test(err?.message || '');
+}
+
+// Most routes answer a failure with `res.status(500).json({ error: err.message })`, which would
+// hand a customer pg's raw "Connection terminated unexpectedly". Swapping in a readable message
+// here fixes every one of those routes at once; the original is logged for whoever's debugging.
+function unavailable(cause) {
+  console.error('[db] database unreachable:', cause.message);
+  const err = new Error('HomeLink is having trouble connecting right now. Please try again in a moment.');
+  err.code = 'db_unavailable';
+  err.status = 503;
+  err.cause = cause;
+  return err;
+}
+
+function guardConnection(rawQuery) {
+  return async (text, params) => {
+    try {
+      return await rawQuery(text, params);
+    } catch (err) {
+      throw isConnectionError(err) ? unavailable(err) : err;
+    }
+  };
+}
 
 function toPgSql(sql) {
   let i = 0;
@@ -62,24 +113,38 @@ function wrapExecutor(rawQuery) {
   };
 }
 
-const db = wrapExecutor((text, params) => pool.query(text, params));
+const db = wrapExecutor(guardConnection((text, params) => pool.query(text, params)));
 
 // Runs fn against a single checked-out client wrapped in BEGIN/COMMIT/ROLLBACK. Postgres
 // requires every statement in a transaction to share one connection, not the shared pool, so
 // fn receives its own {prepare} bound to that client rather than the module-level `db`.
 export async function withTransaction(fn) {
-  const client = await pool.connect();
-  const tx = wrapExecutor((text, params) => client.query(text, params));
+  let client;
   try {
-    await client.query('BEGIN');
+    client = await pool.connect();
+  } catch (err) {
+    throw isConnectionError(err) ? unavailable(err) : err;
+  }
+  const query = guardConnection((text, params) => client.query(text, params));
+  const tx = wrapExecutor(query);
+  // Set when ROLLBACK itself fails, which means the connection is dead. Postgres rolls the
+  // transaction back on its own when a connection drops, so the client just has to be destroyed
+  // (release(err)) instead of going back into the pool for the next request to trip over.
+  let brokenConnection;
+  try {
+    await query('BEGIN');
     const result = await fn(tx);
-    await client.query('COMMIT');
+    await query('COMMIT');
     return result;
   } catch (err) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      brokenConnection = rollbackErr;
+    }
     throw err;
   } finally {
-    client.release();
+    client.release(brokenConnection);
   }
 }
 
@@ -256,6 +321,10 @@ await db.exec(`
     price DOUBLE PRECISION NOT NULL
   );
 
+  -- How many units of this line a paid order was short when its payment completed (see
+  -- fulfillOrder): those never came off the shelf, so cancelling the order mustn't put them back.
+  ALTER TABLE order_items ADD COLUMN IF NOT EXISTS stock_shortfall INTEGER DEFAULT 0;
+
   -- Holds a validated cart snapshot between "redirect out to PayMongo's hosted Checkout
   -- Session" and "webhook/poll confirms payment", since the real order can't be created —
   -- and stock can't be deducted — until the charge is actually confirmed. checkout_session_id
@@ -337,6 +406,11 @@ await db.exec(`
     created_at TIMESTAMPTZ DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS idx_pending_bookings_session ON pending_bookings(paymongo_checkout_session_id);
+
+  -- When the payment sweep (utils/paymentReconciliation.js) last asked PayMongo about this
+  -- checkout, so each sweep starts with the ones checked longest ago instead of the newest.
+  ALTER TABLE pending_checkouts ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMPTZ;
+  ALTER TABLE pending_bookings ADD COLUMN IF NOT EXISTS reconciled_at TIMESTAMPTZ;
 
   CREATE TABLE IF NOT EXISTS vouchers (
     id TEXT PRIMARY KEY,
