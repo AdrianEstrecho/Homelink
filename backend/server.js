@@ -31,7 +31,7 @@ import appReturnRoutes from './routes/appReturn.js';
 import db from './db/database.js';
 import { MOBILE_ORIGINS } from './utils/frontendUrl.js';
 import { reconcilePendingPayments } from './utils/paymentReconciliation.js';
-import { clearResponseCache } from './utils/responseCache.js';
+import { cachedJson, clearResponseCache } from './utils/responseCache.js';
 
 dotenv.config();
 
@@ -82,24 +82,33 @@ app.get('/api/policies', async (req, res) => {
   res.json(await db.prepare('SELECT * FROM policies WHERE active = 1 ORDER BY sort_order').all());
 });
 
-// The home hero's "N Homeowners Served" pill: customers with at least one order or booking
-// that went through (not cancelled or refunded), plus three of them to show as avatars —
-// ones with a profile photo first, then the most recent. Only a first name and last initial
-// leave the server, never ids or contact details.
-app.get('/api/customers/served', async (req, res) => {
-  const rows = await db.prepare(`
-    WITH buyers AS (
-      SELECT user_id, MAX(created_at) AS last_at FROM (
-        SELECT user_id, created_at FROM orders WHERE status <> 'cancelled' AND payment_status <> 'refunded'
-        UNION ALL
-        SELECT user_id, created_at FROM bookings WHERE status <> 'cancelled' AND payment_status <> 'refunded'
-      ) t
-      GROUP BY user_id
-    )
-    SELECT u.first_name, u.last_name, u.avatar, COUNT(*) OVER () AS total
+// A homeowner "served" is a customer with at least one order or booking that went through (not
+// cancelled or refunded). Shared by the hero pill and the stats bar so the two always agree.
+const SERVED_BUYERS = `
+  WITH buyers AS (
+    SELECT user_id, MAX(created_at) AS last_at FROM (
+      SELECT user_id, created_at FROM orders WHERE status <> 'cancelled' AND payment_status <> 'refunded'
+      UNION ALL
+      SELECT user_id, created_at FROM bookings WHERE status <> 'cancelled' AND payment_status <> 'refunded'
+    ) t
+    GROUP BY user_id
+  ),
+  served AS (
+    SELECT u.first_name, u.last_name, u.avatar, b.last_at
     FROM buyers b JOIN users u ON u.id = b.user_id
     WHERE u.role = 'customer' AND COALESCE(u.archived, 0) = 0
-    ORDER BY (u.avatar IS NOT NULL) DESC, b.last_at DESC
+  )
+`;
+
+// The home hero's "N Homeowners Served" pill: the served count, plus three of them to show as
+// avatars — ones with a profile photo first, then the most recent. Only a first name and last
+// initial leave the server, never ids or contact details.
+app.get('/api/customers/served', async (req, res) => {
+  const rows = await db.prepare(`
+    ${SERVED_BUYERS}
+    SELECT first_name, last_name, avatar, COUNT(*) OVER () AS total
+    FROM served
+    ORDER BY (avatar IS NOT NULL) DESC, last_at DESC
     LIMIT 3
   `).all();
   res.json({
@@ -111,6 +120,22 @@ app.get('/api/customers/served', async (req, res) => {
     })),
   });
 });
+
+// The home page's stats bar, read from live data: homeowners served (same rule as the pill above),
+// products a customer can actually see in the shop, active installers / technicians, and the
+// average product review. rating is null until the first review comes in.
+app.get('/api/stats', cachedJson(async () => {
+  const row = await db.prepare(`
+    ${SERVED_BUYERS}
+    SELECT
+      (SELECT COUNT(*) FROM served) AS homeowners,
+      (SELECT COUNT(*) FROM products WHERE (archived IS NULL OR archived = 0) AND (status IS NULL OR status = 'active')) AS products,
+      (SELECT COUNT(*) FROM users WHERE role = 'employee' AND position = 'installer' AND COALESCE(archived, 0) = 0) AS technicians,
+      (SELECT ROUND(AVG(rating), 1) FROM reviews) AS rating,
+      (SELECT COUNT(*) FROM reviews) AS reviews
+  `).get();
+  return { json: row };
+}));
 
 app.use('/api/geo', geoRoutes);
 app.use('/api/auth', authRoutes);

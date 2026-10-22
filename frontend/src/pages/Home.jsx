@@ -7,6 +7,7 @@ import ProductCard from '../components/ProductCard';
 import ErrorState from '../components/ErrorState';
 import Reveal from '../components/Reveal';
 import CountUp from '../components/CountUp';
+import { useSiteStats, statTiles } from '../hooks/useSiteStats';
 import HowItWorks from '../components/home/HowItWorks';
 import ServicesShowcase from '../components/home/ServicesShowcase';
 import Testimonials from '../components/home/Testimonials';
@@ -16,13 +17,6 @@ import SplitText from '../components/SplitText';
 import CategoryTile, { countLabel } from '../components/CategoryTile';
 import { getCategoryIcon } from '../constants/categoryIcons';
 import { ProductCardSkeleton, CategorySkeleton } from '../components/Skeleton';
-
-const STATS = [
-  { value: '10,000+', label: 'Homeowners Served' },
-  { value: '500+', label: 'Products Available' },
-  { value: '50+', label: 'Verified Technicians' },
-  { value: '4.8/5', label: 'Average Rating' },
-];
 
 // Condensed from the Refund / Cancellation / Data Privacy policies (see /policies).
 const GUARANTEES = [
@@ -52,6 +46,7 @@ export default function Home() {
   const [openFaq, setOpenFaq] = useState(0);
   const [contact, setContact] = useState(DEFAULT_CONTACT);
   const [served, setServed] = useState(null);
+  const stats = useSiteStats();
 
   // One request feeds both the hero's 8 floating cards and the Featured
   // section: the API's default sort is featured-first, so the featured rows
@@ -112,17 +107,26 @@ export default function Home() {
 
       {/* Stats bar — white, not navy, so the cloud band at the bottom of the
           hero fades into it rather than cutting hard from cloud-white into a
-          flat navy block. */}
-      <section className="bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-          {STATS.map((s, i) => (
-            <div key={s.label} className="text-center md:text-left bg-gradient-to-br from-brand-navy to-brand-blue backdrop-blur-md border border-white/10 rounded-2xl px-4 py-5 md:py-6">
-              <CountUp value={s.value} delay={i * 100} className="font-display text-2xl md:text-3xl font-extrabold text-white tabular-nums" />
-              <p className="text-xs md:text-sm text-white/60 mt-1">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+          flat navy block. Live numbers from GET /stats; if that request fails
+          the bar is left out rather than showing made-up figures. */}
+      {!stats.error && (
+        <section className="bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8 grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            {statTiles(stats.data).map((s, i) => (
+              <div key={s.key} className="text-center md:text-left bg-gradient-to-br from-brand-navy to-brand-blue backdrop-blur-md border border-white/10 rounded-2xl px-4 py-5 md:py-6">
+                {stats.loading ? (
+                  <span className="block h-8 md:h-9 w-20 mx-auto md:mx-0 rounded-md bg-white/15 animate-pulse" aria-hidden="true" />
+                ) : s.text ? (
+                  <span className="font-display text-2xl md:text-3xl font-extrabold text-white">{s.text}</span>
+                ) : (
+                  <CountUp value={s.value} delay={i * 100} className="font-display text-2xl md:text-3xl font-extrabold text-white tabular-nums" />
+                )}
+                <p className="text-xs md:text-sm text-white/60 mt-1 capitalize">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Announcements — auto-looping marquee (.marquee-track in index.css)
           wrapped in a manually scrollable strip, so it drifts on its own but
@@ -330,7 +334,7 @@ export default function Home() {
         </div>
         <Reveal className="relative max-w-3xl mx-auto px-4 text-center">
           <h2 className="font-display text-3xl md:text-5xl font-extrabold tracking-tight mb-5"><SplitText text="Ready to upgrade your home?" /></h2>
-          <p className="text-gray-300 mb-10 max-w-lg mx-auto">Join thousands of homeowners who trust HomeLink for their home improvement needs.</p>
+          <p className="text-gray-300 mb-10 max-w-lg mx-auto">Join the homeowners who trust HomeLink for their home improvement needs.</p>
           <Link to="/register" className="btn-primary inline-flex items-center gap-2">Get Started Free <ArrowRight className="w-4 h-4" /></Link>
         </Reveal>
       </section>

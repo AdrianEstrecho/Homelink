@@ -16,13 +16,7 @@ import { LogoMark } from '../components/brand/Logo';
 import { getCategoryIcon } from '../constants/categoryIcons';
 import { useReveal } from '../hooks/useReveal';
 import { useTilt } from '../hooks/useTilt';
-
-const STATS = [
-  { value: '10,000+', label: 'Homeowners served' },
-  { value: '500+', label: 'Products available' },
-  { value: '50+', label: 'Verified technicians' },
-  { value: '4.8/5', label: 'Average rating' },
-];
+import { useSiteStats, statTiles } from '../hooks/useSiteStats';
 
 // What circles the house in the hero; each one opens that category on /products.
 const ORBIT = [
@@ -74,6 +68,7 @@ export default function About() {
   const [hero, setHero] = useState(DEFAULT_HERO);
   const [activePromise, setActivePromise] = useState(0);
   const tilt = useTilt();
+  const stats = useSiteStats();
 
   const loadItems = useCallback(() => {
     setItems(s => ({ ...s, loading: true, error: false }));
@@ -108,14 +103,25 @@ export default function About() {
               <Link to="/products" className="btn-primary inline-flex items-center gap-2">Browse products <ArrowRight className="w-4 h-4" /></Link>
               <Link to="/services" className="btn-outline inline-flex items-center gap-2">Book a service</Link>
             </div>
-            <dl className="grid grid-cols-2 sm:grid-cols-4 gap-y-6 border-t border-gray-200/80 pt-6 text-left">
-              {STATS.map((s, i) => (
-                <div key={s.label} className="flex flex-col-reverse justify-end sm:px-4 sm:first:pl-0 sm:border-l sm:first:border-l-0 border-gray-200/80">
-                  <dt className="text-xs text-gray-500 mt-1">{s.label}</dt>
-                  <dd><CountUp value={s.value} delay={i * 100} className="font-display text-2xl md:text-3xl font-extrabold text-brand-navy tabular-nums" /></dd>
-                </div>
-              ))}
-            </dl>
+            {/* Live numbers (GET /stats); left out if that request fails rather than showing made-up figures. */}
+            {!stats.error && (
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-y-6 border-t border-gray-200/80 pt-6 text-left">
+                {statTiles(stats.data).map((s, i) => (
+                  <div key={s.key} className="flex flex-col-reverse justify-end sm:px-4 sm:first:pl-0 sm:border-l sm:first:border-l-0 border-gray-200/80">
+                    <dt className="text-xs text-gray-500 mt-1">{s.label}</dt>
+                    <dd>
+                      {stats.loading ? (
+                        <span className="block h-8 md:h-9 w-16 rounded-md bg-gray-200 animate-pulse" aria-hidden="true" />
+                      ) : s.text ? (
+                        <span className="font-display text-2xl md:text-3xl font-extrabold text-brand-navy">{s.text}</span>
+                      ) : (
+                        <CountUp value={s.value} delay={i * 100} className="font-display text-2xl md:text-3xl font-extrabold text-brand-navy tabular-nums" />
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
           </div>
           <Reveal className="flex justify-center">
             <ServiceOrbit />
