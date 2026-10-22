@@ -3,12 +3,21 @@ import { API_BASE as API, trackRequest, reportReachable, reportUnreachable } fro
 const UNREACHABLE_MESSAGE = "We can't reach HomeLink right now. Check your internet connection, then try again in a moment.";
 const UNAVAILABLE_MESSAGE = 'HomeLink is temporarily unavailable. Please try again in a moment.';
 
-function failure(message, code, data = {}) {
+// status is 0 when the request never reached the server.
+function failure(message, code, data = {}, status = 0) {
   const err = new Error(message);
   if (code) err.code = code;
+  err.status = status;
   // The whole body, for errors that carry more than a message (e.g. wrong_portal's `portal`).
   err.data = data;
   return err;
+}
+
+// The server couldn't be reached, or it answered but couldn't do the work right then (busy,
+// restarting, database unreachable). Says nothing about the request itself, so it's safe to try
+// the same thing again later.
+export function isTransientApiError(err) {
+  return typeof err?.status === 'number' && (err.status === 0 || err.status >= 500);
 }
 
 async function request(path, options = {}, { expectSlow } = {}) {
@@ -37,11 +46,11 @@ async function request(path, options = {}, { expectSlow } = {}) {
     // front of it (Render's proxy while the server restarts or is down), not from HomeLink.
     if (data === null && res.status >= 500) {
       reportUnreachable();
-      throw failure(UNAVAILABLE_MESSAGE, 'unavailable');
+      throw failure(UNAVAILABLE_MESSAGE, 'unavailable', {}, res.status);
     }
     reportReachable();
     const fallback = res.status >= 500 ? 'Something went wrong on our end. Please try again.' : 'Request failed';
-    throw failure(data?.error || fallback, data?.code, data ?? {});
+    throw failure(data?.error || fallback, data?.code, data ?? {}, res.status);
   }
   reportReachable();
   return data ?? {};
