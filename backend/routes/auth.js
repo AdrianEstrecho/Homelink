@@ -268,17 +268,19 @@ router.post('/forgot-password', async (req, res) => {
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
     const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
-    // Always respond the same way whether or not the account exists (or which kind it is), so this endpoint can't be used to enumerate registered emails.
-    if (user?.role === 'employee') {
+    // Say so rather than send the customer off to wait for a code that will never come. Sign-up already
+    // answers "Email already registered", so staying vague here hid nothing.
+    if (!user) return res.status(404).json({ error: 'No HomeLink account uses this email.' });
+    if (user.role === 'employee') {
       if (!user.archived) await queueStaffPasswordReset(user, req);
-    } else if (user) {
+    } else {
       const code = generateVerificationCode();
       const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       await db.prepare('UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?').run(hashVerificationCode(code), expires, user.id);
       passwordResetEmail(user, code).catch((emailErr) => console.error(`Failed to send password reset email to ${user.email}:`, emailErr.message));
     }
 
-    res.json({ message: 'If an account exists for that email, a verification code has been sent.' });
+    res.json({ message: 'A verification code has been sent to your email.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
