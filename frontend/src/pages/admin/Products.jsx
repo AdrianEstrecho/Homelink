@@ -15,6 +15,14 @@ import { specEntries, toHighlights, presetsForCategory } from '../../utils/catal
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_IMAGE_MB = 5;
 const PAGE_SIZE = 10;
+const LOW_STOCK_MAX = 5;
+
+// Same split as the backend's lowStockCount / outOfStockCount, so the number on a dashboard
+// stock tile is the number of rows this filter shows.
+const STOCK_LEVELS = {
+  low: p => p.stock > 0 && p.stock <= LOW_STOCK_MAX,
+  out: p => p.stock <= 0,
+};
 
 // Specifications and highlights are edited as ordered rows, but stored as a label -> value
 // object and a string array respectively. Rows carry a client-only id so React keeps inputs
@@ -87,6 +95,7 @@ export default function AdminProducts() {
   const [suppliers, setSuppliers] = useState([]);
   const [tab, setTab] = useState(searchParams.get('tab') === 'archived' ? 'archived' : 'active');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [stockFilter, setStockFilter] = useState(Object.hasOwn(STOCK_LEVELS, searchParams.get('stock')) ? searchParams.get('stock') : '');
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
@@ -130,15 +139,25 @@ export default function AdminProducts() {
       .filter(p => !search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase()));
   }, [products, tab, search]);
 
+  // Each dropdown's counts respect the other dropdown's choice, so picking "Low Stock" shows
+  // how many low items each category holds, and vice versa.
   const categoryCounts = useMemo(() => {
-    const c = { '': byTabAndSearch.length };
-    mainCategories.forEach(mc => { c[mc.id] = byTabAndSearch.filter(p => p.main_category_id === mc.id).length; });
+    const inStockLevel = stockFilter ? byTabAndSearch.filter(STOCK_LEVELS[stockFilter]) : byTabAndSearch;
+    const c = { '': inStockLevel.length };
+    mainCategories.forEach(mc => { c[mc.id] = inStockLevel.filter(p => p.main_category_id === mc.id).length; });
     return c;
-  }, [byTabAndSearch, mainCategories]);
+  }, [byTabAndSearch, mainCategories, stockFilter]);
 
-  const filtered = categoryFilter ? byTabAndSearch.filter(p => p.main_category_id === categoryFilter) : byTabAndSearch;
+  const stockCounts = useMemo(() => {
+    const inCategory = categoryFilter ? byTabAndSearch.filter(p => p.main_category_id === categoryFilter) : byTabAndSearch;
+    return { '': inCategory.length, low: inCategory.filter(STOCK_LEVELS.low).length, out: inCategory.filter(STOCK_LEVELS.out).length };
+  }, [byTabAndSearch, categoryFilter]);
 
-  useEffect(() => { setPage(1); }, [tab, search, categoryFilter]);
+  const filtered = byTabAndSearch
+    .filter(p => !categoryFilter || p.main_category_id === categoryFilter)
+    .filter(p => !stockFilter || STOCK_LEVELS[stockFilter](p));
+
+  useEffect(() => { setPage(1); }, [tab, search, categoryFilter, stockFilter]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // Archiving or deleting from this very table can shrink the list past the page being read, so
   // the page in use is clamped to one that still exists rather than left pointing at nothing.
@@ -643,6 +662,16 @@ export default function AdminProducts() {
             ...mainCategories.map(mc => ({ value: mc.id, label: `${mc.name} (${categoryCounts[mc.id] || 0})` })),
           ]}
         />
+        <Select
+          value={stockFilter}
+          onChange={setStockFilter}
+          className="w-56"
+          options={[
+            { value: '', label: `All Stock Levels (${stockCounts['']})` },
+            { value: 'low', label: `Low Stock, 1–${LOW_STOCK_MAX} left (${stockCounts.low})` },
+            { value: 'out', label: `Out of Stock (${stockCounts.out})` },
+          ]}
+        />
       </div>
 
       <div className="card overflow-hidden">
@@ -699,7 +728,7 @@ export default function AdminProducts() {
                   {formatPrice(p.price)}
                   {p.discount > 0 && <span className="ml-1.5 badge bg-orange-100 text-brand-orange">-{p.discount}%</span>}
                 </td>
-                <td className="p-3 text-gray-600">{p.stock <= 5 ? <span className="text-red-600 font-medium">{p.stock}</span> : p.stock}</td>
+                <td className="p-3 text-gray-600">{p.stock <= LOW_STOCK_MAX ? <span className="text-red-600 font-medium">{p.stock}</span> : p.stock}</td>
                 <td className="p-3">
                   <span className={`badge ${p.status === 'inactive' ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-800'}`}>
                     {p.status === 'inactive' ? 'Inactive' : 'Active'}

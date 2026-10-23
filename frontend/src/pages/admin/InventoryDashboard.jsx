@@ -34,7 +34,7 @@ export default function InventoryDashboard() {
     <AdminLayout title="Dashboard" subtitle={`Welcome back, ${user?.firstName || 'there'}. Here's your product & stock overview.`}>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {cards.map(c => <StatTile key={c.label} label={c.label} value={c.value} icon={c.icon} />)}
-        <StatTile label="Low stock items" value={lowStockCount} icon={AlertTriangle} tone={lowStockCount > 0 ? 'alert' : 'default'} to="/admin/products" action="Review stock" />
+        <StatTile label="Low stock items" value={lowStockCount} icon={AlertTriangle} tone={lowStockCount > 0 ? 'alert' : 'default'} to="/admin/products?stock=low" action="Review stock" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
